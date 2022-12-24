@@ -1,6 +1,6 @@
-mod aptos;
+pub mod aptos;
 pub mod cmd;
-mod com;
-mod config;
-mod http;
-mod sui;
+pub mod com;
+pub mod config;
+pub mod http;
+pub mod sui;

@@ -1,31 +1,45 @@
+use crate::com::{self, CliError};
 use crate::config::Config as cfg;
 use home;
 use log::debug;
-use std::path::PathBuf;
-use std::{fs, path::PathBuf, str::FromStr};
-use sui::config::SuiClientConfig;
+use std::{fs, path::PathBuf, str::FromStr, thread, time::Duration};
+use sui::config::{SuiClientConfig, SuiEnv};
+use sui_json_rpc_types::{SuiEvent, SuiTransactionResponse};
 use sui_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
 use sui_sdk::{
-    types::base_types::{ObjectID, SuiAddress},
+    types::base_types::{ObjectID, SuiAddress, TransactionDigest},
     SuiClient,
 };
+use tokio::runtime::Runtime;
 extern crate serde;
-
 use serde::{Deserialize, Serialize};
 
+const DEFAULT_OBJECT_ID: &str = "0x0000000000000000000000000000000000000000";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub sui_cli_config_file: PathBuf,
-    #[serde(skip_serializing)]
-    pub sui_config: SuiClientConfig,
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, skip_deserializing)]
+    pub sui_config: SuiConfig,
+    #[serde(skip_serializing, skip_deserializing)]
     pub scale_config_file: PathBuf,
-    pub store_path: PathBuf,
-    pub scale_package_address: SuiAddress,
-    pub market_list_address: ObjectID,
-    pub scale_nft_factory_address: ObjectID,
+    pub scale_store_path: PathBuf,
+    pub scale_package_id: ObjectID,
+    pub scale_market_list_id: ObjectID,
+    pub scale_nft_factory_id: ObjectID,
+    pub scale_admin_id: ObjectID,
 }
-
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SuiConfig {
+    pub keystore: KeystoreFile,
+    pub envs: Vec<SuiEnv>,
+    pub active_env: Option<String>,
+    pub active_address: Option<SuiAddress>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KeystoreFile {
+    #[serde(alias = "File")]
+    pub file: PathBuf,
+}
 impl Default for Config {
     fn default() -> Self {
         let home_dir = match home::home_dir() {
@@ -36,29 +50,59 @@ impl Default for Config {
         if !scale_home_dir.is_dir() {
             fs::create_dir(&scale_home_dir).unwrap();
         }
+        let sui_dir = home_dir.join(".sui").join("sui_config");
+        let keystore_file = sui_dir.join("sui.keystore");
+        let default_id = ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap();
         Config {
-            sui_cli_config_file: home_dir.join(".sui").join("sui_config").join("client.yaml"),
-            sui_config: SuiClientConfig::default(),
+            sui_cli_config_file: sui_dir.join("client.yaml"),
+            sui_config: SuiConfig {
+                keystore: KeystoreFile {
+                    file: keystore_file,
+                },
+                envs: vec![],
+                active_address: None,
+                active_env: None,
+            },
             scale_config_file: scale_home_dir.join("sui_config.yaml"),
-            store_path: scale_home_dir.join("store"),
-            scale_package_address: SuiAddress::from_str("0x0").unwrap(),
-            market_list_address: ObjectID::from_str("0x0").unwrap(),
-            scale_nft_factory_address: ObjectID::from_str("0x0").unwrap(),
+            scale_store_path: scale_home_dir.join("store"),
+            scale_package_id: default_id,
+            scale_market_list_id: default_id,
+            scale_nft_factory_id: default_id,
+            scale_admin_id: default_id,
         }
     }
 }
 
 impl cfg for Config {
-    fn init(&mut self) -> anyhow::Result<()> {
-        self.load_sui_config()?;
-        // get move package info
-
-        Ok(())
-    }
-    fn load(&mut self) -> anyhow::Result<()> {
-        let config = fs::read_to_string(&self.scale_config_file)?;
-        *self = serde_yaml::from_str(&config)?;
-        self.load_sui_config()?;
+    fn load(&mut self) -> anyhow::Result<()>
+    where
+        Self: serde::de::DeserializeOwned,
+    {
+        if !self.scale_config_file.exists() {
+            self.load_sui_config()?;
+            return self.init();
+        }
+        let config_str = fs::read_to_string(&self.scale_config_file)?;
+        match serde_yaml::from_str::<Config>(&config_str) {
+            Ok(c) => {
+                self.sui_cli_config_file = c.sui_cli_config_file;
+                self.scale_store_path = c.scale_store_path;
+                self.scale_package_id = c.scale_package_id;
+                self.scale_market_list_id = c.scale_market_list_id;
+                self.scale_nft_factory_id = c.scale_nft_factory_id;
+                self.scale_admin_id = c.scale_admin_id;
+                self.load_sui_config()?;
+                if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
+                    return self.init();
+                }
+            }
+            Err(e) => {
+                self.load_sui_config()?;
+                debug!("load scale config error: {}", e);
+                return self.init();
+                // return Err(CliError::CanNotLoadScaleConfig(e.to_string()).into());
+            }
+        }
         Ok(())
     }
     fn get_config_file(&self) -> PathBuf {
@@ -68,13 +112,114 @@ impl cfg for Config {
         self.scale_config_file = path;
     }
     fn print(&self) {
-        println!("{:?}", self)
+        println!(
+            r#"sui cli config file: {}
+scale config file: {}
+scale store path: {}
+scale package id: {}
+scale market list id: {}
+scale nft factory id: {}
+scale admin id: {}"#,
+            self.sui_cli_config_file.display(),
+            self.scale_config_file.display(),
+            self.scale_store_path.display(),
+            self.scale_package_id,
+            self.scale_market_list_id,
+            self.scale_nft_factory_id,
+            self.scale_admin_id,
+        );
     }
 }
+
 impl Config {
     fn load_sui_config(&mut self) -> anyhow::Result<()> {
-        let sui_config = fs::read_to_string(&self.sui_cli_config_file)?;
-        self.sui_config = serde_yaml::from_str(&sui_config)?;
+        let sui_config_str = fs::read_to_string(&self.sui_cli_config_file)?;
+        let sui_config: SuiConfig = serde_yaml::from_str(&sui_config_str)?;
+        debug!("load sui config success: {:?}", sui_config);
+        self.sui_config = sui_config;
         Ok(())
+    }
+
+    fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
+        let mut sui_config = SuiClientConfig::new(Keystore::from(
+            FileBasedKeystore::new(&self.sui_config.keystore.file).unwrap(),
+        ));
+        sui_config.envs = self.sui_config.envs.clone();
+        sui_config.active_address = self.sui_config.active_address.clone();
+        sui_config.active_env = self.sui_config.active_env.clone();
+        Ok(sui_config)
+    }
+    fn init(&mut self) -> anyhow::Result<()> {
+        // get move package info
+        let rs = self.get_publish_info()?;
+        for v in rs.effects.events {
+            match v {
+                SuiEvent::NewObject {
+                    package_id: _,
+                    transaction_module,
+                    sender: _,
+                    recipient: _,
+                    object_type: _,
+                    object_id,
+                    version: _,
+                } => match transaction_module.as_str() {
+                    "nft" => {
+                        self.scale_nft_factory_id = object_id;
+                    }
+                    "market" => {
+                        self.scale_market_list_id = object_id;
+                    }
+                    "admin" => {
+                        self.scale_admin_id = object_id;
+                    }
+                    _ => {}
+                },
+                SuiEvent::Publish {
+                    sender: _,
+                    package_id,
+                } => {
+                    self.scale_package_id = package_id;
+                }
+                _ => {}
+            }
+        }
+        self.save()?;
+        Ok(())
+    }
+
+    fn get_publish_info(&self) -> anyhow::Result<SuiTransactionResponse> {
+        let rt = Runtime::new().unwrap();
+        let sui_config = self.get_sui_config()?;
+        rt.block_on(async {
+            debug!("get move package info");
+            if let Ok(active_envs) = sui_config.get_active_env() {
+                let client = active_envs
+                    .create_rpc_client(Some(Duration::from_secs(1000)))
+                    .await;
+                match client {
+                    Ok(client) => {
+                        let pm = TransactionDigest::from_str(com::SUI_SCALE_PUBLISH_TX).unwrap();
+                        client.read_api().get_transaction(pm).await
+                    }
+                    Err(e) => {
+                        debug!("get move package info failed: {:?}", e);
+                        Err(CliError::ActiveEnvNotFound.into())
+                    }
+                }
+            } else {
+                debug!("get move package info failed, active env not found");
+                Err(CliError::ActiveEnvNotFound.into())
+            }
+        })
+    }
+    pub fn set_config(&mut self, args: &clap::ArgMatches) {
+        let storage_path = args.get_one::<PathBuf>("storage");
+        let sui_config_file = args.get_one::<PathBuf>("sui-client-config");
+        if let Some(path) = storage_path {
+            self.scale_store_path = path.clone();
+        }
+        if let Some(path) = sui_config_file {
+            self.sui_cli_config_file = path.clone();
+        }
     }
 }

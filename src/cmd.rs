@@ -1,4 +1,5 @@
-use crate::config;
+use crate::aptos::config::Config as aptosConfig;
+use crate::config::{self, Config};
 use crate::sui::config::Config as suiConfig;
 use clap::{arg, Command};
 use std::path::PathBuf;
@@ -29,18 +30,23 @@ fn cli() -> Command {
         )
 }
 fn sui() -> Command {
-    Command::new("config").about("cli program config.")
-    .args_conflicts_with_subcommands(true)
-    .subcommand_required(true)
-    .subcommand(Command::new("get").about("get cli program config."))
-    .subcommand(
-        Command::new("set").about("set cli program config.")
-        .arg(arg!(-p --path <PATH> "Parameter file storage directory.").value_parser(clap::value_parser!(PathBuf)))
-        .arg(arg!(-k --keypair <PATH> "Wallet key pair address.").value_parser(clap::value_parser!(PathBuf)))
-        .arg(arg!(-r --rpc_url <PATH> "Custom rpc url."))
-        .arg(arg!(-w --ws_url <PATH> "Custom websocket url."))
-        .arg(arg!(-c --cluster <PATH> "set the cluster.Optional values: Testnet,Mainnet,Devnet,Localnet,Debug."))
-    )
+    Command::new("config")
+        .about("cli program config.")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_required(true)
+        .subcommand(Command::new("get").about("get cli program config."))
+        .subcommand(
+            Command::new("set")
+                .about("set cli program config.")
+                .arg(
+                    arg!(-s --storage <PATH> "Parameter file storage directory.")
+                        .value_parser(clap::value_parser!(PathBuf)),
+                )
+                .arg(
+                    arg!(-c --sui_client_config <PATH> "Sui client config file path.")
+                        .value_parser(clap::value_parser!(PathBuf)),
+                ),
+        )
 }
 
 fn aptos() -> Command {
@@ -58,9 +64,25 @@ pub fn run() -> anyhow::Result<()> {
             match matches.subcommand() {
                 Some(("config", matches)) => match matches.subcommand() {
                     Some(("get", _)) => {
-                        conf.print();
+                        (&conf).print();
                     }
                     Some(("set", matches)) => {
+                        conf.set_config(matches);
+                    }
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            }
+        }
+        Some(("aptos", matches)) => {
+            // let mut conf = aptosConfig::default();
+            // config::config(&mut conf, config_file)?;
+            match matches.subcommand() {
+                Some(("config", matches)) => match matches.subcommand() {
+                    Some(("get", _)) => {
+                        // (&conf).print();
+                    }
+                    Some(("set", _matches)) => {
                         println!("set config");
                     }
                     _ => unreachable!(),
@@ -68,18 +90,6 @@ pub fn run() -> anyhow::Result<()> {
                 _ => unreachable!(),
             }
         }
-        Some(("aptos", matches)) => match matches.subcommand() {
-            Some(("config", matches)) => match matches.subcommand() {
-                Some(("get", _)) => {
-                    conf.print();
-                }
-                Some(("set", matches)) => {
-                    println!("set config");
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        },
         _ => unreachable!(),
     }
     Ok(())

@@ -9,6 +9,7 @@ edition = "2021"
 clap = "4.0.22"
 sui-sdk = { path = "../sui/crates/sui-sdk" }
 sui-keys = {  path = "../sui/crates/sui-keys" }
+sui-json-rpc-types = {  path = "../sui/crates/sui-json-rpc-types" }
 sui = {  path = "../sui/crates/sui" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream="0.1.8"
@@ -20,3 +21,4 @@ home="0.5.4"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9.14"
 serde_json="~1"
+chrono="0.4.22"
