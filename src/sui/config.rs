@@ -2,17 +2,14 @@ use crate::com::{self, CliError};
 use crate::config::Config as cfg;
 use home;
 use log::debug;
-use std::{fs, path::PathBuf, str::FromStr, thread, time::Duration};
+use std::{fs, path::PathBuf, str::FromStr, time::Duration};
 use sui::config::{SuiClientConfig, SuiEnv};
-use sui_json_rpc_types::{SuiEvent, SuiTransactionResponse};
-use sui_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
-use sui_sdk::{
-    types::base_types::{ObjectID, SuiAddress, TransactionDigest},
-    SuiClient,
-};
+use sui_keys::keystore::{FileBasedKeystore, Keystore};
+use sui_sdk::rpc_types::{SuiEvent, SuiTransactionResponse};
+use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
 use tokio::runtime::Runtime;
 extern crate serde;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 const DEFAULT_OBJECT_ID: &str = "0x0000000000000000000000000000000000000000";
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +43,7 @@ impl Default for Config {
             Some(p) => p,
             None => PathBuf::from("/tmp/"),
         };
-        let scale_home_dir = home_dir.join(".scale");
+        let scale_home_dir = home_dir.join(".scale").join("sui");
         if !scale_home_dir.is_dir() {
             fs::create_dir(&scale_home_dir).unwrap();
         }
@@ -76,7 +73,7 @@ impl Default for Config {
 impl cfg for Config {
     fn load(&mut self) -> anyhow::Result<()>
     where
-        Self: serde::de::DeserializeOwned,
+        Self: DeserializeOwned,
     {
         if !self.scale_config_file.exists() {
             self.load_sui_config()?;
@@ -100,7 +97,6 @@ impl cfg for Config {
                 self.load_sui_config()?;
                 debug!("load scale config error: {}", e);
                 return self.init();
-                // return Err(CliError::CanNotLoadScaleConfig(e.to_string()).into());
             }
         }
         Ok(())
@@ -140,7 +136,7 @@ impl Config {
         Ok(())
     }
 
-    fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
+    pub fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
         let mut sui_config = SuiClientConfig::new(Keystore::from(
             FileBasedKeystore::new(&self.sui_config.keystore.file).unwrap(),
         ));

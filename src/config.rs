@@ -1,7 +1,7 @@
 use anyhow;
-use log::debug;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fs, path::PathBuf};
+
 extern crate serde_yaml;
 pub trait Config {
     fn load(&mut self) -> anyhow::Result<()>
