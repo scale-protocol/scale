@@ -6,12 +6,12 @@
 //     com,
 //     http::router::{self, HttpServer},
 // };
-use crate::app::App;
+use crate::app::{App, Task};
 use crate::aptos::config::Config as AptosConfig;
 use crate::com::{self, CliError};
 use crate::config;
 use crate::sui::config::Config as SuiConfig;
-use crate::sui::object;
+use crate::sui::subscribe;
 use log::*;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;
@@ -22,6 +22,7 @@ use std::{
         Arc,
     },
 };
+use tokio::task::JoinHandle;
 use tokio::{runtime::Builder, signal, sync::mpsc};
 
 pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -63,28 +64,23 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
         .enable_all()
         .build()
         .map_err(|e| CliError::TokioRuntimeCreateField(e.to_string()))?;
-
     if app == App::Sui {
         let mut conf = SuiConfig::default();
         config::config(&mut conf, config_file)?;
-        runtime.spawn(async move {
-            object::sub_sui_events(Arc::new(conf))
-                .await
-                .expect("sub sui events error");
+        // start even task
+        let tasks_list = runtime.spawn(async {
+            let event_task = subscribe::EventSubscriber::new(Arc::new(conf)).await;
+            event_task
+        });
+        runtime.block_on(async move {
+            signal::ctrl_c().await.expect("failed to listen for event");
+            info!("Ctrl-C received, shutting down");
+            let event_task = tasks_list.await.unwrap();
+            let _ = event_task.stop().await;
         });
     } else {
         let mut conf = AptosConfig::default();
         config::config(&mut conf, config_file)?;
-    }
-
-    let s = runtime.block_on(async { signal::ctrl_c().await });
-    match s {
-        Ok(()) => {
-            info!("got exit signal...start execution.")
-        }
-        Err(err) => {
-            error!("Unable to listen for shutdown signal: {}", err);
-        }
     }
     Ok(())
 }

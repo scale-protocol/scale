@@ -1,5 +1,5 @@
+use async_trait::async_trait;
 use std::fmt;
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum App {
     Sui,
@@ -27,10 +27,7 @@ impl fmt::Display for App {
         write!(f, "{}", t)
     }
 }
-
-pub trait AppTask {
-    fn start(&self);
-    fn shutdown(&self);
-    // Restart the task if it does not exit normally
-    fn is_shutdown(&self) -> bool;
+#[async_trait]
+pub trait Task {
+    async fn stop(self) -> anyhow::Result<()>;
 }
