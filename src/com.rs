@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "B2qPue9NUeUU7AaPQubLPRCfBcRMVtD5SgDw7hLHEhTL";
-pub const SUI_COIN_PUBLISH_TX: &str = "xy81qUbWxbZEtmSpU5du2RdGiNzNx1e951GUqx36oek";
+pub const SUI_SCALE_PUBLISH_TX: &str = "AAFXm2Jx26LusjG3QrJ4hkegdcF7gTwHc4wYB2frhv9q";
+pub const SUI_COIN_PUBLISH_TX: &str = "4UjNEzcvZEJSRhDWKBvTgLmE13bSTMP9T3cY9ofJrejZ";
 
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {

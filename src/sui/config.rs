@@ -7,6 +7,7 @@ use sui::config::{SuiClientConfig, SuiEnv};
 use sui_keys::keystore::{FileBasedKeystore, Keystore};
 use sui_sdk::rpc_types::{SuiEvent, SuiTransactionResponse};
 use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
+use sui_sdk::SuiClient;
 use tokio::runtime::Runtime;
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -36,6 +37,23 @@ pub struct SuiConfig {
 pub struct KeystoreFile {
     #[serde(alias = "File")]
     pub file: PathBuf,
+}
+#[derive(Clone)]
+pub struct Context {
+    pub config: Config,
+    pub client: SuiClient,
+}
+impl Context {
+    pub async fn new(config: Config) -> anyhow::Result<Self> {
+        Ok(Context {
+            config: config.clone(),
+            client: config
+                .get_sui_config()?
+                .get_active_env()?
+                .create_rpc_client(Some(Duration::from_secs(1000)))
+                .await?,
+        })
+    }
 }
 impl Default for Config {
     fn default() -> Self {

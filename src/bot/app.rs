@@ -10,7 +10,7 @@ use crate::app::{App, Task};
 use crate::aptos::config::Config as AptosConfig;
 use crate::com::{self, CliError};
 use crate::config;
-use crate::sui::config::Config as SuiConfig;
+use crate::sui::config::{Config as SuiConfig, Context as SuiContext};
 use crate::sui::subscribe;
 use log::*;
 use std::net::ToSocketAddrs;
@@ -67,15 +67,21 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
     if app == App::Sui {
         let mut conf = SuiConfig::default();
         config::config(&mut conf, config_file)?;
-        // start even task
-        let tasks_list = runtime.spawn(async {
-            let event_task = subscribe::EventSubscriber::new(Arc::new(conf)).await;
+
+        let event_sub_task = runtime.spawn(async {
+            let ctx = SuiContext::new(conf).await.expect("sui context init error");
+            // load all objects
+            if let Err(e) = subscribe::sync_all_objects(Arc::new(ctx.clone())).await {
+                error!("sync all orders error: {}", e);
+            }
+            // start even task
+            let event_task = subscribe::EventSubscriber::new(Arc::new(ctx)).await;
             event_task
         });
         runtime.block_on(async move {
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("Ctrl-C received, shutting down");
-            let event_task = tasks_list.await.unwrap();
+            let event_task = event_sub_task.await.unwrap();
             let _ = event_task.stop().await;
         });
     } else {

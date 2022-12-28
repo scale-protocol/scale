@@ -1,0 +1,50 @@
+---
+protocol-key-pair: Ac+pcnoUiqiCpdeoU+sVY6rKqu9jgFewEbdm6g41igKjdIARP4sXmOiaQVTNBCqvV4Zcjg+3PKDbmw/iJ78KMp/gQuwVRxguXx/UsYn6JtIIFvK2Yy00X1+1/FOHIrXTvba6XsVUIxOe+qqbQz9ZvuG0xyiUC/ZiD7Ft/u6SPME=
+worker-key-pair: yByUy0A5sKOIJW1t5DcldxQp86yrigFk48L+qRdcyJYf1pcx5wJXqGwUT57FraMgrc3Fr/RMAmBjhq8YfbsQHw==
+account-key-pair: AHccHjOvRJorlOhBho1r++PxWWroeKxq+zBYm8qylnWogK4nCLkdSVsT51x4uFM1EOmdAARWmA6qxzpuN8cLftA=
+network-key-pair: xwYuTrUeKKy1BCCd+N7CcZTIpBPgkSAKBdKmDK3zYXBwk6AQt6EJ5qQ7fVXmfpjCKr7jWSLzNVmahIo6HJFzew==
+db-path: local/authorities_db/a37480113f8b1798e89a4154cd042aaf57865c8e0fb73ca0db9b0fe227bf0a329fe042ec1547182e5f1fd4b189fa26d20816f2b6632d345f5fb5fc538722b5d3bdb6ba5ec55423139efaaa9b433f59bee1b4c728940bf6620fb16dfeee923cc1
+network-address: /ip4/127.0.0.1/tcp/51329/http
+json-rpc-address: "127.0.0.1:51387"
+metrics-address: "127.0.0.1:51383"
+admin-interface-port: 51385
+consensus-config:
+  address: /ip4/127.0.0.1/tcp/51337/http
+  db-path: local/consensus_db/a37480113f8b1798e89a4154cd042aaf57865c8e0fb73ca0db9b0fe227bf0a329fe042ec1547182e5f1fd4b189fa26d20816f2b6632d345f5fb5fc538722b5d3bdb6ba5ec55423139efaaa9b433f59bee1b4c728940bf6620fb16dfeee923cc1
+  internal-worker-address: ~
+  timeout-secs: 60
+  narwhal-config:
+    header_num_of_batches_threshold: 32
+    max_header_num_of_batches: 1000
+    max_header_delay: 100ms
+    gc_depth: 50
+    sync_retry_delay: 5000ms
+    sync_retry_nodes: 3
+    batch_size: 500000
+    max_batch_delay: 100ms
+    block_synchronizer:
+      range_synchronize_timeout: 30000ms
+      certificates_synchronize_timeout: 30000ms
+      payload_synchronize_timeout: 30000ms
+      payload_availability_timeout: 30000ms
+      handler_certificate_deliver_timeout: 30000ms
+    consensus_api_grpc:
+      socket_addr: /ip4/127.0.0.1/tcp/51375/http
+      get_collections_timeout: 5000ms
+      remove_collections_timeout: 5000ms
+    max_concurrent_requests: 500000
+    prometheus_metrics:
+      socket_addr: /ip4/127.0.0.1/tcp/51377/http
+    network_admin_server:
+      primary_network_admin_server_port: 51379
+      worker_network_admin_server_base_port: 51381
+enable-event-processing: false
+enable-checkpoint: false
+enable-reconfig: false
+grpc-load-shed: ~
+grpc-concurrency-limit: 20000000000
+p2p-config:
+  listen-address: "127.0.0.1:51331"
+  external-address: /ip4/127.0.0.1/udp/51331
+genesis:
+  genesis-file-location: local/genesis.blob

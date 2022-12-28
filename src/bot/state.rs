@@ -1,6 +1,6 @@
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-
+use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AccountAddress([u8; AccountAddress::LENGTH]);
 impl AccountAddress {
@@ -95,6 +95,7 @@ pub enum Officer {
     CertifiedThirdParty,
     Community,
 }
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Account {
     pub id: AccountAddress,
     pub owner: AccountAddress,
@@ -116,5 +117,31 @@ pub struct Account {
     pub margin_full_sell_total: u64,
     pub margin_independent_buy_total: u64,
     pub margin_independent_sell_total: u64,
-    // full_position_idx: VecMap<PFK,ID>
+    pub full_position_idx: Vec<Entry>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PFK {
+    pub market_id: AccountAddress,
+    pub account_id: AccountAddress,
+    pub direction: u8,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Entry {
+    pub key: PFK,
+    pub value: AccountAddress,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Position {}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UserAccount {
+    pub id: SuiAddress,
+    pub owner: SuiAddress,
+    pub account_id: TypedID,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TypedID {
+    pub type_id: u8,
+    pub id: SuiAddress,
 }

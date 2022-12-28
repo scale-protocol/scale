@@ -7488,6 +7488,7 @@ dependencies = [
  "sui",
  "sui-keys",
  "sui-sdk",
+ "sui-types",
  "thiserror",
  "tokio",
  "tokio-stream",
