@@ -6,7 +6,7 @@ use log::*;
 use std::sync::Arc;
 use std::time::Duration;
 use sui_sdk::rpc_types::{SuiEvent, SuiEventEnvelope, SuiEventFilter};
-// use sui_sdk::types::base_types::{EventQuery, ObjectID};
+use sui_sdk::types::base_types::ObjectID;
 use sui_types::{event::EventID, query::EventQuery};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -72,7 +72,7 @@ impl EventSubscriber {
                     match rs {
                         Some(Ok(event)) => {
                             debug!("event sub got event: {:?}", event);
-                            Self::handle_event(event);
+                            // Self::handle_event(event);
                         }
                         Some(Err(e)) => {
                             error!("event sub got error: {:?}", e);
@@ -87,18 +87,27 @@ impl EventSubscriber {
             }
         }
     }
-    fn handle_event(event: SuiEventEnvelope) {
-        if let SuiEvent::NewObject {
-            package_id,
-            transaction_module,
-            sender,
-            recipient,
-            object_type,
-            object_id,
-            version,
-        } = event.event
-        {
-            println!("New object: {:?}", object_id);
+
+    fn get_change_object(event: SuiEventEnvelope) -> (ObjectType, Option<ObjectID>) {
+        match event.event {
+            SuiEvent::NewObject {
+                package_id: _,
+                transaction_module: _,
+                sender: _,
+                recipient: _,
+                object_type,
+                object_id,
+                version: _,
+            } => (object_type.as_str().into(), Some(object_id)),
+            SuiEvent::MutateObject {
+                package_id: _,
+                transaction_module: _,
+                sender: _,
+                object_type,
+                object_id,
+                version: _,
+            } => (object_type.as_str().into(), Some(object_id)),
+            _ => (ObjectType::None, None),
         }
     }
 }
@@ -127,32 +136,14 @@ pub async fn sync_all_objects(ctx: Arc<Context>) -> anyhow::Result<()> {
                     module: "in".to_string(),
                 },
                 cursor.clone(),
-                Some(1),
+                Some(20),
                 Some(true),
             )
             .await
         {
             cursor = page.next_cursor;
-            for event in page.data {
-                if let SuiEvent::NewObject {
-                    package_id,
-                    transaction_module,
-                    sender,
-                    recipient,
-                    object_type,
-                    object_id,
-                    version,
-                } = event.event
-                {
-                    let t: ObjectType = object_type.as_str().into();
-                    error!("object_type: {:?}", t);
-                    if t == ObjectType::None {
-                        continue;
-                    }
-                    let r = object::get_object(ctx.clone(), object_id).await;
-                    println!("get_object: {:?}", r);
-                }
-            }
+            debug!("got data: {:?}", page.data);
+            for event in page.data {}
             if cursor.is_none() {
                 break;
             }

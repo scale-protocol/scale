@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "AAFXm2Jx26LusjG3QrJ4hkegdcF7gTwHc4wYB2frhv9q";
+pub const SUI_SCALE_PUBLISH_TX: &str = "FkcB3LVmVLEuQ3M5froVnvo7NVu8oMeYut2FME1cJG81";
 pub const SUI_COIN_PUBLISH_TX: &str = "4UjNEzcvZEJSRhDWKBvTgLmE13bSTMP9T3cY9ofJrejZ";
 
 #[derive(Error, Debug, PartialEq)]

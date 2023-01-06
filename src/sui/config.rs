@@ -24,7 +24,7 @@ pub struct Config {
     pub scale_package_id: ObjectID,
     pub scale_market_list_id: ObjectID,
     pub scale_nft_factory_id: ObjectID,
-    pub scale_admin_id: ObjectID,
+    pub admin_cap_id: ObjectID,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SuiConfig {
@@ -62,8 +62,9 @@ impl Default for Config {
             None => PathBuf::from("/tmp/"),
         };
         let scale_home_dir = home_dir.join(".scale").join("sui");
-        if !scale_home_dir.is_dir() {
-            fs::create_dir(&scale_home_dir).unwrap();
+        if !scale_home_dir.exists() {
+            debug!("create default home dir: {:?}", scale_home_dir);
+            fs::create_dir_all(&scale_home_dir).unwrap();
         }
         let sui_dir = home_dir.join(".sui").join("sui_config");
         let keystore_file = sui_dir.join("sui.keystore");
@@ -83,7 +84,7 @@ impl Default for Config {
             scale_package_id: default_id,
             scale_market_list_id: default_id,
             scale_nft_factory_id: default_id,
-            scale_admin_id: default_id,
+            admin_cap_id: default_id,
         }
     }
 }
@@ -105,11 +106,12 @@ impl cfg for Config {
                 self.scale_package_id = c.scale_package_id;
                 self.scale_market_list_id = c.scale_market_list_id;
                 self.scale_nft_factory_id = c.scale_nft_factory_id;
-                self.scale_admin_id = c.scale_admin_id;
+                self.admin_cap_id = c.admin_cap_id;
                 self.load_sui_config()?;
                 if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
                     return self.init();
                 }
+                debug!("load scale config success: {:?}", self);
             }
             Err(e) => {
                 self.load_sui_config()?;
@@ -140,7 +142,7 @@ scale admin id: {}"#,
             self.scale_package_id,
             self.scale_market_list_id,
             self.scale_nft_factory_id,
-            self.scale_admin_id,
+            self.admin_cap_id,
         );
     }
 }
@@ -166,6 +168,7 @@ impl Config {
     fn init(&mut self) -> anyhow::Result<()> {
         // get move package info
         let rs = self.get_publish_info()?;
+        debug!("get publish info: {:?}", rs.effects.events);
         for v in rs.effects.events {
             match v {
                 SuiEvent::NewObject {
@@ -184,7 +187,7 @@ impl Config {
                         self.scale_market_list_id = object_id;
                     }
                     "admin" => {
-                        self.scale_admin_id = object_id;
+                        self.admin_cap_id = object_id;
                     }
                     _ => {}
                 },
