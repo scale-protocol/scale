@@ -1,4 +1,4 @@
-use crate::bot::state::Address;
+use crate::bot::state::{Address, State};
 use crate::com;
 use sled::{Batch, Db};
 use std::fmt;
@@ -106,24 +106,24 @@ impl Storage {
         self.db.scan_prefix(px.as_bytes())
     }
 
-    fn save_one(&self, ks: &Keys, account: &Address) -> anyhow::Result<()> {
-        let value = serde_json::to_vec(account)?;
+    fn save_one(&self, ks: &Keys, data: &State) -> anyhow::Result<()> {
+        let value = serde_json::to_vec(data)?;
         let key = ks.get_storage_key();
         self.db.insert(key.as_bytes(), value)?;
         Ok(())
     }
 
-    pub fn save_to_active(&self, ks: &Keys, account: &Address) -> anyhow::Result<()> {
-        self.save_one(ks, account)
+    pub fn save_to_active(&self, ks: &Keys, data: &State) -> anyhow::Result<()> {
+        self.save_one(ks, data)
     }
 
-    pub fn save_to_history(&self, ks: &mut Keys, account: &Address) -> anyhow::Result<()> {
+    pub fn save_to_history(&self, ks: &mut Keys, data: &State) -> anyhow::Result<()> {
         ks.set_prefix(Prefix::History);
-        self.save_one(ks, account)
+        self.save_one(ks, data)
     }
 
-    pub fn save_as_history(&self, ks: &mut Keys, account: &Address) -> anyhow::Result<()> {
-        let value = serde_json::to_vec(account)?;
+    pub fn save_as_history(&self, ks: &mut Keys, data: &State) -> anyhow::Result<()> {
+        let value = serde_json::to_vec(data)?;
         let value = value.as_slice();
         let key = ks.get_storage_key();
         ks.set_prefix(Prefix::History);
@@ -138,7 +138,7 @@ impl Storage {
         Ok(())
     }
 
-    pub fn save_batch(&self, kv: Vec<(&Keys, &Address)>) -> anyhow::Result<()> {
+    pub fn save_batch(&self, kv: Vec<(&Keys, &State)>) -> anyhow::Result<()> {
         let mut batch = Batch::default();
         for v in kv {
             let value = serde_json::to_vec(v.1)?;
@@ -147,10 +147,10 @@ impl Storage {
         }
         Ok(())
     }
-    pub fn get_position_history_list(&self, pubkey: &Address) -> sled::Iter {
+    pub fn get_position_history_list(&self, address: &Address) -> sled::Iter {
         let keys = Keys::new(Prefix::History)
             .add("position".to_string())
-            .add(pubkey.to_string());
+            .add(address.to_string());
         let key = keys.get_storage_key();
         self.db.scan_prefix(key.as_bytes())
     }

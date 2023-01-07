@@ -2,12 +2,16 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 // use chrono::prelude::*;
-use fastcrypto::encoding::{Base58, Base64, Encoding, Hex};
+use anyhow::anyhow;
+use fastcrypto::encoding::{decode_bytes_hex, Base58, Base64, Encoding, Hex};
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Error};
+use std::str::FromStr;
 
 pub const DENOMINATOR: u64 = 10000;
+pub const BURST_RATE: f64 = 0.5;
+
 // ID or address of the contract
 #[derive(Debug, Deserialize, Serialize, Eq, Default, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct Address(Vec<u8>);
@@ -15,6 +19,30 @@ pub struct Address(Vec<u8>);
 impl Address {
     pub fn new(address: Vec<u8>) -> Self {
         Self(address)
+    }
+    pub fn copy(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl FromStr for Address {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        decode_bytes_hex(s).map_err(|e| anyhow!(e))
+    }
+}
+impl TryFrom<Vec<u8>> for Address {
+    type Error = anyhow::Error;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Address, anyhow::Error> {
+        Ok(Self(bytes))
+    }
+}
+impl TryFrom<&[u8]> for Address {
+    type Error = Error;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Error> {
+        Ok(Self(bytes.to_vec()))
     }
 }
 impl fmt::Display for Address {
@@ -35,7 +63,7 @@ impl AsRef<[u8]> for Address {
         &self.0[..]
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum State {
     Market(Market),
     Account(Account),
@@ -104,7 +132,7 @@ pub struct Market {
     pub short_position_total: u64,
     /// Transaction pair (token type, such as BTC, ETH)
     /// len: 4+20
-    pub name: String,
+    pub symbol: String,
     /// market description
     pub description: String,
     /// Market operator,
@@ -147,6 +175,58 @@ impl Market {
             return change / 10;
         };
         return 150;
+    }
+    // 1 buy
+    // 2 sell
+    // 3 Flat
+    pub fn get_dominant_direction(&self) -> Direction {
+        if self.long_position_total == self.short_position_total {
+            Direction::Flat
+        } else if self.long_position_total > self.short_position_total {
+            Direction::Buy
+        } else {
+            Direction::Sell
+        }
+    }
+    pub fn get_exposure(&self) -> u64 {
+        if self.short_position_total > self.long_position_total {
+            self.short_position_total - self.long_position_total
+        } else {
+            self.long_position_total - self.short_position_total
+        }
+    }
+    pub fn get_total_liquidity(&self) -> u64 {
+        self.pool.vault_balance + self.pool.profit_balance
+    }
+    pub fn get_fund_fee(&self) -> u64 {
+        if self.fund_fee_manual {
+            return self.fund_fee;
+        };
+        let total_liquidity = self.get_total_liquidity();
+        let exposure = self.get_exposure();
+        if exposure == 0 || total_liquidity == 0 {
+            return 0;
+        };
+        let exposure_rate = exposure * DENOMINATOR / total_liquidity;
+        if exposure_rate <= 1000 {
+            return 3;
+        };
+        if exposure_rate > 1000 && exposure_rate <= 2000 {
+            return 5;
+        };
+        if exposure_rate > 2000 && exposure_rate <= 3000 {
+            return 7;
+        };
+        if exposure_rate > 3000 && exposure_rate <= 4000 {
+            return 10;
+        };
+        if exposure_rate > 4000 && exposure_rate <= 5000 {
+            return 20;
+        };
+        if exposure_rate > 5000 && exposure_rate <= 6000 {
+            return 40;
+        };
+        return 70;
     }
 }
 #[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
@@ -243,6 +323,61 @@ pub struct Position {
     pub market_id: Address,
     pub account_id: Address,
 }
+
+impl Position {
+    pub fn get_fund_size(&self) -> u64 {
+        Self::fund_size(self.size, self.lot, self.open_price)
+    }
+
+    fn fund_size(size: u64, lot: u64, price: u64) -> u64 {
+        size * lot * price
+    }
+
+    pub fn get_size(&self) -> u64 {
+        Self::size(self.lot, self.size)
+    }
+
+    fn size(lot: u64, size: u64) -> u64 {
+        size * lot
+    }
+
+    pub fn get_margin_size(&self, market: &Market) -> u64 {
+        Self::margin_size(
+            self.get_fund_size(),
+            self.leverage as u64,
+            market.margin_fee,
+        )
+    }
+
+    fn margin_size(fund_size: u64, leverage: u64, margin_fee: u64) -> u64 {
+        fund_size / leverage * margin_fee / DENOMINATOR
+    }
+
+    /// get Floating P/L
+    pub fn get_pl(&self, price: &Price) -> i64 {
+        if self.direction == Direction::Buy {
+            Self::fund_size(self.size, self.lot, price.sell_price) as i64
+                - self.get_fund_size() as i64
+        } else {
+            self.get_fund_size() as i64
+                - Self::fund_size(self.size, self.lot, price.buy_price) as i64
+        }
+    }
+
+    pub fn get_position_fund_fee(&self, market: &Market) -> i64 {
+        let dominant_direction = market.get_dominant_direction();
+        if dominant_direction == Direction::Flat {
+            return 0;
+        };
+        if self.direction == dominant_direction {
+            -(self.get_fund_size() as i64 * market.get_fund_fee() as i64)
+        } else {
+            let max = market.long_position_total.max(market.short_position_total);
+            let min = market.long_position_total.min(market.short_position_total);
+            (max * market.get_fund_fee() * self.get_fund_size() / min) as i64
+        }
+    }
+}
 #[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
 #[repr(u8)]
 pub enum PositionStatus {
@@ -258,12 +393,14 @@ pub enum PositionType {
     Independent,
 }
 #[derive(
-    Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize, Eq, Ord, PartialOrd,
+    Clone, Debug, Copy, TryFromPrimitive, PartialEq, Deserialize, Serialize, Eq, Ord, PartialOrd,
 )]
 #[repr(u8)]
 pub enum Direction {
     Buy = 1,
     Sell,
+    #[serde(skip_serializing, skip_deserializing)]
+    Flat,
 }
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct Price {
@@ -273,7 +410,7 @@ pub struct Price {
     pub spread: u64,
     pub update_time: i64,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct OrgPrice {
     pub price: u64,
 }

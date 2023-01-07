@@ -3,6 +3,8 @@ use thiserror::Error;
 pub const SUI_SCALE_PUBLISH_TX: &str = "FkcB3LVmVLEuQ3M5froVnvo7NVu8oMeYut2FME1cJG81";
 pub const SUI_COIN_PUBLISH_TX: &str = "4UjNEzcvZEJSRhDWKBvTgLmE13bSTMP9T3cY9ofJrejZ";
 
+// pub const DECIMALS: f64 = 1000000.0;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {
     #[error("Unknown error: {0}")]
@@ -17,4 +19,13 @@ pub enum CliError {
     TokioRuntimeCreateField(String),
     #[error("websocket connection closed")]
     WebSocketConnectionClosed,
+    #[error("db error: {0}")]
+    DBError(String),
+    #[error("cron start error: {0}")]
+    CronError(String),
+    #[error("Error in json parsing:{0}")]
+    JsonError(String),
+}
+pub fn f64_round(f: f64) -> f64 {
+    (f * 100.0).round() / 100.0
 }

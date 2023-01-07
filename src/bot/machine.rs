@@ -1,41 +1,41 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
     Account, Address, Direction, Market, Position, PositionStatus, PositionType, Price, State,
-    Status,
+    Status, BURST_RATE,
 };
-use crate::bot::storage::{self, Keys, Storage};
+use crate::bot::storage::{self, Storage};
 use crate::com::CliError;
 use chrono::{Datelike, NaiveDate, Utc};
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot, watch,
+        oneshot,
     },
     task::JoinHandle,
     time::{self as tokio_time, Duration as TokioDuration},
 };
-use tokio_cron_scheduler::{Job, JobScheduler, JobToRun};
 
 struct Task(oneshot::Sender<()>, JoinHandle<anyhow::Result<()>>);
 
 // key is market Address,value is market data
 type DmMarket = DashMap<Address, Market>;
-// key is user account Address,value is user account data.
+// key is account Address,value is account data.
 type DmAccount = DashMap<Address, Account>;
-// key is position account Address,value is position account data
+// key is position Address,value is position  data
 type DmPosition = DashMap<Address, Position>;
-// key is price account key ,value is price
+// key is symbol ,value is price
 type DmPrice = DashMap<Address, Price>;
-// key is user account Address,value is position k-v map
+// key is account address Address,value is position k-v map
 type DmAccountPosition = DashMap<Address, DmPosition>;
-// key is price account,value is market account
-type DmIdxPriceMarket = DashMap<Address, Address>;
-// key is user account Address
+// key is symbol,value is market address set
+type DmIdxPriceMarket = DashMap<Address, DashSet<Address>>;
+// key is user address Address
 type DmAccountDynamicData = DashMap<Address, AccountDynamicData>;
 type DmPositionDynamicData = DashMap<Address, PositionDynamicData>;
 
@@ -72,9 +72,9 @@ pub struct StateMap {
     pub market: DmMarket,
     pub account: DmAccount,
     pub position: DmAccountPosition,
-    pub price_account: DmPrice,
-    pub price_account_idx: DmIdxPriceMarket,
-    pub user_dynamic_idx: DmAccountDynamicData,
+    pub price_idx: DmPrice,
+    pub price_market_idx: DmIdxPriceMarket,
+    pub account_dynamic_idx: DmAccountDynamicData,
     pub position_dynamic_idx: DmPositionDynamicData,
     pub storage: Storage,
 }
@@ -84,18 +84,18 @@ impl StateMap {
         let market: DmMarket = DashMap::new();
         let account: DmAccount = DashMap::new();
         let position: DmAccountPosition = DashMap::new();
-        let price_account: DmPrice = DashMap::new();
-        let price_account_idx: DmIdxPriceMarket = DashMap::new();
-        let user_dynamic_idx: DmAccountDynamicData = DashMap::new();
+        let price_idx: DmPrice = DashMap::new();
+        let price_market_idx: DmIdxPriceMarket = DashMap::new();
+        let account_dynamic_idx: DmAccountDynamicData = DashMap::new();
         let position_dynamic_idx: DmPositionDynamicData = DashMap::new();
         Ok(Self {
             market,
             account,
             position,
             storage,
-            price_account,
-            price_account_idx,
-            user_dynamic_idx,
+            price_idx,
+            price_market_idx,
+            account_dynamic_idx,
             position_dynamic_idx,
         })
     }
@@ -107,7 +107,7 @@ pub struct Watch {
     pub watch_tx: UnboundedSender<Message>,
     task: JoinHandle<anyhow::Result<()>>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub address: Address,
     pub state: State,
@@ -164,13 +164,27 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
     match msg.state {
         State::Market(market) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
-
+            let symbol =
+                Address::from_str(market.symbol.as_str()).expect("symbol to address error");
             if msg.status == Status::Deleted {
                 mp.market.remove(&msg.address);
-                save_as_history(mp, &mut keys, &msg.address)
+                if let Some(p) = mp.price_market_idx.get(&symbol) {
+                    p.value().remove(&msg.address);
+                }
+                save_as_history(mp, &mut keys, &State::Market(market))
             } else {
-                mp.market.insert(msg.address.clone(), market);
-                save_to_active(mp, &mut keys, &msg.address)
+                mp.market.insert(msg.address.clone(), market.clone());
+                match mp.price_market_idx.get(&symbol) {
+                    Some(p) => {
+                        p.value().insert(msg.address.clone());
+                    }
+                    None => {
+                        let set = DashSet::new();
+                        set.insert(msg.address.clone());
+                        mp.price_market_idx.insert(symbol, set);
+                    }
+                }
+                save_to_active(mp, &mut keys, &State::Market(market))
             }
         }
         State::Account(account) => {
@@ -178,10 +192,10 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
 
             if msg.status == Status::Deleted {
                 mp.account.remove(&msg.address);
-                save_as_history(mp, &mut keys, &msg.address)
+                save_as_history(mp, &mut keys, &State::Account(account))
             } else {
-                mp.account.insert(msg.address.clone(), account);
-                save_to_active(mp, &mut keys, &msg.address)
+                mp.account.insert(msg.address.clone(), account.clone());
+                save_to_active(mp, &mut keys, &State::Account(account))
             }
         }
         State::Position(position) => {
@@ -201,7 +215,7 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                         // nothing to do
                     }
                 };
-                save_as_history(mp, &mut keys, &msg.address)
+                save_as_history(mp, &mut keys, &State::Position(position))
             } else {
                 match mp.position.get(&msg.address) {
                     Some(p) => {
@@ -210,15 +224,29 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                     None => {
                         let p: DmPosition = dashmap::DashMap::new();
                         p.insert(msg.address.clone(), position.clone());
-                        mp.position.insert(position.account_id, p);
+                        mp.position.insert((&position.account_id).copy(), p);
                     }
                 };
-                save_to_active(mp, &mut keys, &msg.address)
+                save_to_active(mp, &mut keys, &State::Position(position))
             }
         }
         State::Price(price) => {
-            // let market = mp.
-            // mp.price_account.insert(msg.address, price);
+            let idx_set = &mp.price_market_idx;
+            let market_mp = &mp.market;
+            let price_mp = &mp.price_idx;
+            match idx_set.get(&msg.address) {
+                Some(p) => {
+                    for market in p.value().iter() {
+                        if let Some(m) = market_mp.get(&market) {
+                            let price = m.get_price(price.price);
+                            price_mp.insert(m.id.clone(), price);
+                        }
+                    }
+                }
+                None => {
+                    debug!("price market index not existence : {:?}", msg);
+                }
+            }
         }
         State::None => {
             debug!("got none data : {:?}", msg);
@@ -226,8 +254,8 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
     }
 }
 
-fn save_as_history(mp: SharedStateMap, ks: &mut storage::Keys, address: &Address) {
-    match mp.storage.save_as_history(ks, address) {
+fn save_as_history(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
+    match mp.storage.save_as_history(ks, data) {
         Ok(()) => {
             debug!(
                 "save a address as history success! key:{}",
@@ -244,8 +272,8 @@ fn save_as_history(mp: SharedStateMap, ks: &mut storage::Keys, address: &Address
     }
 }
 
-fn save_to_active(mp: SharedStateMap, ks: &mut storage::Keys, address: &Address) {
-    match mp.storage.save_to_active(ks, address) {
+fn save_to_active(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
+    match mp.storage.save_to_active(ks, data) {
         Ok(()) => {
             debug!(
                 "save a address as active success! key:{}",
@@ -276,6 +304,7 @@ impl Liquidation {
         }
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let (task_tx, task_rx) = flume::bounded::<Address>(tasks);
+        let (fund_task_tx, fund_task_rx) = flume::bounded::<Address>(tasks);
         let cron = Cron::new().await?;
         // create fund fee cron
         let fund_fee_timer = cron.add_job("1/2 * * * * *").await?;
@@ -286,6 +315,7 @@ impl Liquidation {
             tokio::spawn(loop_account_task(
                 mp.clone(),
                 task_tx,
+                fund_task_tx,
                 shutdown_rx,
                 fund_fee_timer,
                 opening_price_timer,
@@ -293,7 +323,7 @@ impl Liquidation {
         );
         Ok(Self {
             account_tasks: account_task,
-            position_tasks: loop_position_task(mp, tasks, task_rx).await?,
+            position_tasks: loop_position_task(mp, tasks, task_rx, fund_task_rx).await?,
             cron,
         })
     }
@@ -314,6 +344,7 @@ impl Liquidation {
 async fn loop_account_task(
     mp: SharedStateMap,
     task_tx: flume::Sender<Address>,
+    fund_task_tx: flume::Sender<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
     mut fund_fee_timer: mpsc::Receiver<()>,
     mut opening_price_timer: mpsc::Receiver<()>,
@@ -328,9 +359,16 @@ async fn loop_account_task(
             },
             _ = fund_fee_timer.recv() => {
                 info!("Got fund fee timer signal , current time: {:?}",Utc::now());
+                for v in & mp.account {
+                    let address = v.key().clone();
+                    if let Err(e) = fund_task_tx.send(address) {
+                        error!("send address to fund task channel error: {}", e);
+                    }
+                }
             }
             _= opening_price_timer.recv() => {
                 info!("Got opening price timer signal , current time: {:?}",Utc::now());
+                update_opening_price(&mp.market).await;
             }
             // loop account
             _ = async {
@@ -356,11 +394,17 @@ async fn loop_account_task(
     }
     Ok(())
 }
-
+async fn update_opening_price(dm_market: &DmMarket) {
+    for v in dm_market {
+        // todo update opening price
+        todo!();
+    }
+}
 async fn loop_position_task(
     mp: SharedStateMap,
     tasks: usize,
     task_rx: flume::Receiver<Address>,
+    fund_task_rx: flume::Receiver<Address>,
 ) -> anyhow::Result<Vec<Task>> {
     debug!("start position task...");
     let mut workers: Vec<Task> = Vec::with_capacity(tasks);
@@ -370,6 +414,7 @@ async fn loop_position_task(
         let task = tokio::spawn(loop_position_by_user(
             mp.clone(),
             task_rx.clone(),
+            fund_task_rx.clone(),
             task_shutdown_rx,
         ));
         workers.push(Task(task_shutdown_tx, task));
@@ -380,6 +425,7 @@ async fn loop_position_task(
 async fn loop_position_by_user(
     mp: SharedStateMap,
     task_rx: flume::Receiver<Address>,
+    fund_task_rx: flume::Receiver<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> anyhow::Result<()> {
     loop {
@@ -395,7 +441,25 @@ async fn loop_position_by_user(
                         let account = mp.account.get(&address);
                         match account {
                             Some(account) => {
-                                debug!("got account from state map: {:?}",account);
+                                handle_fund_fee(mp.clone(),&account,&address);
+                            },
+                            None => {
+                                debug!("no account for state map : {:?}",address);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        error!("recv account address error: {}",e);
+                    }
+                }
+            },
+            account_address = fund_task_rx.recv_async() => {
+                match account_address {
+                    Ok(address) => {
+                        debug!("got account address from fund task recv: {:?}",address);
+                        let account = mp.account.get(&address);
+                        match account {
+                            Some(account) => {
                                 compute_position(mp.clone(),&account,&address);
                             },
                             None => {
@@ -415,29 +479,125 @@ async fn loop_position_by_user(
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct PositionSort {
-    pub offset: u32,
+    pub position_address: Address,
     pub profit: i64,
     pub direction: Direction,
     pub margin: u64,
-    pub market_account: Option<Address>,
+    pub market_address: Option<Address>,
 }
+
+fn handle_fund_fee(mp: SharedStateMap, account: &Account, address: &Address) {
+    // todo handle fund fee
+    todo!();
+}
+
 fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {
     match mp.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
-            compute_pl_all_position(account, &positions);
+            compute_pl_all_position(
+                &mp.market,
+                account,
+                &positions,
+                &mp.price_idx,
+                &mp.account_dynamic_idx,
+                &mp.position_dynamic_idx,
+            );
         }
         None => {
             debug!("no position for state map: {:?}", address);
         }
     }
 }
-fn compute_pl_all_position(account: &Account, positions: &DmPosition) {
-    let mut total_pl: f64 = 0.0;
-    // let headers = account.full_position_idx;
-    let mut data = AccountDynamicData::default();
+
+fn compute_pl_all_position(
+    dm_market: &DmMarket,
+    account: &Account,
+    dm_position: &DmPosition,
+    dm_price: &DmPrice,
+    account_dynamic_idx_mp: &DmAccountDynamicData,
+    position_dynamic_idx_mp: &DmPositionDynamicData,
+) {
+    let mut account_data = AccountDynamicData::default();
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
-    for v in positions.iter() {
+    let mut pl_full = 0i64;
+    for v in dm_position.iter() {
         let position = v.value();
+        match dm_market.get(&position.market_id) {
+            Some(market) => match dm_price.get(&position.market_id) {
+                Some(price) => {
+                    let pl = position.get_pl(&price);
+                    let fund_fee = position.get_position_fund_fee(&market);
+                    let pl_and_fund_fee = pl + fund_fee;
+                    account_data.profit += pl as f64;
+                    account_data.equity += pl_and_fund_fee as f64;
+                    if position.position_type == PositionType::Full {
+                        pl_full += pl_and_fund_fee;
+                    } else {
+                        if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
+                            // todo BURST position
+                            todo!();
+                        }
+                    }
+                    position_dynamic_idx_mp.insert(
+                        position.id.copy(),
+                        PositionDynamicData {
+                            profit_rate: pl as f64 / position.margin as f64,
+                        },
+                    );
+                    position_sort.push(PositionSort {
+                        profit: pl_and_fund_fee,
+                        position_address: position.id.copy(),
+                        direction: position.direction,
+                        margin: position.margin,
+                        market_address: Some(market.id.copy()),
+                    });
+                }
+                None => {
+                    error!("no price for position id: {}", position.id);
+                    continue;
+                }
+            },
+            None => {
+                error!("no market for position id: {}", position.id);
+                continue;
+            }
+        }
     }
+    // check full position
+    let mut margin_full_buy_total = account.margin_full_buy_total;
+    let mut margin_full_sell_total = account.margin_full_sell_total;
+    let equity = account.balance as i64 + pl_full;
+    let margin_full_total = margin_full_buy_total.max(margin_full_sell_total);
+    // Forced close
+    if (equity as f64 / margin_full_total as f64) < BURST_RATE {
+        // sort
+        position_sort.sort_by(|a, b| b.profit.cmp(&a.profit).reverse());
+        for p in position_sort {
+            // todo close position
+            {
+                // todo!();
+            }
+            match p.direction {
+                Direction::Buy => {
+                    margin_full_buy_total -= p.margin;
+                }
+                Direction::Sell => {
+                    margin_full_sell_total -= p.margin;
+                }
+                Direction::Flat => {}
+            }
+            // Reach the safety line of explosion
+            if ((equity + p.profit) as f64
+                / margin_full_buy_total.max(margin_full_sell_total) as f64)
+                > BURST_RATE
+            {
+                break;
+            }
+        }
+    }
+    account_data.equity += account.balance as f64;
+    account_data.margin_percentage = account_data.equity as f64 / account.margin_total as f64;
+    account_data.profit_rate = account_data.profit as f64 / account.margin_total as f64;
+    account_dynamic_idx_mp.insert(account.id.copy(), account_data);
 }
