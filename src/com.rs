@@ -25,6 +25,8 @@ pub enum CliError {
     CronError(String),
     #[error("Error in json parsing:{0}")]
     JsonError(String),
+    #[error("Error in websocket:{0}")]
+    WebSocketError(String),
 }
 pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0
