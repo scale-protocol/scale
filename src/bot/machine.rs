@@ -29,12 +29,12 @@ type DmMarket = DashMap<Address, Market>;
 type DmAccount = DashMap<Address, Account>;
 // key is position Address,value is position  data
 type DmPosition = DashMap<Address, Position>;
-// key is symbol ,value is price
+// key is market address ,value is price
 type DmPrice = DashMap<Address, Price>;
 // key is account address Address,value is position k-v map
 type DmAccountPosition = DashMap<Address, DmPosition>;
 // key is symbol,value is market address set
-type DmIdxPriceMarket = DashMap<Address, DashSet<Address>>;
+type DmIdxPriceMarket = DashMap<String, DashSet<Address>>;
 // key is user address Address
 type DmAccountDynamicData = DashMap<Address, AccountDynamicData>;
 type DmPositionDynamicData = DashMap<Address, PositionDynamicData>;
@@ -164,24 +164,22 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
     match msg.state {
         State::Market(market) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
-            let symbol =
-                Address::from_str(market.symbol.as_str()).expect("symbol to address error");
             if msg.status == Status::Deleted {
                 mp.market.remove(&msg.address);
-                if let Some(p) = mp.price_market_idx.get(&symbol) {
+                if let Some(p) = mp.price_market_idx.get(&market.symbol) {
                     p.value().remove(&msg.address);
                 }
                 save_as_history(mp, &mut keys, &State::Market(market))
             } else {
                 mp.market.insert(msg.address.clone(), market.clone());
-                match mp.price_market_idx.get(&symbol) {
+                match mp.price_market_idx.get(&market.symbol) {
                     Some(p) => {
                         p.value().insert(msg.address.clone());
                     }
                     None => {
                         let set = DashSet::new();
                         set.insert(msg.address.clone());
-                        mp.price_market_idx.insert(symbol, set);
+                        mp.price_market_idx.insert(market.symbol.clone(), set);
                     }
                 }
                 save_to_active(mp, &mut keys, &State::Market(market))
@@ -230,21 +228,21 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                 save_to_active(mp, &mut keys, &State::Position(position))
             }
         }
-        State::Price(price) => {
+        State::Price(org_price) => {
             let idx_set = &mp.price_market_idx;
             let market_mp = &mp.market;
             let price_mp = &mp.price_idx;
-            match idx_set.get(&msg.address) {
+            match idx_set.get(&org_price.symbol) {
                 Some(p) => {
                     for market in p.value().iter() {
                         if let Some(m) = market_mp.get(&market) {
-                            let price = m.get_price(price.price);
+                            let price = m.get_price(org_price.price);
                             price_mp.insert(m.id.clone(), price);
                         }
                     }
                 }
                 None => {
-                    debug!("price market index not existence : {:?}", msg);
+                    debug!("price market index not existence : {:?}", &org_price.symbol);
                 }
             }
         }
@@ -397,7 +395,7 @@ async fn loop_account_task(
 async fn update_opening_price(dm_market: &DmMarket) {
     for v in dm_market {
         // todo update opening price
-        todo!();
+        // todo!();
     }
 }
 async fn loop_position_task(
@@ -488,7 +486,7 @@ struct PositionSort {
 
 fn handle_fund_fee(mp: SharedStateMap, account: &Account, address: &Address) {
     // todo handle fund fee
-    todo!();
+    // todo!();
 }
 
 fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {

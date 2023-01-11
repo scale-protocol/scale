@@ -28,6 +28,7 @@ impl Address {
 impl FromStr for Address {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // if s.split_at(2).0 == "0x" {}
         decode_bytes_hex(s).map_err(|e| anyhow!(e))
     }
 }
@@ -410,7 +411,9 @@ pub struct Price {
     pub spread: u64,
     pub update_time: i64,
 }
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OrgPrice {
     pub price: u64,
+    pub update_time: i64,
+    pub symbol: String,
 }

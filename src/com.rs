@@ -3,7 +3,7 @@ use thiserror::Error;
 pub const SUI_SCALE_PUBLISH_TX: &str = "FkcB3LVmVLEuQ3M5froVnvo7NVu8oMeYut2FME1cJG81";
 pub const SUI_COIN_PUBLISH_TX: &str = "4UjNEzcvZEJSRhDWKBvTgLmE13bSTMP9T3cY9ofJrejZ";
 
-// pub const DECIMALS: f64 = 1000000.0;
+pub const DECIMALS: u64 = 1000000;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {
@@ -27,6 +27,8 @@ pub enum CliError {
     JsonError(String),
     #[error("Error in websocket:{0}")]
     WebSocketError(String),
+    #[error("Error in price subscribe,unknown symbol")]
+    UnknownSymbol,
 }
 pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0
