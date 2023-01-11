@@ -1,11 +1,14 @@
 use crate::bot::{
     self,
+    influxdb::{Influxdb, PriceData},
     machine::{AccountDynamicData, PositionDynamicData},
     state::{Account, Address, Position, State},
 };
 use crate::bot::{machine, storage};
 use crate::com::{self, CliError};
+use chrono::{DateTime, FixedOffset};
 use log::*;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -39,7 +42,7 @@ pub fn get_account_info(
                 }
                 None => None,
             };
-            let mut user_account = (*user.value()).clone();
+            let user_account = (*user.value()).clone();
             let user_info = AccountInfo {
                 account_data: user_account,
                 dynamic_data: data,
@@ -121,4 +124,59 @@ pub fn get_position_list(
         storage::Prefix::None => {}
     }
     Ok(rs)
+}
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceStatus {
+    pub change_rate: i64,
+    pub change: i64,
+    pub high_24h: i64,
+    pub low_24h: i64,
+    pub current_price: i64,
+}
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceColumn {
+    pub open: i64,
+    pub close: i64,
+    pub high: i64,
+    pub low: i64,
+    pub time: DateTime<FixedOffset>,
+}
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Price {
+    pub price: i64,
+    pub time: DateTime<FixedOffset>,
+}
+fn get_filter(bucket: &str, symbol: &str) -> String {
+    format!(
+        r#"from(bucket: "{}")
+        |> range(start: -1d)
+        |> filter(fn: (r) => r["_measurement"] == "{}")
+        |> filter(fn: (r) => r["feed"] == "price")
+        |> filter(fn: (r) => r["_field"] == "price")
+        "#,
+        bucket, symbol
+    )
+}
+pub async fn get_price_history(symbol: String, range: String, db: Arc<Influxdb>) {
+    let range = match range.as_str() {
+        "1H" => "-1h",
+        "1D" => "-1d",
+        "1W" => "-1w",
+        "1M" => "-1mo",
+        "1Y" => "-1y",
+        _ => "",
+    };
+}
+pub async fn get_price_history_column(symbol: String, range: String, db: Arc<Influxdb>) {
+    let range = match range.as_str() {
+        "1H" => "1h",
+        "1D" => "1d",
+        "1W" => "7d",
+        "1M" => "30d",
+        "1Y" => "365d",
+        _ => "",
+    };
 }

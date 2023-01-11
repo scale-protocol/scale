@@ -1,21 +1,23 @@
 use std::net::SocketAddr;
 
-use log::*;
-
 use crate::bot;
+use crate::bot::influxdb::{Influxdb, PriceData};
+use crate::bot::machine::SharedStateMap;
 use axum::{
     self,
     error_handling::HandleErrorLayer,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Extension, Path, TypedHeader,
+        Extension, Path, Query, TypedHeader,
     },
     http::StatusCode,
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
+use log::*;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{borrow::Cow, time::Duration};
 use tokio::sync::oneshot;
 use tower::{BoxError, ServiceBuilder};
@@ -28,8 +30,8 @@ pub struct HttpServer {
 }
 
 impl HttpServer {
-    pub async fn new(addr: &SocketAddr, mp: bot::machine::SharedStateMap) -> Self {
-        let router = router(mp);
+    pub async fn new(addr: &SocketAddr, mp: SharedStateMap, db: Arc<Influxdb>) -> Self {
+        let router = router(mp, db);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -51,13 +53,14 @@ impl HttpServer {
     }
 }
 
-pub fn router(mp: bot::machine::SharedStateMap) -> Router {
+pub fn router(mp: SharedStateMap, db: Arc<Influxdb>) -> Router {
     let app: Router = Router::new()
         .route("/user/info/:address", get(get_user_info))
         .route(
             "/user/positions/:prefix/:address",
             get(get_user_position_list),
         )
+        .route("/price/history/:symbol", get(get_price_history))
         .route("/ws", get(ws_handler))
         .layer(
             ServiceBuilder::new()
@@ -71,7 +74,8 @@ pub fn router(mp: bot::machine::SharedStateMap) -> Router {
                         .make_span_with(DefaultMakeSpan::default().include_headers(true)),
                 ), // .into_inner(),
         )
-        .layer(Extension(mp));
+        .layer(Extension(mp))
+        .layer(Extension(db));
     app
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -82,7 +86,7 @@ pub struct JsonResponse<T> {
 }
 async fn get_user_info(
     Path(address): Path<String>,
-    Extension(state): Extension<bot::machine::SharedStateMap>,
+    Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
     let rs = match service::get_account_info(address, state) {
         Ok(r) => {
@@ -101,7 +105,7 @@ async fn get_user_info(
 
 async fn get_user_position_list(
     Path((prefix, address)): Path<(String, String)>,
-    Extension(state): Extension<bot::machine::SharedStateMap>,
+    Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
     let rs = match service::get_position_list(state, prefix, address) {
         Ok(r) => {
@@ -117,7 +121,13 @@ async fn get_user_position_list(
     };
     Json(rs)
 }
-
+async fn get_price_history(
+    Path(symbol): Path<String>,
+    Query(range): Query<String>,
+    Extension(db): Extension<Influxdb>,
+) -> impl IntoResponse {
+    Json(vec![1, 2, 3])
+}
 async fn handle_error(error: BoxError) -> impl IntoResponse {
     if error.is::<tower::timeout::error::Elapsed>() {
         return (StatusCode::REQUEST_TIMEOUT, Cow::from("request timed out"));

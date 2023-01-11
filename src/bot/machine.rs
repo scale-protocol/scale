@@ -236,7 +236,11 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                 Some(p) => {
                     for market in p.value().iter() {
                         if let Some(m) = market_mp.get(&market) {
-                            let price = m.get_price(org_price.price);
+                            if org_price.price <= 0 {
+                                error!("got a danger price : {:?}", &org_price);
+                                continue;
+                            }
+                            let price = m.get_price(org_price.price as u64);
                             price_mp.insert(m.id.clone(), price);
                         }
                     }

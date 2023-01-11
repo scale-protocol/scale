@@ -1,4 +1,5 @@
 pub mod cron;
+pub mod influxdb;
 pub mod machine;
 pub mod price;
 pub mod state;
