@@ -8,12 +8,14 @@ use crate::bot::ws_client::{WsClient, WsMessage};
 use crate::com::{CliError, DECIMALS};
 use dashmap::DashMap;
 use futures::prelude::*;
-use influxdb2::{self, api::write::TimestampPrecision, models::DataPoint};
+use influxdb2_client::api::write::Precision;
+use influxdb2_client::models::DataPoint;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
@@ -84,14 +86,16 @@ pub struct PriceFeed {
 }
 impl PriceFeed {
     fn get_data_points(&self, measurement: String) -> anyhow::Result<Vec<DataPoint>> {
+        // let now = chrono::Utc::now();
+        // let ts = Utc.timestamp_millis_opt(111).unwrap();
         let r = vec![
-            influxdb2::models::DataPoint::builder(measurement.clone())
+            DataPoint::builder(measurement.clone())
                 .field("price", self.price.get_real_price())
                 .field("conf", self.price.conf.parse::<i64>().unwrap())
                 .tag("feed", "price")
                 .timestamp(self.price.publish_time)
                 .build()?,
-            influxdb2::models::DataPoint::builder(measurement)
+            DataPoint::builder(measurement)
                 .field("price", self.ema_price.get_real_price())
                 .field("conf", self.ema_price.conf.parse::<i64>().unwrap())
                 .tag("feed", "ema_price")
@@ -160,6 +164,7 @@ pub async fn sub_price(
     price_ws_url: String,
     inf_db: Influxdb,
     symbol_id_vec: Vec<SymbolId>,
+    is_write_db: bool,
 ) -> anyhow::Result<WsClient> {
     debug!("start sub price url: {:?}", price_ws_url);
     let mut sub_req = Request {
@@ -179,6 +184,7 @@ pub async fn sub_price(
         let sm_mp = sm_mp.clone();
         let watch_tx = watch_tx.clone();
         let influxdb_client = inf_db.client.clone();
+        let org = inf_db.org.clone();
         let bucket = inf_db.bucket.clone();
         Box::pin(async move {
             if let WsMessage::Txt(txt) = msg {
@@ -199,18 +205,22 @@ pub async fn sub_price(
                 if let Err(e) = watch_tx.send(watch_msg) {
                     error!("send watch msg error: {:?}", e);
                 }
-                // let db_price_data: PriceData = resp.price_feed.price.into();
+                if !is_write_db {
+                    return Ok(());
+                }
                 let _db_rs = influxdb_client
-                    .write_with_precision(
+                    .write(
+                        org.as_str(),
                         bucket.as_str(),
+                        Precision::Seconds,
                         stream::iter(resp.price_feed.get_data_points(symbol_str.to_string())?),
-                        TimestampPrecision::Seconds,
                     )
-                    .await?;
-                debug!(
-                    "write price to db success! {:?}",
-                    resp.price_feed.get_data_points(symbol_str.to_string())?
-                );
+                    .await;
+                // debug!(
+                //     "write price to db success! {:?}",
+                //     resp.price_feed.get_data_points(symbol_str.to_string())?
+                // );
+                // debug!("......write price resp.....: {:?}", _db_rs);
             }
             Ok(())
         })

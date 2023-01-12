@@ -1,17 +1,18 @@
 use crate::bot::{
     self,
-    influxdb::{Influxdb, PriceData},
+    influxdb::Influxdb,
     machine::{AccountDynamicData, PositionDynamicData},
     state::{Account, Address, Position, State},
 };
 use crate::bot::{machine, storage};
 use crate::com::{self, CliError};
-use chrono::{DateTime, FixedOffset};
+use csv::ReaderBuilder;
+use influxdb2_client::models::Query;
 use log::*;
-use std::sync::Arc;
-
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use std::sync::Arc;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
     pub account_data: Account,
@@ -134,49 +135,142 @@ pub struct PriceStatus {
     pub low_24h: i64,
     pub current_price: i64,
 }
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PriceColumn {
-    pub open: i64,
-    pub close: i64,
-    pub high: i64,
-    pub low: i64,
-    pub time: DateTime<FixedOffset>,
-}
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Price {
-    pub price: i64,
-    pub time: DateTime<FixedOffset>,
+    #[serde(rename(deserialize = "_value", serialize = "value"))]
+    value: i64,
+    #[serde(rename(deserialize = "_start", serialize = "time"))]
+    time: String,
 }
-fn get_filter(bucket: &str, symbol: &str) -> String {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PriceColumn {
+    #[serde(rename(deserialize = "_start", serialize = "start_time"))]
+    start_time: String,
+    #[serde(rename(deserialize = "_stop", serialize = "stop_time"))]
+    stop_time: String,
+    #[serde(rename(deserialize = "_value_first", serialize = "open"))]
+    value_first: i64,
+    #[serde(rename(deserialize = "_value_last", serialize = "close"))]
+    value_last: i64,
+    #[serde(rename(deserialize = "_value_min", serialize = "low"))]
+    value_min: i64,
+    #[serde(rename(deserialize = "_value_max", serialize = "high"))]
+    value_max: i64,
+}
+fn get_price_history_query(
+    bucket: &str,
+    start: &str,
+    symbol: &str,
+    feed: &str,
+    window: &str,
+) -> String {
     format!(
         r#"from(bucket: "{}")
-        |> range(start: -1d)
+        |> range(start: {})
         |> filter(fn: (r) => r["_measurement"] == "{}")
-        |> filter(fn: (r) => r["feed"] == "price")
         |> filter(fn: (r) => r["_field"] == "price")
+        |> filter(fn: (r) => r["feed"] == "{}")
+        |> window(every: {})
+        |> keep(columns: ["_value","_start","_stop"])
+        |> first()
         "#,
-        bucket, symbol
+        bucket, start, symbol, feed, window
     )
 }
-pub async fn get_price_history(symbol: String, range: String, db: Arc<Influxdb>) {
-    let range = match range.as_str() {
-        "1H" => "-1h",
-        "1D" => "-1d",
-        "1W" => "-1w",
-        "1M" => "-1mo",
-        "1Y" => "-1y",
-        _ => "",
-    };
+fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
+    match range {
+        "1H" => Ok(("-1h".to_string(), "5s".to_string())),
+        "1D" => Ok(("-1d".to_string(), "1m".to_string())),
+        "1W" => Ok(("-1w".to_string(), "1h".to_string())),
+        "1M" => Ok(("-1m".to_string(), "1h".to_string())),
+        "1Y" => Ok(("-1y".to_string(), "1h".to_string())),
+        _ => Err(CliError::InvalidRange.into()),
+    }
 }
-pub async fn get_price_history_column(symbol: String, range: String, db: Arc<Influxdb>) {
-    let range = match range.as_str() {
-        "1H" => "1h",
-        "1D" => "1d",
-        "1W" => "7d",
-        "1M" => "30d",
-        "1Y" => "365d",
-        _ => "",
-    };
+pub async fn get_price_history(
+    symbol: Option<String>,
+    range: Option<String>,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<Vec<Price>> {
+    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    if symbol.is_empty() {
+        return Err(CliError::UnknownSymbol.into());
+    }
+    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let (start, window) = get_start_and_window(range.as_str())?;
+    let query = get_price_history_query(
+        db.bucket.as_str(),
+        start.as_str(),
+        symbol.as_str(),
+        "price",
+        window.as_str(),
+    );
+    let db_query_rs = db
+        .client
+        .query_raw(db.org.as_str(), Some(Query::new(query)))
+        .await?;
+    let rs = ReaderBuilder::new()
+        .delimiter(b',')
+        .from_reader(db_query_rs.as_bytes())
+        .deserialize()
+        .collect::<Result<Vec<Price>, _>>()?;
+    Ok(rs)
+}
+
+fn get_price_history_column_query(
+    bucket: &str,
+    start: &str,
+    symbol: &str,
+    feed: &str,
+    window: &str,
+) -> String {
+    format!(
+        r#"dataSet=from(bucket: "{}")
+    |> range(start: {})
+    |> filter(fn: (r) => r["_measurement"] == "{}")
+    |> filter(fn: (r) => r["_field"] == "price")
+    |> filter(fn: (r) => r["feed"] == "{}")
+    |> window(every: {})
+    |> keep(columns: ["_value","_start","_stop"])
+    dataMin = dataSet|> min()
+    dataMax = dataSet|> max()
+    dataFirst = dataSet|> first()
+    dataLast = dataSet|> last()
+    j1=join(tables: {{min: dataMin, max: dataMax}}, on: ["_start", "_stop"], method: "inner")
+    j2=join(tables: {{first: dataFirst, last: dataLast}}, on: ["_start", "_stop"], method: "inner")
+    join(tables: {{t1: j1, t2: j2}}, on: ["_start", "_stop"], method: "inner")
+    "#,
+        bucket, start, symbol, feed, window
+    )
+}
+
+pub async fn get_price_history_column(
+    symbol: Option<String>,
+    range: Option<String>,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<Vec<PriceColumn>> {
+    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    if symbol.is_empty() {
+        return Err(CliError::UnknownSymbol.into());
+    }
+    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let (start, window) = get_start_and_window(range.as_str())?;
+    let query = get_price_history_column_query(
+        db.bucket.as_str(),
+        start.as_str(),
+        symbol.as_str(),
+        "price",
+        window.as_str(),
+    );
+    let db_query_rs = db
+        .client
+        .query_raw(db.org.as_str(), Some(Query::new(query)))
+        .await?;
+    let rs = ReaderBuilder::new()
+        .delimiter(b',')
+        .from_reader(db_query_rs.as_bytes())
+        .deserialize()
+        .collect::<Result<Vec<PriceColumn>, _>>()?;
+    Ok(rs)
 }

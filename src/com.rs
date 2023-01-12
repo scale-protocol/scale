@@ -27,8 +27,10 @@ pub enum CliError {
     JsonError(String),
     #[error("Error in websocket:{0}")]
     WebSocketError(String),
-    #[error("Error in price subscribe,unknown symbol")]
+    #[error("unknown symbol params")]
     UnknownSymbol,
+    #[error("invalid range params")]
+    InvalidRange,
 }
 pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0

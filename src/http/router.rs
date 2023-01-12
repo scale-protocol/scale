@@ -1,8 +1,9 @@
 use std::net::SocketAddr;
 
-use crate::bot;
-use crate::bot::influxdb::{Influxdb, PriceData};
+use crate::bot::influxdb::Influxdb;
 use crate::bot::machine::SharedStateMap;
+use crate::http::query::empty_string_as_none;
+use crate::http::response::JsonResponse;
 use axum::{
     self,
     error_handling::HandleErrorLayer,
@@ -13,10 +14,11 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::get,
-    Json, Router,
+    Router,
 };
 use log::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
 use std::sync::Arc;
 use std::{borrow::Cow, time::Duration};
 use tokio::sync::oneshot;
@@ -60,7 +62,8 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>) -> Router {
             "/user/positions/:prefix/:address",
             get(get_user_position_list),
         )
-        .route("/price/history/:symbol", get(get_price_history))
+        .route("/price/history", get(get_price_history))
+        .route("/price/history_c/", get(get_price_history_column))
         .route("/ws", get(ws_handler))
         .layer(
             ServiceBuilder::new()
@@ -78,55 +81,41 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>) -> Router {
         .layer(Extension(db));
     app
 }
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct JsonResponse<T> {
-    code: u64,
-    message: String,
-    data: T,
-}
+
 async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    let rs = match service::get_account_info(address, state) {
-        Ok(r) => {
-            let mut j: JsonResponse<Option<service::AccountInfo>> = JsonResponse::default();
-            j.data = r;
-            j
-        }
-        Err(e) => {
-            let mut j: JsonResponse<Option<service::AccountInfo>> = JsonResponse::default();
-            j.message = e.to_string();
-            j
-        }
-    };
-    Json(rs)
+    JsonResponse::from(service::get_account_info(address, state)).to_json()
 }
 
 async fn get_user_position_list(
     Path((prefix, address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    let rs = match service::get_position_list(state, prefix, address) {
-        Ok(r) => {
-            let mut j: JsonResponse<Vec<service::PositionInfo>> = JsonResponse::default();
-            j.data = r;
-            j
-        }
-        Err(e) => {
-            let mut j: JsonResponse<Vec<service::PositionInfo>> = JsonResponse::default();
-            j.message = e.to_string();
-            j
-        }
-    };
-    Json(rs)
+    JsonResponse::from(service::get_position_list(state, prefix, address)).to_json()
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct HistoryParams {
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    range: Option<String>,
+    symbol: Option<String>,
 }
 async fn get_price_history(
-    Path(symbol): Path<String>,
-    Query(range): Query<String>,
-    Extension(db): Extension<Influxdb>,
+    Query(q_m): Query<HistoryParams>,
+    Extension(db): Extension<Arc<Influxdb>>,
 ) -> impl IntoResponse {
-    Json(vec![1, 2, 3])
+    let r = service::get_price_history(q_m.symbol, q_m.range, db).await;
+    JsonResponse::from(r).to_json()
+}
+async fn get_price_history_column(
+    Query(q_m): Query<HistoryParams>,
+    Extension(db): Extension<Arc<Influxdb>>,
+) -> impl IntoResponse {
+    let r = service::get_price_history_column(q_m.symbol, q_m.range, db).await;
+    JsonResponse::from(r).to_json()
 }
 async fn handle_error(error: BoxError) -> impl IntoResponse {
     if error.is::<tower::timeout::error::Elapsed>() {
