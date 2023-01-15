@@ -1,87 +1,53 @@
 use crate::bot::{
     self,
     influxdb::Influxdb,
-    machine::{AccountDynamicData, PositionDynamicData},
-    state::{Account, Address, Position, State},
+    state::{Account, Address, OrgPrice, Position, State, Task},
+    ws::{PriceWatchRx, SubType, WsSrvMessage},
 };
 use crate::bot::{machine, storage};
 use crate::com::{self, CliError};
+use axum::extract::ws::{Message, WebSocket};
 use csv::ReaderBuilder;
+use dashmap::DashMap;
 use influxdb2_client::models::Query;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountInfo {
-    pub account_data: Account,
-    pub address: Address,
-    pub dynamic_data: Option<AccountDynamicData>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PositionInfo {
-    pub position_data: Position,
-    pub address: Address,
-    pub dynamic_data: Option<PositionDynamicData>,
-}
+use tokio::{
+    sync::{
+        mpsc::{self, UnboundedReceiver},
+        oneshot,
+    },
+    time::{self, Duration},
+};
 
 pub fn get_account_info(
     address: String,
     mp: bot::machine::SharedStateMap,
-) -> anyhow::Result<Option<AccountInfo>> {
+) -> anyhow::Result<Option<Account>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-    let rs = match mp.account.get(&address) {
-        Some(user) => {
-            let data = match mp.account_dynamic_idx.get(&address) {
-                Some(d) => {
-                    let mut dynamic_data = machine::AccountDynamicData::default();
-                    dynamic_data.margin_percentage = com::f64_round(d.value().margin_percentage);
-                    dynamic_data.profit_rate = com::f64_round(d.value().profit_rate);
-                    Some(dynamic_data)
-                }
-                None => None,
-            };
-            let user_account = (*user.value()).clone();
-            let user_info = AccountInfo {
-                account_data: user_account,
-                dynamic_data: data,
-                address,
-            };
-            Some(user_info)
-        }
-        None => None,
-    };
-    Ok(rs)
+    let r = mp.account.get(&address);
+    Ok(r.map(|a| a.value().clone()))
 }
 
 pub fn get_position_list(
     mp: machine::SharedStateMap,
     prefix: String,
     address: String,
-) -> anyhow::Result<Vec<PositionInfo>> {
+) -> anyhow::Result<Vec<Position>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     let prefix = storage::Prefix::from_str(prefix.as_str())?;
-    let mut rs: Vec<PositionInfo> = Vec::new();
+    let mut rs: Vec<Position> = Vec::new();
     match prefix {
         storage::Prefix::Active => {
             let r = mp.position.get(&address);
             match r {
                 Some(p) => {
-                    for v in p.value() {
-                        let p = (*v.value()).clone();
-                        let data = mp.position_dynamic_idx.get(v.key()).map(|d| {
-                            let mut dynamic_data = machine::PositionDynamicData::default();
-                            dynamic_data.profit_rate = com::f64_round(d.value().profit_rate);
-                            dynamic_data
-                        });
-                        rs.push(PositionInfo {
-                            position_data: p,
-                            address: v.key().copy(),
-                            dynamic_data: data,
-                        });
+                    for i in p.value().iter() {
+                        rs.push(i.clone());
                     }
                 }
                 None => {}
@@ -91,27 +57,18 @@ pub fn get_position_list(
             let items = mp.storage.get_position_history_list(&address);
             for i in items {
                 match i {
-                    Ok((k, v)) => {
-                        let key = String::from_utf8(k.to_vec())
-                            .map_err(|e| CliError::JsonError(e.to_string()))?;
-                        let keys = storage::Keys::from_str(key.as_str())?;
-                        let pk = keys.get_end();
-                        let pbk = Address::from_str(pk.as_str())
-                            .map_err(|e| CliError::Unknown(e.to_string()))?;
+                    Ok((_k, v)) => {
+                        // let key = String::from_utf8(k.to_vec())
+                        //     .map_err(|e| CliError::JsonError(e.to_string()))?;
+                        // let keys = storage::Keys::from_str(key.as_str())?;
+                        // let pk = keys.get_end();
+                        // let pbk = Address::from_str(pk.as_str())
+                        //     .map_err(|e| CliError::Unknown(e.to_string()))?;
                         let values: State = serde_json::from_slice(v.to_vec().as_slice())
                             .map_err(|e| CliError::JsonError(e.to_string()))?;
-                        let data = mp.position_dynamic_idx.get(&pbk).map(|d| {
-                            let mut dynamic_data = machine::PositionDynamicData::default();
-                            dynamic_data.profit_rate = com::f64_round(d.value().profit_rate);
-                            dynamic_data
-                        });
                         match values {
                             State::Position(p) => {
-                                rs.push(PositionInfo {
-                                    position_data: p,
-                                    address: pbk,
-                                    dynamic_data: data,
-                                });
+                                rs.push(p);
                             }
                             _ => {}
                         }
@@ -125,15 +82,6 @@ pub fn get_position_list(
         storage::Prefix::None => {}
     }
     Ok(rs)
-}
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PriceStatus {
-    pub change_rate: i64,
-    pub change: i64,
-    pub high_24h: i64,
-    pub low_24h: i64,
-    pub current_price: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -158,6 +106,7 @@ pub struct PriceColumn {
     #[serde(rename(deserialize = "_value_max", serialize = "high"))]
     value_max: i64,
 }
+
 fn get_price_history_query(
     bucket: &str,
     start: &str,
@@ -178,6 +127,7 @@ fn get_price_history_query(
         bucket, start, symbol, feed, window
     )
 }
+
 fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
     match range {
         "1H" => Ok(("-1h".to_string(), "5s".to_string())),
@@ -188,6 +138,7 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
         _ => Err(CliError::InvalidRange.into()),
     }
 }
+
 pub async fn get_price_history(
     symbol: Option<String>,
     range: Option<String>,
@@ -245,6 +196,26 @@ fn get_price_history_column_query(
     )
 }
 
+fn get_24h_price_status_query(bucket: &str, symbol: &str, feed: &str) -> String {
+    format!(
+        r#"dataSet=from(bucket: "{}")
+    |> range(start: -24h)
+    |> filter(fn: (r) => r["_measurement"] == "{}")
+    |> filter(fn: (r) => r["_field"] == "price")
+    |> filter(fn: (r) => r["feed"] == "{}")
+    |> keep(columns: ["_value","_start","_stop"])
+    dataMin = dataSet|> min()
+    dataMax = dataSet|> max()
+    dataFirst = dataSet|> first()
+    dataLast = dataSet|> last()
+    j1=join(tables: {{min: dataMin, max: dataMax}}, on: ["_start", "_stop"], method: "inner")
+    j2=join(tables: {{first: dataFirst, last: dataLast}}, on: ["_start", "_stop"], method: "inner")
+    join(tables: {{t1: j1, t2: j2}}, on: ["_start", "_stop"], method: "inner")
+    "#,
+        bucket, symbol, feed
+    )
+}
+
 pub async fn get_price_history_column(
     symbol: Option<String>,
     range: Option<String>,
@@ -273,4 +244,222 @@ pub async fn get_price_history_column(
         .deserialize()
         .collect::<Result<Vec<PriceColumn>, _>>()?;
     Ok(rs)
+}
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PriceStatus {
+    pub symbol: String,
+    pub change_rate: f64,
+    pub change: i64,
+    pub high_24h: i64,
+    pub low_24h: i64,
+    pub current_price: i64,
+}
+// key: symbol , value: PriceStatus
+pub type DmPriceStatus = DashMap<String, PriceStatus>;
+
+async fn update_price_status(
+    mp: machine::SharedStateMap,
+    dps: &DmPriceStatus,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<()> {
+    for symbol in mp.ws_state.supported_symbol.iter() {
+        let query = get_24h_price_status_query(db.bucket.as_str(), symbol.as_str(), "price");
+        let db_query_rs = db
+            .client
+            .query_raw(db.org.as_str(), Some(Query::new(query)))
+            .await?;
+        let rs = ReaderBuilder::new()
+            .delimiter(b',')
+            .from_reader(db_query_rs.as_bytes())
+            .deserialize()
+            .collect::<Result<Vec<PriceColumn>, _>>()?;
+        if let Some(p) = rs.get(0) {
+            let change = p.value_last - p.value_first;
+            let change_rate = com::f64_round(change as f64 / p.value_first as f64);
+            let price_status = PriceStatus {
+                symbol: symbol.to_string(),
+                change_rate,
+                change,
+                high_24h: p.value_max,
+                low_24h: p.value_min,
+                current_price: 0,
+            };
+            dps.insert(symbol.to_string(), price_status);
+        }
+    }
+    Ok(())
+}
+
+async fn broadcast_price_status(
+    mp: machine::SharedStateMap,
+    dps: &DmPriceStatus,
+    org_price: &OrgPrice,
+) -> anyhow::Result<()> {
+    if let Some(price_status) = dps.get(&org_price.symbol) {
+        let mut price_status = price_status.value().clone();
+        price_status.current_price = org_price.price;
+        let message = serde_json::to_string(&price_status)?;
+        if let Some(set) = mp.ws_state.sub_idx_map.get(&org_price.symbol) {
+            for idx in set.iter() {
+                if let Some(w) = mp.ws_state.conns.get(&idx) {
+                    w.send(WsSrvMessage::PriceUpdate(message.clone())).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+pub struct PriceBroadcast {
+    task: Task,
+}
+
+impl PriceBroadcast {
+    pub async fn new(
+        mp: machine::SharedStateMap,
+        price_status: DmPriceStatus,
+        price_ws_rx: PriceWatchRx,
+        db: Arc<Influxdb>,
+    ) -> Self {
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let task = Task(
+            shutdown_tx,
+            tokio::spawn(broadcast_price(
+                mp,
+                price_status,
+                db.clone(),
+                price_ws_rx,
+                shutdown_rx,
+            )),
+        );
+        Self { task }
+    }
+    pub async fn shutdown(self) -> anyhow::Result<()> {
+        debug!("shutdown price broadcast ...");
+        let _ = self.task.0.send(());
+        self.task.1.await??;
+        Ok(())
+    }
+}
+
+async fn broadcast_price(
+    mp: machine::SharedStateMap,
+    price_status: DmPriceStatus,
+    db: Arc<Influxdb>,
+    mut price_ws_rx: UnboundedReceiver<OrgPrice>,
+    mut shutdown_rx: oneshot::Receiver<()>,
+) -> anyhow::Result<()> {
+    let mut timer = time::interval(Duration::from_secs(5));
+    loop {
+        tokio::select! {
+            _ = (&mut shutdown_rx) => {
+                info!("got shutdown signal , break price broadcast!");
+                break;
+            },
+            Some(price) = price_ws_rx.recv() => {
+                // debug!("got price from ws broadcast channel: {:?}", price);
+                if let Err(e) = broadcast_price_status(mp.clone(), &price_status, &price).await {
+                    error!("broadcast price status error: {}", e);
+                }
+            }
+            _ = timer.tick() => {
+                if let Err(e) = update_price_status(mp.clone(), &price_status, db.clone()).await {
+                    error!("update price status error: {}", e);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubRequest {
+    pub symbol: String,
+    pub sub_type: SubType,
+}
+
+pub async fn handle_ws(mp: machine::SharedStateMap, mut socket: WebSocket, address: Address) {
+    let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
+    mp.ws_state.add_conn(address.clone(), tx);
+    let mut symbols: Vec<String> = Vec::new();
+    loop {
+        tokio::select! {
+            Some(msg) = rx.recv() => {
+                if let Err(e) = socket.send(Message::Text(msg.into_txt())).await {
+                    error!("send ws message error: {}", e);
+                    break;
+                }
+            }
+            ws_msg = socket.recv() => {
+                match ws_msg {
+                    Some(Ok(msg))=>{
+                        match msg {
+                            Message::Text(t) => {
+                                debug!("client sent str: {:?}", t);
+                                handle_ws_events(mp.clone(), t, &address, &mut symbols);
+                            }
+                            Message::Binary(_) => {
+                                debug!("client sent binary data");
+                            }
+                            Message::Ping(ping) => {
+                                debug!("socket got ping");
+                                if let Err(e) = socket.send(Message::Pong(ping)).await{
+                                    error!("send ws pong message error: {}", e);
+                                    break;
+                                }
+                            }
+                            Message::Pong(pong) => {
+                                debug!("socket got pong");
+                                if let Err(e) = socket.send(Message::Ping(pong)).await{
+                                    error!("send ws ping message error: {}", e);
+                                    break;
+                                }
+                            }
+                            Message::Close(_) => {
+                                debug!("client disconnected");
+                                break;
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        error!("recv ws message error: {}", e);
+                        break;
+                    }
+                    None => {
+                        debug!("client disconnected");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    info!("client disconnected, clean connection :{:?}", address);
+    mp.ws_state.remove_conn(&address);
+    for symbol in symbols {
+        mp.ws_state.remove_symbol_sub(&symbol, &address);
+    }
+}
+
+fn handle_ws_events(
+    mp: machine::SharedStateMap,
+    msg: String,
+    address: &Address,
+    symbols: &mut Vec<String>,
+) {
+    let sub_req: SubRequest = serde_json::from_str(msg.as_str()).unwrap();
+    let symbol = sub_req.symbol;
+    if !mp.ws_state.is_supported_symbol(&symbol) {
+        return;
+    }
+    let sub_type = sub_req.sub_type;
+    match sub_type {
+        SubType::Subscribe => {
+            mp.ws_state.add_symbol_sub(symbol.clone(), address.copy());
+            symbols.push(symbol);
+        }
+        SubType::Unsubscribe => {
+            mp.ws_state.remove_symbol_sub(&symbol, &address);
+            symbols.retain(|s| s != &symbol);
+        }
+        SubType::None => {}
+    }
 }

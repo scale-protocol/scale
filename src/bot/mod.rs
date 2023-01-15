@@ -4,4 +4,4 @@ pub mod machine;
 pub mod price;
 pub mod state;
 pub mod storage;
-pub mod ws_client;
+pub mod ws;

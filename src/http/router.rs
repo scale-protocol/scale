@@ -1,16 +1,19 @@
 use std::net::SocketAddr;
 
 use crate::bot::influxdb::Influxdb;
-use crate::bot::machine::SharedStateMap;
+use crate::bot::state::Address;
+use crate::bot::{
+    machine::SharedStateMap,
+    ws::{PriceWatchRx, SharedDmSymbolId},
+};
+use crate::com::CliError;
 use crate::http::query::empty_string_as_none;
 use crate::http::response::JsonResponse;
+use crate::http::service;
 use axum::{
     self,
     error_handling::HandleErrorLayer,
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Extension, Path, Query, TypedHeader,
-    },
+    extract::{ws::WebSocketUpgrade, Extension, Path, Query},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -25,15 +28,21 @@ use tokio::sync::oneshot;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
-use super::service;
 // use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub struct HttpServer {
     shutdown_tx: oneshot::Sender<()>,
+    price_broadcast: service::PriceBroadcast,
 }
 
 impl HttpServer {
-    pub async fn new(addr: &SocketAddr, mp: SharedStateMap, db: Arc<Influxdb>) -> Self {
-        let router = router(mp, db);
+    pub async fn new(
+        addr: &SocketAddr,
+        mp: SharedStateMap,
+        db: Arc<Influxdb>,
+        sds: SharedDmSymbolId,
+        price_ws_rx: PriceWatchRx,
+    ) -> Self {
+        let router = router(mp.clone(), db.clone(), sds);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -46,28 +55,33 @@ impl HttpServer {
                 println!("server error: {}", e);
             }
         });
-        Self { shutdown_tx }
+        let price_broadcast =
+            service::PriceBroadcast::new(mp, service::DmPriceStatus::new(), price_ws_rx, db).await;
+        Self {
+            shutdown_tx,
+            price_broadcast,
+        }
     }
 
     pub async fn shutdown(self) {
         info!("send http server shutdown signal");
         let _ = self.shutdown_tx.send(());
+        let _ = self.price_broadcast.shutdown().await;
     }
 }
 
-pub fn router(mp: SharedStateMap, db: Arc<Influxdb>) -> Router {
+pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> Router {
     let app: Router = Router::new()
-        .route("/user/info/:address", get(get_user_info))
+        .route("/account/info/:address", get(get_user_info))
         .route(
-            "/user/positions/:prefix/:address",
+            "/account/positions/:prefix/:address",
             get(get_user_position_list),
         )
         .route("/price/history", get(get_price_history))
-        .route("/price/history_c/", get(get_price_history_column))
-        .route("/ws", get(ws_handler))
+        .route("/price/history_full", get(get_price_history_column))
+        .route("/ws/:sig", get(ws_handler))
         .layer(
             ServiceBuilder::new()
-                // Handle errors from middleware
                 .layer(HandleErrorLayer::new(handle_error))
                 .load_shed()
                 // .concurrency_limit(1024)
@@ -78,6 +92,7 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>) -> Router {
                 ), // .into_inner(),
         )
         .layer(Extension(mp))
+        .layer(Extension(sds))
         .layer(Extension(db));
     app
 }
@@ -103,6 +118,7 @@ struct HistoryParams {
     range: Option<String>,
     symbol: Option<String>,
 }
+
 async fn get_price_history(
     Query(q_m): Query<HistoryParams>,
     Extension(db): Extension<Arc<Influxdb>>,
@@ -110,6 +126,7 @@ async fn get_price_history(
     let r = service::get_price_history(q_m.symbol, q_m.range, db).await;
     JsonResponse::from(r).to_json()
 }
+
 async fn get_price_history_column(
     Query(q_m): Query<HistoryParams>,
     Extension(db): Extension<Arc<Influxdb>>,
@@ -117,6 +134,7 @@ async fn get_price_history_column(
     let r = service::get_price_history_column(q_m.symbol, q_m.range, db).await;
     JsonResponse::from(r).to_json()
 }
+
 async fn handle_error(error: BoxError) -> impl IntoResponse {
     if error.is::<tower::timeout::error::Elapsed>() {
         return (StatusCode::REQUEST_TIMEOUT, Cow::from("request timed out"));
@@ -132,51 +150,30 @@ async fn handle_error(error: BoxError) -> impl IntoResponse {
         Cow::from(format!("Unhandled internal error: {}", error)),
     )
 }
+
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    user_agent: Option<TypedHeader<headers::UserAgent>>,
+    Path(sig): Path<String>,
+    Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    if let Some(TypedHeader(user_agent)) = user_agent {
-        debug!("`{}` connected", user_agent.as_str());
+    let jr = JsonResponse::<()>::default();
+    if sig.is_empty() {
+        return jr
+            .err(CliError::InvalidWsAddressSigner.into())
+            .to_json()
+            .into_response();
     }
-    ws.on_upgrade(handle_socket)
-}
-
-async fn handle_socket(mut socket: WebSocket) {
-    if let Some(msg) = socket.recv().await {
-        if let Ok(msg) = msg {
-            match msg {
-                Message::Text(t) => {
-                    println!("client sent str: {:?}", t);
-                }
-                Message::Binary(_) => {
-                    println!("client sent binary data");
-                }
-                Message::Ping(_) => {
-                    println!("socket ping");
-                }
-                Message::Pong(_) => {
-                    println!("socket pong");
-                }
-                Message::Close(_) => {
-                    println!("client disconnected");
-                    return;
-                }
-            }
-        } else {
-            debug!("client disconnected");
-            return;
+    // todo check signer and get wallet address
+    let address = <Address as std::str::FromStr>::from_str(sig.as_str());
+    match address {
+        Ok(address) => {
+            return ws.on_upgrade(|socket| service::handle_ws(state, socket, address));
         }
-    }
-
-    loop {
-        if socket
-            .send(Message::Text(String::from("Hi!")))
-            .await
-            .is_err()
-        {
-            println!("client disconnected");
-            return;
+        Err(e) => {
+            return jr
+                .err(CliError::WebSocketError(e.to_string()).into())
+                .to_json()
+                .into_response();
         }
     }
 }

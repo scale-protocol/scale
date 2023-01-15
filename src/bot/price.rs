@@ -4,19 +4,17 @@
 use crate::bot::influxdb::Influxdb;
 use crate::bot::machine::Message;
 use crate::bot::state::{Address, OrgPrice, State, Status};
-use crate::bot::ws_client::{WsClient, WsMessage};
+use crate::bot::ws::{PriceWatchRx, SharedDmSymbolId, SubType, WsClient, WsClientMessage};
 use crate::com::{CliError, DECIMALS};
-use dashmap::DashMap;
 use futures::prelude::*;
 use influxdb2_client::api::write::Precision;
 use influxdb2_client::models::DataPoint;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
     #[serde(rename = "type")]
@@ -25,48 +23,8 @@ pub struct Request {
     pub verbose: bool,
     pub binary: bool,
 }
-#[derive(Debug, Clone, PartialEq)]
-pub enum SubType {
-    Unsubscribe,
-    Subscribe,
-    None,
-}
 
-impl Serialize for SubType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let t = match *self {
-            Self::Unsubscribe => "unsubscribe",
-            Self::Subscribe => "subscribe",
-            _ => "",
-        };
-        serializer.serialize_str(t)
-    }
-}
-impl<'de> Deserialize<'de> for SubType {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let r = match s.as_str() {
-            "unsubscribe" => SubType::Unsubscribe,
-            "subscribe" => SubType::Subscribe,
-            _ => SubType::None,
-        };
-        Ok(r)
-    }
-}
-
-impl Default for SubType {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
     #[serde(rename = "type")]
@@ -150,22 +108,14 @@ impl EmaPrice {
         price * (DECIMALS as i64) / 10u64.pow(self.expo.abs() as u32) as i64
     }
 }
-// like Crypto.BTC/USD 0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SymbolId {
-    pub symbol: String,
-    pub id: String,
-}
 
-// key is id, value is symbol
-type DmSymbolId = DashMap<String, String>;
 pub async fn sub_price(
     watch_tx: UnboundedSender<Message>,
     price_ws_url: String,
     inf_db: Influxdb,
-    symbol_id_vec: Vec<SymbolId>,
+    sds: SharedDmSymbolId,
     is_write_db: bool,
-) -> anyhow::Result<WsClient> {
+) -> anyhow::Result<(WsClient, PriceWatchRx)> {
     debug!("start sub price url: {:?}", price_ws_url);
     let mut sub_req = Request {
         type_field: SubType::Subscribe,
@@ -173,37 +123,38 @@ pub async fn sub_price(
         verbose: true,
         binary: false,
     };
-    let sm_mp = Arc::new(DmSymbolId::new());
-    for symbol_id in symbol_id_vec {
-        let id = symbol_id.id.as_str();
-        let id_key = id.strip_prefix("0x").unwrap_or(id).to_string();
-        sm_mp.insert(id_key.clone(), symbol_id.symbol.clone());
-        sub_req.ids.push(id_key);
+    for id in sds.iter() {
+        sub_req.ids.push(id.key().to_string());
     }
+    let (ws_price_tx, ws_price_rx) = tokio::sync::mpsc::unbounded_channel::<OrgPrice>();
     let mut ws_client = WsClient::new(price_ws_url, move |msg, _send_tx| {
-        let sm_mp = sm_mp.clone();
+        let sds = sds.clone();
         let watch_tx = watch_tx.clone();
         let influxdb_client = inf_db.client.clone();
         let org = inf_db.org.clone();
         let bucket = inf_db.bucket.clone();
+        let ws_price_tx = ws_price_tx.clone();
         Box::pin(async move {
-            if let WsMessage::Txt(txt) = msg {
+            if let WsClientMessage::Txt(txt) = msg {
                 let resp: Response = serde_json::from_str(&txt)?;
-                let symbol_str = sm_mp
+                let symbol_str = sds
                     .get(&resp.price_feed.id)
                     .ok_or_else(|| CliError::UnknownSymbol)?;
-
+                let op = OrgPrice {
+                    price: resp.price_feed.price.get_real_price(),
+                    update_time: resp.price_feed.price.publish_time,
+                    symbol: symbol_str.to_string(),
+                };
                 let watch_msg = Message {
                     address: Address::from_str(resp.price_feed.id.as_str())?,
-                    state: State::Price(OrgPrice {
-                        price: resp.price_feed.price.get_real_price(),
-                        update_time: resp.price_feed.price.publish_time,
-                        symbol: symbol_str.to_string(),
-                    }),
+                    state: State::Price(op.clone()),
                     status: Status::Normal,
                 };
                 if let Err(e) = watch_tx.send(watch_msg) {
                     error!("send watch msg error: {:?}", e);
+                }
+                if let Err(e) = ws_price_tx.send(op) {
+                    error!("send ws price msg error: {:?}", e);
                 }
                 if !is_write_db {
                     return Ok(());
@@ -229,6 +180,6 @@ pub async fn sub_price(
 
     let req = serde_json::to_string(&sub_req)?;
     debug!("......sub price req: {:?}", req);
-    ws_client.send(WsMessage::Txt(req)).await?;
-    Ok(ws_client)
+    ws_client.send(WsClientMessage::Txt(req)).await?;
+    Ok((ws_client, ws_price_rx))
 }

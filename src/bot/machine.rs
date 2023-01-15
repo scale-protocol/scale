@@ -1,10 +1,13 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
     Account, Address, Direction, Market, Position, PositionStatus, PositionType, Price, State,
-    Status, BURST_RATE,
+    Status, Task, BURST_RATE,
 };
 use crate::bot::storage::{self, Storage};
-use crate::com::CliError;
+use crate::bot::ws::{
+    AccountDynamicData, PositionDynamicData, SupportedSymbol, WsServerState, WsSrvMessage,
+};
+use crate::com;
 use chrono::{Datelike, NaiveDate, Utc};
 use dashmap::{DashMap, DashSet};
 use log::*;
@@ -21,8 +24,6 @@ use tokio::{
     time::{self as tokio_time, Duration as TokioDuration},
 };
 
-struct Task(oneshot::Sender<()>, JoinHandle<anyhow::Result<()>>);
-
 // key is market Address,value is market data
 type DmMarket = DashMap<Address, Market>;
 // key is account Address,value is account data.
@@ -35,37 +36,6 @@ type DmPrice = DashMap<Address, Price>;
 type DmAccountPosition = DashMap<Address, DmPosition>;
 // key is symbol,value is market address set
 type DmIdxPriceMarket = DashMap<String, DashSet<Address>>;
-// key is user address Address
-type DmAccountDynamicData = DashMap<Address, AccountDynamicData>;
-type DmPositionDynamicData = DashMap<Address, PositionDynamicData>;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountDynamicData {
-    pub profit: f64,
-    pub margin_percentage: f64,
-    pub equity: f64,
-    pub profit_rate: f64,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PositionDynamicData {
-    pub profit_rate: f64,
-}
-
-impl Default for AccountDynamicData {
-    fn default() -> Self {
-        AccountDynamicData {
-            profit: 0.0,
-            margin_percentage: 0.0,
-            equity: 0.0,
-            profit_rate: 0.0,
-        }
-    }
-}
-impl Default for PositionDynamicData {
-    fn default() -> Self {
-        PositionDynamicData { profit_rate: 0.0 }
-    }
-}
 
 #[derive(Clone)]
 pub struct StateMap {
@@ -74,20 +44,17 @@ pub struct StateMap {
     pub position: DmAccountPosition,
     pub price_idx: DmPrice,
     pub price_market_idx: DmIdxPriceMarket,
-    pub account_dynamic_idx: DmAccountDynamicData,
-    pub position_dynamic_idx: DmPositionDynamicData,
     pub storage: Storage,
+    pub ws_state: WsServerState,
 }
 impl StateMap {
-    pub fn new(store_path: PathBuf) -> anyhow::Result<Self> {
+    pub fn new(store_path: PathBuf, supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
         let storage = storage::Storage::new(store_path)?;
         let market: DmMarket = DashMap::new();
         let account: DmAccount = DashMap::new();
         let position: DmAccountPosition = DashMap::new();
         let price_idx: DmPrice = DashMap::new();
         let price_market_idx: DmIdxPriceMarket = DashMap::new();
-        let account_dynamic_idx: DmAccountDynamicData = DashMap::new();
-        let position_dynamic_idx: DmPositionDynamicData = DashMap::new();
         Ok(Self {
             market,
             account,
@@ -95,17 +62,15 @@ impl StateMap {
             storage,
             price_idx,
             price_market_idx,
-            account_dynamic_idx,
-            position_dynamic_idx,
+            ws_state: WsServerState::new(supported_symbol),
         })
     }
 }
 pub type SharedStateMap = Arc<StateMap>;
 
 pub struct Watch {
-    shutdown_tx: oneshot::Sender<()>,
     pub watch_tx: UnboundedSender<Message>,
-    task: JoinHandle<anyhow::Result<()>>,
+    task: Task,
 }
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -118,18 +83,21 @@ impl Watch {
         let (watch_tx, watch_rx) = mpsc::unbounded_channel::<Message>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         Self {
-            shutdown_tx,
             watch_tx,
-            task: tokio::spawn(watch_message(mp, watch_rx, shutdown_rx)),
+            task: Task(
+                shutdown_tx,
+                tokio::spawn(watch_message(mp, watch_rx, shutdown_rx)),
+            ),
         }
     }
     pub async fn shutdown(self) -> anyhow::Result<()> {
         debug!("shutdown watch ...");
-        let _ = self.shutdown_tx.send(());
-        self.task.await??;
+        let _ = self.task.0.send(());
+        self.task.1.await??;
         Ok(())
     }
 }
+
 async fn watch_message(
     mp: SharedStateMap,
     mut watch_rx: UnboundedReceiver<Message>,
@@ -462,7 +430,7 @@ async fn loop_position_by_user(
                         let account = mp.account.get(&address);
                         match account {
                             Some(account) => {
-                                compute_position(mp.clone(),&account,&address);
+                                compute_position(mp.clone(),&account,&address).await;
                             },
                             None => {
                                 debug!("no account for state map : {:?}",address);
@@ -493,18 +461,12 @@ fn handle_fund_fee(mp: SharedStateMap, account: &Account, address: &Address) {
     // todo!();
 }
 
-fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {
+async fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {
     match mp.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
-            compute_pl_all_position(
-                &mp.market,
-                account,
-                &positions,
-                &mp.price_idx,
-                &mp.account_dynamic_idx,
-                &mp.position_dynamic_idx,
-            );
+            compute_pl_all_position(&mp.market, account, &positions, &mp.price_idx, &mp.ws_state)
+                .await;
         }
         None => {
             debug!("no position for state map: {:?}", address);
@@ -512,27 +474,31 @@ fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {
     }
 }
 
-fn compute_pl_all_position(
+async fn compute_pl_all_position(
     dm_market: &DmMarket,
     account: &Account,
     dm_position: &DmPosition,
     dm_price: &DmPrice,
-    account_dynamic_idx_mp: &DmAccountDynamicData,
-    position_dynamic_idx_mp: &DmPositionDynamicData,
+    ws_state: &WsServerState,
 ) {
     let mut account_data = AccountDynamicData::default();
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
     let mut pl_full = 0i64;
+    let ws_tx = ws_state.conns.get(&account.id);
+    let mut position_data: Vec<PositionDynamicData> = Vec::with_capacity(dm_position.len());
     for v in dm_position.iter() {
         let position = v.value();
+        if position.status != PositionStatus::Normal {
+            continue;
+        }
         match dm_market.get(&position.market_id) {
             Some(market) => match dm_price.get(&position.market_id) {
                 Some(price) => {
                     let pl = position.get_pl(&price);
                     let fund_fee = position.get_position_fund_fee(&market);
                     let pl_and_fund_fee = pl + fund_fee;
-                    account_data.profit += pl as f64;
-                    account_data.equity += pl_and_fund_fee as f64;
+                    account_data.profit += pl;
+                    account_data.equity += pl_and_fund_fee;
                     if position.position_type == PositionType::Full {
                         pl_full += pl_and_fund_fee;
                     } else {
@@ -541,12 +507,11 @@ fn compute_pl_all_position(
                             todo!();
                         }
                     }
-                    position_dynamic_idx_mp.insert(
-                        position.id.copy(),
-                        PositionDynamicData {
-                            profit_rate: pl as f64 / position.margin as f64,
-                        },
-                    );
+                    position_data.push(PositionDynamicData {
+                        id: position.id.copy(),
+                        profit_rate: com::f64_round(pl as f64 / position.margin as f64),
+                        profit: pl,
+                    });
                     position_sort.push(PositionSort {
                         profit: pl_and_fund_fee,
                         position_address: position.id.copy(),
@@ -598,8 +563,33 @@ fn compute_pl_all_position(
             }
         }
     }
-    account_data.equity += account.balance as f64;
-    account_data.margin_percentage = account_data.equity as f64 / account.margin_total as f64;
-    account_data.profit_rate = account_data.profit as f64 / account.margin_total as f64;
-    account_dynamic_idx_mp.insert(account.id.copy(), account_data);
+    account_data.equity += account.balance as i64;
+    if account.margin_total != 0 {
+        account_data.margin_percentage =
+            com::f64_round(account_data.equity as f64 / account.margin_total as f64);
+        account_data.profit_rate =
+            com::f64_round(account_data.profit as f64 / account.margin_total as f64);
+    }
+    // send to ws
+    if let Some(tx) = ws_tx {
+        let r = tx
+            .value()
+            .send(WsSrvMessage::AccountUpdate(account_data.clone()))
+            .await;
+        if let Err(e) = r {
+            error!("send account dynamic data to ws channel data error: {}", e);
+        }
+        if !position_data.is_empty() {
+            let r = tx
+                .value()
+                .send(WsSrvMessage::PositionUpdate(position_data))
+                .await;
+            if let Err(e) = r {
+                error!(
+                    "send positions dynamic data to ws channel data error: {}",
+                    e
+                );
+            }
+        }
+    }
 }

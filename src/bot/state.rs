@@ -6,10 +6,11 @@ use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Error};
 use std::str::FromStr;
+use tokio::{sync::oneshot, task::JoinHandle};
 
 pub const DENOMINATOR: u64 = 10000;
 pub const BURST_RATE: f64 = 0.5;
-
+pub struct Task(pub oneshot::Sender<()>, pub JoinHandle<anyhow::Result<()>>);
 // ID or address of the contract
 #[derive(Debug, Eq, Default, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct Address(Vec<u8>);

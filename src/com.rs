@@ -31,6 +31,8 @@ pub enum CliError {
     UnknownSymbol,
     #[error("invalid range params")]
     InvalidRange,
+    #[error("invalid ws address signer")]
+    InvalidWsAddressSigner,
 }
 pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0

@@ -36,6 +36,7 @@ impl<T> From<anyhow::Result<T>> for JsonResponse<T> {
         }
     }
 }
+pub struct JsonOk(pub [u8]);
 impl<T> JsonResponse<T> {
     pub fn new(r: T) -> Self {
         Self {
@@ -45,5 +46,9 @@ impl<T> JsonResponse<T> {
     }
     pub fn to_json(self) -> Json<Self> {
         Json(self)
+    }
+    pub fn err(mut self, e: anyhow::Error) -> Self {
+        self.message = e.to_string();
+        self
     }
 }
