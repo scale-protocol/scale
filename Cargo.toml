@@ -10,7 +10,7 @@ clap = "4.0.22"
 sui-sdk = { path = "../sui/crates/sui-sdk" }
 sui-keys = {  path = "../sui/crates/sui-keys" }
 sui-types = {  path = "../sui/crates/sui-types" }
-# sui-json-rpc-types = {  path = "../sui/crates/sui-json-rpc-types" }
+sui-adapter = {  path = "../sui/crates/sui-adapter" }
 sui = {  path = "../sui/crates/sui" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream="0.1.8"
@@ -22,7 +22,20 @@ home="0.5.4"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9.14"
 serde_json="~1"
-chrono="0.4.22"
 num_enum="0.5.4"
 async-trait = "0.1.60"
-# bcs = "0.1.4"
+tokio-tungstenite = {version = "*",features = ["native-tls"]}
+tokio-cron-scheduler = "0.8.3"
+sled="0.34.7"
+dashmap="5.4.0"
+flume="0.10.14"
+chrono={version = "0.4.23",features = ["serde"]}
+axum= {version="0.6.1",features = ["ws", "headers"] }
+futures = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tower-http = { version = "0.3.0", features = ["trace"] }
+tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] }
+headers = "0.3"
+fastcrypto="0.1.0"
+influxdb2_client= {path="../influxdb2_client"}
+csv="1.1.6"

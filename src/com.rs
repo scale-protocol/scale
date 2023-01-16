@@ -1,7 +1,8 @@
 use thiserror::Error;
+use tokio::{self, runtime::Builder, runtime::Runtime};
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "FkcB3LVmVLEuQ3M5froVnvo7NVu8oMeYut2FME1cJG81";
-pub const SUI_COIN_PUBLISH_TX: &str = "4UjNEzcvZEJSRhDWKBvTgLmE13bSTMP9T3cY9ofJrejZ";
+pub const SUI_SCALE_PUBLISH_TX: &str = "FAZXodDdQzGGRThjidaBLq4yvNgMBA6F7vGubLnUq7T";
+pub const SUI_COIN_PUBLISH_TX: &str = "AjR9MfKohJLAiUcnEjoYFWKcUxMowc9G5LiLKh9SexDF";
 
 pub const DECIMALS: u64 = 1000000;
 
@@ -9,6 +10,8 @@ pub const DECIMALS: u64 = 1000000;
 pub enum CliError {
     #[error("Unknown error: {0}")]
     Unknown(String),
+    #[error("Invalid cli params: {0}")]
+    InvalidCliParams(String),
     #[error("can not load scale config: {0}")]
     CanNotLoadScaleConfig(String),
     #[error("sui active address not found")]
@@ -25,6 +28,8 @@ pub enum CliError {
     CronError(String),
     #[error("Error in json parsing:{0}")]
     JsonError(String),
+    #[error("Error in rpc:{0}")]
+    RpcError(String),
     #[error("Error in websocket:{0}")]
     WebSocketError(String),
     #[error("unknown symbol params")]
@@ -34,6 +39,14 @@ pub enum CliError {
     #[error("invalid ws address signer")]
     InvalidWsAddressSigner,
 }
+
 pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0
+}
+
+pub fn new_tokio_one_thread() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build tokio runtime")
 }

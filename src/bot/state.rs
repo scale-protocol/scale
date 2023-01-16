@@ -435,3 +435,9 @@ pub struct OrgPrice {
     pub update_time: i64,
     pub symbol: String,
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_str_to_address() {}
+}

@@ -1,4 +1,4 @@
-use crate::bot::state::{self, Account, Market, Position, UserAccount};
+use crate::bot::state::{self, Account, Market, Position};
 use crate::sui::config::Context;
 use crate::{app::Task, com::CliError};
 use log::*;
@@ -24,13 +24,13 @@ pub enum ObjectType {
 }
 impl<'a> From<&'a str> for ObjectType {
     fn from(value: &'a str) -> Self {
-        if value.starts_with("::market::Market") {
+        if value.ends_with("::market::Market") {
             Self::Market
-        } else if value.contains("::account::Account") {
+        } else if value.ends_with("::account::Account") {
             Self::Account
-        } else if value.contains("::account::UserAccount") {
+        } else if value.ends_with("::account::UserAccount") {
             Self::UserAccount
-        } else if value.contains("::position::Position") {
+        } else if value.ends_with("::position::Position") {
             Self::Position
         } else {
             Self::None

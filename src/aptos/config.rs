@@ -1,4 +1,4 @@
-use crate::config::Config as cfg;
+use crate::config::{self, Config as cfg};
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{fs, path::PathBuf};
@@ -8,14 +8,8 @@ pub struct Config {
 }
 impl Default for Config {
     fn default() -> Self {
-        let home_dir = match home::home_dir() {
-            Some(p) => p,
-            None => PathBuf::from("/tmp/"),
-        };
-        let scale_home_dir = home_dir.join(".scale").join("aptos");
-        if !scale_home_dir.is_dir() {
-            fs::create_dir(&scale_home_dir).unwrap();
-        }
+        let home_dir = config::get_home_dir();
+        let scale_home_dir = config::get_or_create_config_dir(vec![".scale", ".sui"]);
         Config {
             scale_config_file: scale_home_dir.join("aptos_config.yaml"),
         }

@@ -1,3 +1,4 @@
+pub mod app;
 pub mod cron;
 pub mod influxdb;
 pub mod machine;

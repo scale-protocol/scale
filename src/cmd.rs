@@ -1,10 +1,12 @@
 use crate::app::App;
 use crate::aptos::config::Config as aptosConfig;
 use crate::bot;
+use crate::com;
 use crate::config::{self, Config};
-use crate::sui::config::Config as suiConfig;
+use crate::sui::{config::Config as suiConfig, tool};
 use clap::{arg, Command};
 use std::path::PathBuf;
+
 fn cli() -> Command {
     Command::new("Scale contract command line operator.")
         .about("Scale contract command line operator. More https://www.scale.exchange .")
@@ -20,7 +22,8 @@ fn cli() -> Command {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .allow_external_subcommands(true)
-                .subcommand(sui()),
+                .subcommand(sui())
+                .subcommand(sui_coin()),
         )
         .subcommand(
             Command::new("aptos")
@@ -38,6 +41,35 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
+                .arg(arg!(-w --write <WRITE> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
+        )
+}
+
+fn sui_coin() -> Command {
+    Command::new("coin")
+        .about("scale coin tool, with devnet and testnet.")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_required(true)
+        .subcommand(Command::new("set").about("set subscription ratio."))
+        .about("Set conversion ratio")
+        .arg(
+            arg!(-r --ratio <RATIO> "How many scales can be exchanged for a sui coin")
+                .value_parser(clap::value_parser!(u64)),
+        )
+        .subcommand(Command::new("burn").about("withdraw sui token."))
+        .about("Burn scale coin and return sui coin")
+        .arg(arg!(-c --coin <COIN> "The scale coin to burn").value_parser(clap::value_parser!(u64)))
+        .subcommand(
+            Command::new("airdrop")
+                .about("Airdrop SCALE tokens. In order to prevent malicious operation of robots.")
+                .arg(
+                    arg!(-c --coin <COIN> "Sui token for payment")
+                        .value_parser(clap::value_parser!(String)),
+                )
+                .arg(
+                    arg!(-a --amount <PATH> "How much scale coin is expected to be redeemed.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
         )
 }
 fn sui() -> Command {
@@ -82,6 +114,22 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     _ => unreachable!(),
                 },
+                Some(("coin", matches)) => com::new_tokio_one_thread().block_on(async {
+                    let tool = tool::Tool::new(conf).await?;
+                    match matches.subcommand() {
+                        Some(("set", matches)) => {
+                            tool.coin_set(matches).await?;
+                        }
+                        Some(("burn", matches)) => {
+                            tool.coin_burn(matches).await?;
+                        }
+                        Some(("airdrop", matches)) => {
+                            tool.coin_airdrop(matches).await?;
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?,
                 _ => unreachable!(),
             }
         }

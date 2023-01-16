@@ -70,12 +70,12 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
 
         let event_sub_task = runtime.spawn(async {
             let ctx = SuiContext::new(conf).await.expect("sui context init error");
-            // load all objects
-            if let Err(e) = subscribe::sync_all_objects(Arc::new(ctx.clone())).await {
+            // load all objects from sui network
+            if let Err(e) = subscribe::sync_all_objects(ctx.clone()).await {
                 error!("sync all orders error: {}", e);
             }
             // start even task
-            let event_task = subscribe::EventSubscriber::new(Arc::new(ctx)).await;
+            let event_task = subscribe::EventSubscriber::new(ctx.clone()).await;
             event_task
         });
         runtime.block_on(async move {

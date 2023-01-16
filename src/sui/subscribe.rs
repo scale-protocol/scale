@@ -1,4 +1,4 @@
-use crate::sui::config::Context;
+use crate::sui::config::Ctx;
 use crate::sui::object::{self, ObjectType};
 use crate::{app::Task, com::CliError};
 use async_trait::async_trait;
@@ -17,14 +17,14 @@ pub struct EventSubscriber {
 }
 
 impl EventSubscriber {
-    pub async fn new(ctx: Arc<Context>) -> Self {
+    pub async fn new(ctx: Ctx) -> Self {
         let (close_tx, close_rx) = watch::channel(false);
         Self {
             task: tokio::spawn(Self::run(ctx, close_rx)),
             close_tx,
         }
     }
-    async fn run(ctx: Arc<Context>, close_rx: watch::Receiver<bool>) -> anyhow::Result<()> {
+    async fn run(ctx: Ctx, close_rx: watch::Receiver<bool>) -> anyhow::Result<()> {
         let mut next_retrying_time = Duration::from_secs(1);
         while let Err(e) = Self::loop_event_message(ctx.clone(), close_rx.clone()).await {
             debug!("Error: {:?}", e);
@@ -51,7 +51,7 @@ impl EventSubscriber {
         Ok(())
     }
     async fn loop_event_message(
-        ctx: Arc<Context>,
+        ctx: Ctx,
         mut close_rx: watch::Receiver<bool>,
     ) -> anyhow::Result<()> {
         // let x = ObjectID::from_str("0x2").unwrap();
@@ -122,7 +122,7 @@ impl Task for EventSubscriber {
     }
 }
 
-pub async fn sync_all_objects(ctx: Arc<Context>) -> anyhow::Result<()> {
+pub async fn sync_all_objects(ctx: Ctx) -> anyhow::Result<()> {
     debug!("sync_all_objects");
     tokio::spawn(async move {
         // get all events
@@ -137,7 +137,7 @@ pub async fn sync_all_objects(ctx: Arc<Context>) -> anyhow::Result<()> {
                 },
                 cursor.clone(),
                 Some(20),
-                Some(true),
+                true,
             )
             .await
         {
