@@ -8,7 +8,7 @@ pub struct Config {
 }
 impl Default for Config {
     fn default() -> Self {
-        let home_dir = config::get_home_dir();
+        let _home_dir = config::get_home_dir();
         let scale_home_dir = config::get_or_create_config_dir(vec![".scale", ".sui"]);
         Config {
             scale_config_file: scale_home_dir.join("aptos_config.yaml"),

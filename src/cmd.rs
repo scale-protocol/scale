@@ -23,6 +23,7 @@ fn cli() -> Command {
                 .arg_required_else_help(true)
                 .allow_external_subcommands(true)
                 .subcommand(sui())
+                .subcommand(sui_contract())
                 .subcommand(sui_coin()),
         )
         .subcommand(
@@ -41,7 +42,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-w --write <WRITE> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-w --write_to_db <WRITE_TO_DB> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
         )
 }
 
@@ -50,26 +51,227 @@ fn sui_coin() -> Command {
         .about("scale coin tool, with devnet and testnet.")
         .args_conflicts_with_subcommands(true)
         .subcommand_required(true)
-        .subcommand(Command::new("set").about("set subscription ratio."))
-        .about("Set conversion ratio")
-        .arg(
-            arg!(-r --ratio <RATIO> "How many scales can be exchanged for a sui coin")
-                .value_parser(clap::value_parser!(u64)),
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("set")
+                .about("set subscription ratio.")
+                .about("Set conversion ratio")
+                .arg(
+                    arg!(-r --ratio <RATIO> "How many scales can be exchanged for a sui coin")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
         )
-        .subcommand(Command::new("burn").about("withdraw sui token."))
-        .about("Burn scale coin and return sui coin")
-        .arg(arg!(-c --coin <COIN> "The scale coin to burn").value_parser(clap::value_parser!(u64)))
+        .subcommand(
+            Command::new("burn")
+                .about("withdraw sui token.")
+                .about("Burn scale coin and return sui coin")
+                .arg(arg!(-c --coin <COIN> "The scale coin to burn")),
+        )
         .subcommand(
             Command::new("airdrop")
                 .about("Airdrop SCALE tokens. In order to prevent malicious operation of robots.")
+                .arg(arg!(-c --coin <COIN> "Sui token for payment"))
                 .arg(
-                    arg!(-c --coin <COIN> "Sui token for payment")
-                        .value_parser(clap::value_parser!(String)),
-                )
-                .arg(
-                    arg!(-a --amount <PATH> "How much scale coin is expected to be redeemed.")
+                    arg!(-a --amount <AMOUNT> "How much scale coin is expected to be redeemed.")
                         .value_parser(clap::value_parser!(u64)),
                 ),
+        )
+}
+
+fn sui_contract() -> Command {
+    Command::new("contract")
+        .about(
+            "scale sui_contract tools , It is used to call the contract program more conveniently.",
+        )
+        .args_conflicts_with_subcommands(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("create_account")
+                .about("Create a transaction account.")
+                .arg(arg!(-c --coin <COIN> "Used to specify transaction currency.")),
+        )
+        .subcommand(
+            Command::new("deposit")
+                .about("Withdrawal of trading account balance.")
+                .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
+                .arg(arg!(-c --coin <COIN> "Coins for deduction"))
+                .arg(
+                    arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+        .subcommand(
+            Command::new("withdrawal")
+                .about("Cash deposit.")
+                .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "The balance to be drawn will fail if the equity is insufficient.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+        .subcommand(
+            Command::new("add_admin_member")
+                .about("Add a member to admin.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id."))
+                .arg(
+                    arg!(-m --member <MEMBER> "Member address to be added."),
+                ),
+        )
+        .subcommand(
+            Command::new("remove_admin_member")
+                .about("Remove a member to admin.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id."))
+                .arg(
+                    arg!(-m --member <MEMBER> "Member address to be removed."),
+                ),
+        )
+        .subcommand(
+            Command::new("create_market")
+                .about("Create a market object.")
+                .arg(arg!(-c --coin <COIN> "Used to specify transaction currency."))
+                .arg(arg!(-s --symbol <SYMBOL> "The transaction pair symbol needs pyth.network to support quotation."))
+                .arg(arg!(-p --pyth_id <PYTH_ID> "Pyth.network oracle quote object ID."))
+                .arg(arg!(-i --size <SIZE> "The basic unit of open position is 1 by default, and the final position size is equal to size * lot.").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-o --opening_price <OPENING_PRICE> "The opening price of the current day is used to calculate the spread, and the subsequent value will be automatically triggered and updated by the robot.").value_parser(clap::value_parser!(u64)))
+                .arg(
+                    arg!(-d --description <DESCRIPTION> "The description")
+                ),
+        )
+        .subcommand(
+            Command::new("update_max_leverage")
+                .about("Update the max_leverage of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --max_leverage <MAX_LEVERAGE> "The maximum leverage of the market will be modified to this value.").value_parser(clap::value_parser!(u8)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_margin_fee")
+                .about("Update the margin_fee of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --margin_fee <MARGIN_FEE> "The margin fee rate of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_insurance_fee")
+                .about("Update the insurance_fee of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --insurance_fee <INSURANCE_FEE> "The insurance fee of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_fund_fee")
+                .about("Update the fund_fee of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-n --manual <MARKET> "Whether it is in manual mode. If the value is not true, the modified value will not be applied to the transaction."))
+                .arg(arg!(-v --fund_fee <FUND_FEE> "The fund fee rate of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_spread_fee")
+                .about("Update the spread_fee of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-n --manual <MARKET> "Whether it is in manual mode. If the value is not true, the modified value will not be applied to the transaction."))
+                .arg(arg!(-v --spread_fee <SPREAD_FEE> "The spread_fee of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_description")
+                .about("Update the description of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --description <DESCRIPTION> "The description of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_status")
+                .about("Update the status of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --status <STATUS> r#"The status of the market will be modified to this value.
+                1 Normal;
+                2. Lock the market, allow closing settlement and not open positions.
+                3 The market is frozen, and opening and closing positions are not allowed."#).value_parser(clap::value_parser!(u8)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_officer")
+                .about("Update the officer of market object.This must be run by the contract deployer.")
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-v --officer <OFFICER> r#"The officer of the market will be modified to this value.
+                1 project team.
+                2 Certified Third Party.
+                3 Community."#).value_parser(clap::value_parser!(u8)))
+                ,
+        )
+        .subcommand(
+            Command::new("add_factory_mould")
+                .about("Add NFT style.This must be run by the contract deployer.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-u --url <URL> "The nft image url."))
+                ,
+        )
+        .subcommand(
+            Command::new("remove_factory_mould")
+                .about("Remove NFT style.This must be run by the contract deployer.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                ,
+        )
+        .subcommand(
+            Command::new("investment")
+                .about("Funding the market liquidity pool.")
+                .arg(arg!(-m --market <MARKET> "The nft style name."))
+                .arg(arg!(-c --coin <COIN> "Coins for deduction"))
+                .arg(arg!(-n --name <NAME> "The nft style name. NFT credentials of the specified style will be obtained."))
+                ,
+        )
+        .subcommand(
+            Command::new("divestment")
+                .about("Withdraw funds from the market liquidity pool.")
+                .arg(arg!(-m --market <MARKET> "The nft style name."))
+                .arg(arg!(-n --nft <NFT> "The NFT certificate."))
+                ,
+        )
+        .subcommand(
+            Command::new("generate_upgrade_move_token")
+                .about("Issue vouchers to nft holders for fund transfer.This must be run by the contract deployer.")
+                .arg(arg!(-a --address <ADDRESS> "The wallet address of the user who holds the nft."))
+                .arg(arg!(-n --nft <NFT> "The NFT certificate."))
+                .arg(arg!(-e --expiration_time <EXPIRATION_TIME> "Voucher validity period."))
+                ,
+        )
+        .subcommand(
+            Command::new("divestment_by_upgrade")
+                .about("The user holding the fund transfer voucher transfers the fund to the new version of the contract.")
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-n --nft <NFT> "The NFT certificate."))
+                .arg(arg!(-t --move_token <MOVE_TOKEN> "Fund transfer voucher."))
+                ,
+        )
+        .subcommand(
+            Command::new("open_position")
+                .about("Open a position.")
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-p --position_type <POSITION_TYPE> "The position type. 1 full position mode, 2 independent position modes").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
+                ,
+        )
+        .subcommand(
+            Command::new("close_position")
+                .about("Close the position.")
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                .arg(arg!(-p --position <POSITION> "Position object id."))
+                ,
         )
 }
 fn sui() -> Command {
@@ -77,6 +279,7 @@ fn sui() -> Command {
         .about("cli program config.")
         .args_conflicts_with_subcommands(true)
         .subcommand_required(true)
+        .arg_required_else_help(true)
         .subcommand(Command::new("get").about("get cli program config."))
         .subcommand(
             Command::new("set")
@@ -125,6 +328,76 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("airdrop", matches)) => {
                             tool.coin_airdrop(matches).await?;
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?,
+                Some(("contract", matches)) => com::new_tokio_one_thread().block_on(async {
+                    let tool = tool::Tool::new(conf).await?;
+                    match matches.subcommand() {
+                        Some(("create_account", matches)) => {
+                            tool.create_account(matches).await?;
+                        }
+                        Some(("deposit", matches)) => {
+                            tool.deposit(matches).await?;
+                        }
+                        Some(("add_admin_member", matches)) => {
+                            tool.add_admin_member(matches).await?;
+                        }
+                        Some(("remove_admin_member", matches)) => {
+                            tool.remove_admin_member(matches).await?;
+                        }
+                        Some(("create_market", matches)) => {
+                            tool.create_market(matches).await?;
+                        }
+                        Some(("update_max_leverage", matches)) => {
+                            tool.update_max_leverage(matches).await?;
+                        }
+                        Some(("update_insurance_fee", matches)) => {
+                            tool.update_insurance_fee(matches).await?;
+                        }
+                        Some(("update_margin_fee", matches)) => {
+                            tool.update_margin_fee(matches).await?;
+                        }
+                        Some(("update_fund_fee", matches)) => {
+                            tool.update_fund_fee(matches).await?;
+                        }
+                        Some(("update_status", matches)) => {
+                            tool.update_status(matches).await?;
+                        }
+                        Some(("update_description", matches)) => {
+                            tool.update_description(matches).await?;
+                        }
+                        Some(("update_spread_fee", matches)) => {
+                            tool.update_spread_fee(matches).await?;
+                        }
+                        Some(("update_officer", matches)) => {
+                            tool.update_officer(matches).await?;
+                        }
+                        Some(("add_factory_mould", matches)) => {
+                            tool.add_factory_mould(matches).await?;
+                        }
+                        Some(("remove_factory_mould", matches)) => {
+                            tool.remove_factory_mould(matches).await?;
+                        }
+                        Some(("investment", matches)) => {
+                            tool.investment(matches).await?;
+                        }
+                        Some(("divestment", matches)) => {
+                            tool.divestment(matches).await?;
+                        }
+                        Some(("generate_upgrade_move_token", matches)) => {
+                            tool.generate_upgrade_move_token(matches).await?;
+                        }
+                        Some(("divestment_by_upgrade", matches)) => {
+                            tool.divestment_by_upgrade(matches).await?;
+                        }
+                        Some(("open_position", matches)) => {
+                            tool.open_position(matches).await?;
+                        }
+                        Some(("close_position", matches)) => {
+                            tool.close_position(matches).await?;
                         }
                         _ => unreachable!(),
                     }

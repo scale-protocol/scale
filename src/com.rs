@@ -1,7 +1,7 @@
 use thiserror::Error;
-use tokio::{self, runtime::Builder, runtime::Runtime};
+use tokio;
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "FAZXodDdQzGGRThjidaBLq4yvNgMBA6F7vGubLnUq7T";
+pub const SUI_SCALE_PUBLISH_TX: &str = "44hnd9cQmgwJBtawUisgRJb9aqSV6qXNGjhRERpxgtM5";
 pub const SUI_COIN_PUBLISH_TX: &str = "AjR9MfKohJLAiUcnEjoYFWKcUxMowc9G5LiLKh9SexDF";
 
 pub const DECIMALS: u64 = 1000000;

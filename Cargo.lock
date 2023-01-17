@@ -7628,6 +7628,7 @@ dependencies = [
  "sled",
  "sui",
  "sui-adapter",
+ "sui-json-rpc-types",
  "sui-keys",
  "sui-sdk",
  "sui-types",

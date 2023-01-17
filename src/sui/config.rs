@@ -118,7 +118,7 @@ impl cfg for Config {
                 if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
                     return self.init();
                 }
-                debug!("load scale config success: {:?}", self);
+                // debug!("load scale config success: {:?}", self);
             }
             Err(e) => {
                 self.load_sui_config()?;
@@ -158,14 +158,15 @@ impl Config {
     fn load_sui_config(&mut self) -> anyhow::Result<()> {
         let sui_config_str = fs::read_to_string(&self.sui_cli_config_file)?;
         let sui_config: SuiConfig = serde_yaml::from_str(&sui_config_str)?;
-        debug!("load sui config success: {:?}", sui_config);
+        // debug!("load sui config success: {:?}", sui_config);
         self.sui_config = sui_config;
         Ok(())
     }
 
     pub fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
         let mut sui_config = SuiClientConfig::new(Keystore::from(
-            FileBasedKeystore::new(&self.sui_config.keystore.file).unwrap(),
+            FileBasedKeystore::new(&self.sui_config.keystore.file)
+                .map_err(|e| CliError::Unknown(e.to_string()))?,
         ));
         sui_config.envs = self.sui_config.envs.clone();
         sui_config.active_address = self.sui_config.active_address.clone();
