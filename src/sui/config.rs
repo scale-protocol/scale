@@ -166,7 +166,7 @@ impl Config {
     pub fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
         let mut sui_config = SuiClientConfig::new(Keystore::from(
             FileBasedKeystore::new(&self.sui_config.keystore.file)
-                .map_err(|e| CliError::Unknown(e.to_string()))?,
+                .map_err(|e| CliError::CliError(e.to_string()))?,
         ));
         sui_config.envs = self.sui_config.envs.clone();
         sui_config.active_address = self.sui_config.active_address.clone();

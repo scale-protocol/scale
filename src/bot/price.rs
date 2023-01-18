@@ -115,7 +115,8 @@ pub async fn sub_price(
     inf_db: Influxdb,
     sds: SharedDmSymbolId,
     is_write_db: bool,
-) -> anyhow::Result<(WsClient, PriceWatchRx)> {
+    is_http_ws_watch: bool,
+) -> anyhow::Result<(WsClient, Option<PriceWatchRx>)> {
     debug!("start sub price url: {:?}", price_ws_url);
     let mut sub_req = Request {
         type_field: SubType::Subscribe,
@@ -153,8 +154,10 @@ pub async fn sub_price(
                 if let Err(e) = watch_tx.send(watch_msg) {
                     error!("send watch msg error: {:?}", e);
                 }
-                if let Err(e) = ws_price_tx.send(op) {
-                    error!("send ws price msg error: {:?}", e);
+                if is_http_ws_watch {
+                    if let Err(e) = ws_price_tx.send(op) {
+                        error!("send ws price msg error: {:?}", e);
+                    }
                 }
                 if !is_write_db {
                     return Ok(());
@@ -181,5 +184,8 @@ pub async fn sub_price(
     let req = serde_json::to_string(&sub_req)?;
     debug!("......sub price req: {:?}", req);
     ws_client.send(WsClientMessage::Txt(req)).await?;
-    Ok((ws_client, ws_price_rx))
+    if is_http_ws_watch {
+        return Ok((ws_client, Some(ws_price_rx)));
+    }
+    Ok((ws_client, None))
 }

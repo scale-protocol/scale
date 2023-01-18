@@ -9,7 +9,7 @@ pub const DECIMALS: u64 = 1000000;
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {
     #[error("Unknown error: {0}")]
-    Unknown(String),
+    CliError(String),
     #[error("Invalid cli params: {0}")]
     InvalidCliParams(String),
     #[error("can not load scale config: {0}")]

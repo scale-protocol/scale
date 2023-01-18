@@ -1,7 +1,7 @@
 use crate::config::{self, Config as cfg};
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub scale_config_file: PathBuf,
@@ -20,8 +20,6 @@ impl cfg for Config {
     where
         Self: DeserializeOwned,
     {
-        // let config = fs::read_to_string(&self.scale_config_file)?;
-        // let config: Config = serde_yaml::from_str(&config)?;
         Ok(())
     }
     fn get_config_file(&self) -> PathBuf {

@@ -1,36 +1,38 @@
-use crate::bot::state::{self, Account, Market, Position};
-use crate::sui::config::Context;
-use crate::{app::Task, com::CliError};
+use crate::bot::machine::Message;
+use crate::bot::state::{
+    self, Account, Address, Direction, Market, MarketStatus, Officer, Pool, Position,
+    PositionStatus, PositionType, State, Status,
+};
+use crate::sui::config::Ctx;
+use crate::sui::object;
 use log::*;
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt;
-use std::sync::Arc;
-use std::time::Duration;
 use sui_sdk::rpc_types::{SuiEvent, SuiEventFilter, SuiObjectRead, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, SuiAddress},
     id::{ID, UID},
 };
+use tokio::sync::mpsc::UnboundedSender;
 extern crate serde;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ObjectType {
     Market,
-    UserAccount,
     Account,
     Position,
     None,
 }
 impl<'a> From<&'a str> for ObjectType {
     fn from(value: &'a str) -> Self {
-        if value.ends_with("::market::Market") {
+        if value.contains("::market::Market") {
             Self::Market
-        } else if value.ends_with("::account::Account") {
+        } else if value.contains("::account::Account") {
             Self::Account
-        } else if value.ends_with("::account::UserAccount") {
-            Self::UserAccount
-        } else if value.ends_with("::position::Position") {
+        } else if value.contains("::position::Position") {
             Self::Position
         } else {
             Self::None
@@ -42,14 +44,18 @@ impl fmt::Display for ObjectType {
         let t = match *self {
             Self::Market => "market",
             Self::Account => "account",
-            Self::UserAccount => "user account",
             Self::Position => "position",
             Self::None => "None",
         };
         write!(f, "{}", t)
     }
 }
-pub async fn get_object(ctx: Arc<Context>, id: ObjectID) -> anyhow::Result<()> {
+
+pub async fn pull_object(
+    ctx: Ctx,
+    id: ObjectID,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
     let rs = ctx.client.read_api().get_object(id).await?;
     match rs {
         SuiObjectRead::Exists(o) => match o.data {
@@ -58,23 +64,43 @@ pub async fn get_object(ctx: Arc<Context>, id: ObjectID) -> anyhow::Result<()> {
                 debug!("got move object data type: {:?}", t);
                 match t {
                     ObjectType::Market => {
-                        let market: SuiMarket = m.deserialize()?;
-                        println!("market: {:?}", market);
+                        let sui_market: SuiMarket = m.deserialize()?;
+                        debug!("market: {:?}", sui_market);
+                        let market = Market::from(sui_market);
+                        if let Err(e) = watch_tx.send(Message {
+                            address: market.id.clone(),
+                            state: State::Market(market),
+                            status: Status::Normal,
+                        }) {
+                            error!("send market message error: {:?}", e);
+                        };
                     }
                     ObjectType::Account => {
-                        let account: SuiAccount = m.deserialize()?;
-                        println!("account: {:?}", account);
-                    }
-                    ObjectType::UserAccount => {
-                        let account: SuiUserAccount = m.deserialize()?;
-                        println!("user account: {:?}", account);
+                        let sui_account: SuiAccount = m.deserialize()?;
+                        debug!("account: {:?}", sui_account);
+                        let account = Account::from(sui_account);
+                        if let Err(e) = watch_tx.send(Message {
+                            address: account.id.clone(),
+                            state: State::Account(account),
+                            status: Status::Normal,
+                        }) {
+                            error!("send account message error: {:?}", e);
+                        };
                     }
                     ObjectType::Position => {
-                        let position: SuiPosition = m.deserialize()?;
-                        println!("position: {:?}", position);
+                        let sui_position: SuiPosition = m.deserialize()?;
+                        debug!("position: {:?}", sui_position);
+                        let position = Position::from(sui_position);
+                        if let Err(e) = watch_tx.send(Message {
+                            address: position.id.clone(),
+                            state: State::Position(position),
+                            status: Status::Normal,
+                        }) {
+                            error!("send position message error: {:?}", e);
+                        };
                     }
-                    ObjectType::None => {
-                        println!("None");
+                    _ => {
+                        debug!("pull object nothing to do ")
                     }
                 }
             }
@@ -114,23 +140,23 @@ pub struct SuiMarket {
     /// 1 Normal;
     /// 2. Lock the market, allow closing settlement and not open positions;
     /// 3 The market is frozen, and opening and closing positions are not allowed.
-    pub status: MarketStatus,
+    pub status: u8,
     /// Total amount of long positions in the market
     pub long_position_total: u64,
     /// Total amount of short positions in the market
     pub short_position_total: u64,
     /// Transaction pair (token type, such as BTC, ETH)
     /// len: 4+20
-    pub name: String,
+    pub symbol: String,
     /// market description
     pub description: String,
     /// Market operator,
     /// 1 project team
     /// 2 Certified Third Party
     /// 3 Community
-    pub officer: Officer,
+    pub officer: u8,
     /// coin pool of the market
-    pub pool: Pool,
+    pub pool: SuiPool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
     pub size: u64,
@@ -138,8 +164,34 @@ pub struct SuiMarket {
     pub opening_price: u64,
     pub pyth_id: ID,
 }
+
+impl From<SuiMarket> for Market {
+    fn from(m: SuiMarket) -> Self {
+        Self {
+            id: Address::new(m.id.id.bytes.to_vec()),
+            max_leverage: m.max_leverage,
+            insurance_fee: m.insurance_fee,
+            margin_fee: m.margin_fee,
+            fund_fee: m.fund_fee,
+            fund_fee_manual: m.fund_fee_manual,
+            spread_fee: m.spread_fee,
+            spread_fee_manual: m.spread_fee_manual,
+            status: MarketStatus::try_from(m.status).unwrap(),
+            long_position_total: m.long_position_total,
+            short_position_total: m.short_position_total,
+            symbol: m.symbol,
+            description: m.description,
+            officer: Officer::try_from(m.officer).unwrap(),
+            pool: m.pool.into(),
+            size: m.size,
+            opening_price: m.opening_price,
+            pyth_id: Address::new(m.pyth_id.bytes.to_vec()),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Pool {
+pub struct SuiPool {
     // The original supply of the liquidity pool represents
     // the liquidity funds obtained through the issuance of NFT bonds
     vault_supply: Supply,
@@ -152,26 +204,26 @@ pub struct Pool {
     // Spread benefits, to prevent robot cheating and provide benefits to sponsors
     spread_profit: Balance,
 }
-#[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
-#[repr(u8)]
-pub enum MarketStatus {
-    Normal = 1,
-    Locked,
-    Frozen,
+
+impl From<SuiPool> for Pool {
+    fn from(p: SuiPool) -> Self {
+        Self {
+            vault_supply: p.vault_supply.value,
+            vault_balance: p.vault_balance.value(),
+            profit_balance: p.profit_balance.value(),
+            insurance_balance: p.insurance_balance.value(),
+            spread_profit: p.spread_profit.value(),
+        }
+    }
 }
-#[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
-#[repr(u8)]
-pub enum Officer {
-    ProjectTeam = 1,
-    CertifiedThirdParty,
-    Community,
-}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiUserAccount {
     pub id: UID,
     pub owner: SuiAddress,
     pub account_id: TypedID,
 }
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TypedID {
     pub id: ID,
@@ -200,21 +252,72 @@ pub struct SuiAccount {
     pub margin_independent_sell_total: u64,
     pub full_position_idx: Vec<Entry>,
 }
+
+impl From<SuiAccount> for Account {
+    fn from(a: SuiAccount) -> Self {
+        let mut full_position_idx: HashMap<Vec<u8>, Address> = HashMap::new();
+        for e in a.full_position_idx {
+            let (key, value): (Vec<u8>, Address) = e.into();
+            full_position_idx.insert(key, value);
+        }
+        Self {
+            id: Address::new(a.id.id.bytes.to_vec()),
+            owner: Address::new(a.owner.to_vec()),
+            offset: a.offset,
+            balance: a.balance,
+            profit: a.profit.into(),
+            margin_total: a.margin_total,
+            margin_full_total: a.margin_full_total,
+            margin_independent_total: a.margin_independent_total,
+            margin_full_buy_total: a.margin_full_buy_total,
+            margin_full_sell_total: a.margin_full_sell_total,
+            margin_independent_buy_total: a.margin_independent_buy_total,
+            margin_independent_sell_total: a.margin_independent_sell_total,
+            full_position_idx,
+        }
+    }
+}
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PFK {
     pub market_id: ID,
     pub account_id: ID,
     pub direction: u8,
 }
+
+impl From<PFK> for Vec<u8> {
+    fn from(p: PFK) -> Self {
+        let mut v = Vec::new();
+        v.extend_from_slice(&p.market_id.bytes.to_vec());
+        v.extend_from_slice(&p.account_id.bytes.to_vec());
+        v.push(p.direction);
+        v
+    }
+}
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Entry {
     pub key: PFK,
     pub value: ID,
 }
+
+impl From<Entry> for (Vec<u8>, Address) {
+    fn from(e: Entry) -> Self {
+        (e.key.into(), Address::new(e.value.bytes.to_vec()))
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct I64 {
     pub negative: bool,
     pub value: u64,
+}
+impl From<I64> for i64 {
+    fn from(i: I64) -> Self {
+        if i.negative {
+            -(i.value as i64)
+        } else {
+            i.value as i64
+        }
+    }
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiPosition {
@@ -270,4 +373,37 @@ pub struct SuiPosition {
     /// Market account number of the position
     market_id: ID,
     account_id: ID,
+}
+impl From<SuiPosition> for Position {
+    fn from(p: SuiPosition) -> Self {
+        Self {
+            id: Address::new(p.id.id.bytes.to_vec()),
+            offset: p.offset,
+            margin: p.margin,
+            margin_balance: p.margin_balance.value(),
+            leverage: p.leverage,
+            position_type: PositionType::try_from(p.position_type).unwrap(),
+            status: PositionStatus::try_from(p.status).unwrap(),
+            direction: Direction::try_from(p.direction).unwrap(),
+            size: p.size,
+            lot: p.lot,
+            open_price: p.open_price,
+            open_spread: p.open_spread,
+            open_real_price: p.open_real_price,
+            close_price: p.close_price,
+            close_spread: p.close_spread,
+            close_real_price: p.close_real_price,
+            profit: p.profit.into(),
+            stop_surplus_price: p.stop_surplus_price,
+            stop_loss_price: p.stop_loss_price,
+            create_time: p.create_time,
+            open_time: p.open_time,
+            close_time: p.close_time,
+            validity_time: p.validity_time,
+            open_operator: Address::new(p.open_operator.to_vec()),
+            close_operator: Address::new(p.close_operator.to_vec()),
+            market_id: Address::new(p.market_id.bytes.to_vec()),
+            account_id: Address::new(p.account_id.bytes.to_vec()),
+        }
+    }
 }

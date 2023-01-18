@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use anyhow::anyhow;
+use async_trait::async_trait;
 use fastcrypto::encoding::{decode_bytes_hex, Encoding, Hex};
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{self, Error};
 use std::str::FromStr;
 use tokio::{sync::oneshot, task::JoinHandle};
@@ -40,6 +40,9 @@ impl Address {
     }
     pub fn copy(&self) -> Self {
         Self(self.0.clone())
+    }
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.clone()
     }
 }
 
@@ -186,6 +189,9 @@ impl Market {
             return self.spread_fee;
         };
         let change_price = real_price.max(self.opening_price) - real_price.min(self.opening_price);
+        if self.opening_price == 0 {
+            return 150;
+        };
         let change = change_price / self.opening_price * DENOMINATOR;
         if change <= 300 {
             return 30;
@@ -434,6 +440,13 @@ pub struct OrgPrice {
     pub price: i64,
     pub update_time: i64,
     pub symbol: String,
+}
+#[async_trait]
+pub trait MoveCall {
+    async fn trigger_update_opening_price(&self, market_id: Address) -> anyhow::Result<()>;
+    async fn burst_position(&self, account_id: Address, position_id: Address)
+        -> anyhow::Result<()>;
+    async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()>;
 }
 #[cfg(test)]
 mod tests {

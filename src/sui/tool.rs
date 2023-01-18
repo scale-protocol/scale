@@ -1,8 +1,10 @@
+use crate::bot::state::{Address, MoveCall};
 use crate::{
     bot::state::DENOMINATOR,
     com::CliError,
     sui::config::{Config, Context, Ctx},
 };
+use async_trait::async_trait;
 use serde_json::json;
 use std::str::FromStr;
 use sui_adapter::execution_mode::Normal;
@@ -12,7 +14,7 @@ use sui_sdk::{
     json::SuiJsonValue,
     types::{
         base_types::ObjectID,
-        messages::{Transaction, TransactionData},
+        messages::{SingleTransactionKind, Transaction, TransactionData, TransactionKind},
     },
 };
 use sui_types::intent::Intent;
@@ -34,7 +36,7 @@ impl Tool {
             sui_types::parse_sui_type_tag(
                 format!("{}::scale::SCALE", self.ctx.config.scale_coin_package_id).as_str(),
             )
-            .expect("cannot parse SuiTypeTag"),
+            .expect("cannot patransaction_datae SuiTypeTag"),
         )
     }
 
@@ -62,11 +64,22 @@ impl Tool {
             .client
             .quorum_driver()
             .execute_transaction(
-                Transaction::from_data(pm, Intent::default(), signature).verify()?,
+                Transaction::from_data(pm.clone(), Intent::default(), signature).verify()?,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
             .await?;
-        println!("success! tx: {:?}", tx.tx_digest);
+        if let TransactionKind::Single(s) = pm.kind {
+            if let SingleTransactionKind::Call(m) = s {
+                println!(
+                    "call {:?}::{:?}::{:?} success! tx: {:?}",
+                    m.package.0,
+                    m.module.to_string(),
+                    m.function.to_string(),
+                    tx.tx_digest
+                );
+            }
+        }
+
         Ok(())
     }
 
@@ -100,7 +113,7 @@ impl Tool {
         let ratio = args
             .get_one::<u64>("ratio")
             .ok_or_else(|| CliError::InvalidCliParams("ratio".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
                 COIN_PACKAGE_NAME,
@@ -113,14 +126,14 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn coin_burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let coin = args
             .get_one::<String>("coin")
             .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
                 COIN_PACKAGE_NAME,
@@ -132,7 +145,7 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -142,7 +155,7 @@ impl Tool {
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
                 COIN_PACKAGE_NAME,
@@ -155,14 +168,14 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn create_account(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let coin = args
             .get_one::<String>("coin")
             .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -171,7 +184,7 @@ impl Tool {
                 vec![self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn deposit(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -184,7 +197,7 @@ impl Tool {
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -197,7 +210,7 @@ impl Tool {
                 vec![self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn withdrawal(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -207,7 +220,7 @@ impl Tool {
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -220,7 +233,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn add_admin_member(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -230,7 +243,7 @@ impl Tool {
         let member = args
             .get_one::<String>("member")
             .ok_or_else(|| CliError::InvalidCliParams("member".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -242,7 +255,7 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn remove_admin_member(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -252,7 +265,7 @@ impl Tool {
         let member = args
             .get_one::<String>("member")
             .ok_or_else(|| CliError::InvalidCliParams("member".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -264,7 +277,7 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn create_market(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -286,7 +299,7 @@ impl Tool {
         let pyth_id = args
             .get_one::<String>("pyth_id")
             .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -303,7 +316,7 @@ impl Tool {
                 vec![self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_max_leverage(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -317,7 +330,7 @@ impl Tool {
         let max_leverage = args
             .get_one::<u8>("max_leverage")
             .ok_or_else(|| CliError::InvalidCliParams("max_leverage".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -331,7 +344,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_insurance_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -346,7 +359,7 @@ impl Tool {
             .get_one::<f64>("insurance_fee")
             .ok_or_else(|| CliError::InvalidCliParams("insurance_fee".to_string()))?;
         let insurance_fee = (insurance_fee * DENOMINATOR as f64) as u64;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -360,7 +373,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_margin_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -375,7 +388,7 @@ impl Tool {
             .get_one::<f64>("margin_fee")
             .ok_or_else(|| CliError::InvalidCliParams("margin_fee".to_string()))?;
         let margin_fee = (margin_fee * DENOMINATOR as f64) as u64;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -389,7 +402,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_fund_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -407,7 +420,7 @@ impl Tool {
         let manual = args
             .get_one::<bool>("manual")
             .ok_or_else(|| CliError::InvalidCliParams("manual".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -422,7 +435,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_status(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -436,7 +449,7 @@ impl Tool {
         let status = args
             .get_one::<u8>("status")
             .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -450,7 +463,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_description(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -464,7 +477,7 @@ impl Tool {
         let description = args
             .get_one::<String>("description")
             .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -478,7 +491,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_spread_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -496,7 +509,7 @@ impl Tool {
         let manual = args
             .get_one::<bool>("manual")
             .ok_or_else(|| CliError::InvalidCliParams("manual".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -511,7 +524,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn update_officer(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -521,7 +534,7 @@ impl Tool {
         let officer = args
             .get_one::<u8>("officer")
             .ok_or_else(|| CliError::InvalidCliParams("officer".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -535,7 +548,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn add_factory_mould(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -548,7 +561,7 @@ impl Tool {
         let url = args
             .get_one::<String>("url")
             .ok_or_else(|| CliError::InvalidCliParams("url".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -563,14 +576,14 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn remove_factory_mould(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
             .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -583,7 +596,7 @@ impl Tool {
                 vec![],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
     pub async fn investment(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let market = args
@@ -595,7 +608,7 @@ impl Tool {
         let name = args
             .get_one::<String>("name")
             .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -610,7 +623,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn divestment(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -620,7 +633,7 @@ impl Tool {
         let nft = args
             .get_one::<String>("nft")
             .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -633,7 +646,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn generate_upgrade_move_token(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -650,7 +663,7 @@ impl Tool {
             .get_one::<String>("expiration_time")
             .ok_or_else(|| CliError::InvalidCliParams("expiration_time".to_string()))?;
         let t = chrono::DateTime::parse_from_rfc3339(expiration_time.as_str())?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -665,7 +678,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn divestment_by_upgrade(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -678,7 +691,7 @@ impl Tool {
         let move_token = args
             .get_one::<String>("move_token")
             .ok_or_else(|| CliError::InvalidCliParams("move_token".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -692,7 +705,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn open_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -714,7 +727,7 @@ impl Tool {
         let direction = args
             .get_one::<u8>("direction")
             .ok_or_else(|| CliError::InvalidCliParams("direction".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -731,7 +744,7 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
     }
 
     pub async fn close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -744,7 +757,7 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        let rs = self
+        let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -758,6 +771,69 @@ impl Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(rs).await
+        self.exec(transaction_data).await
+    }
+}
+#[async_trait]
+impl MoveCall for Tool {
+    async fn trigger_update_opening_price(&self, market_id: Address) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_PACKAGE_NAME,
+                "trigger_update_opening_price",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
+                        market_id.to_vec().as_slice(),
+                    )?),
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    async fn burst_position(
+        &self,
+        account_id: Address,
+        position_id: Address,
+    ) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_PACKAGE_NAME,
+                "burst_position",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
+                        account_id.to_vec().as_slice(),
+                    )?),
+                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
+                        position_id.to_vec().as_slice(),
+                    )?),
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_PACKAGE_NAME,
+                "process_fund_fee",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
+                        account_id.to_vec().as_slice(),
+                    )?),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
     }
 }

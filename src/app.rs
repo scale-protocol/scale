@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum App {
@@ -26,8 +25,4 @@ impl fmt::Display for App {
         };
         write!(f, "{}", t)
     }
-}
-#[async_trait]
-pub trait Task {
-    async fn stop(self) -> anyhow::Result<()>;
 }

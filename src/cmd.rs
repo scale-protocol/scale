@@ -42,7 +42,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-w --write_to_db <WRITE_TO_DB> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-w --write_price_to_db <WRITE_PRICE_TO_DB> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
         )
 }
 
@@ -94,7 +94,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("deposit")
                 .about("Withdrawal of trading account balance.")
-                .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
+                .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
                 .arg(arg!(-c --coin <COIN> "Coins for deduction"))
                 .arg(
                     arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")

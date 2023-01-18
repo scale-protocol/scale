@@ -1,17 +1,16 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
-    Account, Address, Direction, Market, Position, PositionStatus, PositionType, Price, State,
-    Status, Task, BURST_RATE,
+    Account, Address, Direction, Market, MoveCall, Position, PositionStatus, PositionType, Price,
+    State, Status, Task, BURST_RATE,
 };
 use crate::bot::storage::{self, Storage};
 use crate::bot::ws::{
     AccountDynamicData, PositionDynamicData, SupportedSymbol, WsServerState, WsSrvMessage,
 };
 use crate::com;
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use log::*;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -20,7 +19,6 @@ use tokio::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
-    task::JoinHandle,
     time::{self as tokio_time, Duration as TokioDuration},
 };
 
@@ -64,6 +62,64 @@ impl StateMap {
             price_market_idx,
             ws_state: WsServerState::new(supported_symbol),
         })
+    }
+
+    pub fn load_active_account_from_local(&mut self) -> anyhow::Result<()> {
+        info!("start load active object from local!");
+        let p = storage::Prefix::Active;
+        let r = self.storage.scan_prefix(&p);
+        for i in r {
+            match i {
+                Ok((k, v)) => {
+                    let key = String::from_utf8(k.to_vec())
+                        .map_err(|e| com::CliError::JsonError(e.to_string()))?;
+                    let keys = storage::Keys::from_str(key.as_str())?;
+                    debug!("load objects from db: {}", keys.get_storage_key());
+                    let pk = keys.get_end();
+                    debug!("load address from db : {}", pk);
+                    let pbk = Address::from_str(pk.as_str())
+                        .map_err(|e| com::CliError::CliError(e.to_string()))?;
+                    let values: State = serde_json::from_slice(v.to_vec().as_slice())
+                        .map_err(|e| com::CliError::JsonError(e.to_string()))?;
+                    match values {
+                        State::Market(market) => {
+                            self.market.insert(pbk.clone(), market.clone());
+                            match self.price_market_idx.get(&market.symbol) {
+                                Some(p) => {
+                                    p.value().insert(pbk.clone());
+                                }
+                                None => {
+                                    let set = DashSet::new();
+                                    set.insert(pbk.clone());
+                                    self.price_market_idx.insert(market.symbol.clone(), set);
+                                }
+                            }
+                        }
+                        State::Account(account) => {
+                            self.account.insert(pbk, account);
+                        }
+                        State::Position(position) => {
+                            match self.position.get(&pbk) {
+                                Some(p) => {
+                                    p.insert(pbk.clone(), position.clone());
+                                }
+                                None => {
+                                    let p: DmPosition = dashmap::DashMap::new();
+                                    p.insert(pbk, position.clone());
+                                    self.position.insert((&position.account_id).copy(), p);
+                                }
+                            };
+                        }
+                        _ => {}
+                    }
+                }
+                Err(e) => {
+                    debug!("{}", e);
+                }
+            }
+        }
+        info!("complete load active account from local!");
+        Ok(())
     }
 }
 pub type SharedStateMap = Arc<StateMap>;
@@ -267,7 +323,10 @@ pub struct Liquidation {
 }
 
 impl Liquidation {
-    pub async fn new(mp: SharedStateMap, tasks: usize) -> anyhow::Result<Self> {
+    pub async fn new<C>(mp: SharedStateMap, tasks: usize, call: Arc<C>) -> anyhow::Result<Self>
+    where
+        C: MoveCall + Send + Sync + 'static,
+    {
         let mut tasks = tasks;
         if tasks < 2 {
             tasks = 2;
@@ -277,9 +336,9 @@ impl Liquidation {
         let (fund_task_tx, fund_task_rx) = flume::bounded::<Address>(tasks);
         let cron = Cron::new().await?;
         // create fund fee cron
-        let fund_fee_timer = cron.add_job("1/2 * * * * *").await?;
+        let fund_fee_timer = cron.add_job("0 0 0 * * *").await?;
         // create opening price cron
-        let opening_price_timer = cron.add_job("1/2 * * * * *").await?;
+        let opening_price_timer = cron.add_job("0 0 0,8,16 * * *").await?;
         let account_task = Task(
             shutdown_tx,
             tokio::spawn(loop_account_task(
@@ -289,11 +348,12 @@ impl Liquidation {
                 shutdown_rx,
                 fund_fee_timer,
                 opening_price_timer,
+                call.clone(),
             )),
         );
         Ok(Self {
             account_tasks: account_task,
-            position_tasks: loop_position_task(mp, tasks, task_rx, fund_task_rx).await?,
+            position_tasks: loop_position_task(mp, tasks, task_rx, fund_task_rx, call).await?,
             cron,
         })
     }
@@ -311,14 +371,18 @@ impl Liquidation {
     }
 }
 
-async fn loop_account_task(
+async fn loop_account_task<C>(
     mp: SharedStateMap,
     task_tx: flume::Sender<Address>,
     fund_task_tx: flume::Sender<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
     mut fund_fee_timer: mpsc::Receiver<()>,
     mut opening_price_timer: mpsc::Receiver<()>,
-) -> anyhow::Result<()> {
+    call: Arc<C>,
+) -> anyhow::Result<()>
+where
+    C: MoveCall,
+{
     let mut count: usize = 0;
 
     loop {
@@ -338,7 +402,7 @@ async fn loop_account_task(
             }
             _= opening_price_timer.recv() => {
                 info!("Got opening price timer signal , current time: {:?}",Utc::now());
-                update_opening_price(&mp.market).await;
+                update_opening_price(&mp.market,call.clone()).await;
             }
             // loop account
             _ = async {
@@ -364,18 +428,28 @@ async fn loop_account_task(
     }
     Ok(())
 }
-async fn update_opening_price(dm_market: &DmMarket) {
+
+async fn update_opening_price<C>(dm_market: &DmMarket, call: Arc<C>)
+where
+    C: MoveCall,
+{
     for v in dm_market {
         // todo update opening price
-        // todo!();
+        if let Err(e) = call.trigger_update_opening_price(v.key().clone()).await {
+            error!("update opening price error: {}", e);
+        }
     }
 }
-async fn loop_position_task(
+async fn loop_position_task<C>(
     mp: SharedStateMap,
     tasks: usize,
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
-) -> anyhow::Result<Vec<Task>> {
+    call: Arc<C>,
+) -> anyhow::Result<Vec<Task>>
+where
+    C: MoveCall + Send + Sync + 'static,
+{
     debug!("start position task...");
     let mut workers: Vec<Task> = Vec::with_capacity(tasks);
     for _ in 0..tasks {
@@ -386,18 +460,23 @@ async fn loop_position_task(
             task_rx.clone(),
             fund_task_rx.clone(),
             task_shutdown_rx,
+            call.clone(),
         ));
         workers.push(Task(task_shutdown_tx, task));
     }
     Ok(workers)
 }
 
-async fn loop_position_by_user(
+async fn loop_position_by_user<C>(
     mp: SharedStateMap,
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
-) -> anyhow::Result<()> {
+    call: Arc<C>,
+) -> anyhow::Result<()>
+where
+    C: MoveCall + Send + Sync,
+{
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
@@ -411,7 +490,7 @@ async fn loop_position_by_user(
                         let account = mp.account.get(&address);
                         match account {
                             Some(account) => {
-                                handle_fund_fee(mp.clone(),&account,&address);
+                                compute_position(mp.clone(),&account,&address,call.clone()).await;
                             },
                             None => {
                                 debug!("no account for state map : {:?}",address);
@@ -427,15 +506,7 @@ async fn loop_position_by_user(
                 match account_address {
                     Ok(address) => {
                         debug!("got account address from fund task recv: {:?}",address);
-                        let account = mp.account.get(&address);
-                        match account {
-                            Some(account) => {
-                                compute_position(mp.clone(),&account,&address).await;
-                            },
-                            None => {
-                                debug!("no account for state map : {:?}",address);
-                            }
-                        }
+                        process_fund_fee(&address,call.clone()).await;
                     },
                     Err(e) => {
                         error!("recv account address error: {}",e);
@@ -456,17 +527,32 @@ struct PositionSort {
     pub market_address: Option<Address>,
 }
 
-fn handle_fund_fee(mp: SharedStateMap, account: &Account, address: &Address) {
-    // todo handle fund fee
-    // todo!();
+async fn process_fund_fee<C>(account_address: &Address, call: Arc<C>)
+where
+    C: MoveCall,
+{
+    // handle fund fee
+    if let Err(e) = call.process_fund_fee(account_address.clone()).await {
+        error!("process fund fee error: {}", e);
+    }
 }
 
-async fn compute_position(mp: SharedStateMap, account: &Account, address: &Address) {
+async fn compute_position<C>(mp: SharedStateMap, account: &Account, address: &Address, call: Arc<C>)
+where
+    C: MoveCall,
+{
     match mp.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
-            compute_pl_all_position(&mp.market, account, &positions, &mp.price_idx, &mp.ws_state)
-                .await;
+            compute_pl_all_position(
+                &mp.market,
+                account,
+                &positions,
+                &mp.price_idx,
+                &mp.ws_state,
+                call,
+            )
+            .await;
         }
         None => {
             debug!("no position for state map: {:?}", address);
@@ -474,13 +560,16 @@ async fn compute_position(mp: SharedStateMap, account: &Account, address: &Addre
     }
 }
 
-async fn compute_pl_all_position(
+async fn compute_pl_all_position<C>(
     dm_market: &DmMarket,
     account: &Account,
     dm_position: &DmPosition,
     dm_price: &DmPrice,
     ws_state: &WsServerState,
-) {
+    call: Arc<C>,
+) where
+    C: MoveCall,
+{
     let mut account_data = AccountDynamicData::default();
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
     let mut pl_full = 0i64;
@@ -503,8 +592,13 @@ async fn compute_pl_all_position(
                         pl_full += pl_and_fund_fee;
                     } else {
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
-                            // todo BURST position
-                            todo!();
+                            // close position force
+                            if let Err(e) = call
+                                .burst_position(account.id.clone(), position.id.copy())
+                                .await
+                            {
+                                error!("burst position error: {}", e);
+                            }
                         }
                     }
                     position_data.push(PositionDynamicData {
@@ -541,9 +635,12 @@ async fn compute_pl_all_position(
         // sort
         position_sort.sort_by(|a, b| b.profit.cmp(&a.profit).reverse());
         for p in position_sort {
-            // todo close position
+            // close position
+            if let Err(e) = call
+                .burst_position(account.id.clone(), p.position_address)
+                .await
             {
-                // todo!();
+                error!("burst position error: {}", e);
             }
             match p.direction {
                 Direction::Buy => {

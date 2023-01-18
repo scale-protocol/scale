@@ -94,9 +94,11 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> R
         .layer(Extension(mp))
         .layer(Extension(sds))
         .layer(Extension(db));
-    app
+    app.fallback(handler_404)
 }
-
+async fn handler_404() -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, "nothing to see here")
+}
 async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
