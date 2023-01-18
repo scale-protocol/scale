@@ -1,17 +1,15 @@
 use crate::bot::machine::Message;
 use crate::bot::state::{
-    self, Account, Address, Direction, Market, MarketStatus, Officer, Pool, Position,
-    PositionStatus, PositionType, State, Status,
+    Account, Address, Direction, Market, MarketStatus, Officer, Pool, Position, PositionStatus,
+    PositionType, State, Status,
 };
 use crate::sui::config::Ctx;
-use crate::sui::object;
 use log::*;
-use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
-use sui_sdk::rpc_types::{SuiEvent, SuiEventFilter, SuiObjectRead, SuiRawData};
+use sui_sdk::rpc_types::{SuiObjectRead, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, SuiAddress},

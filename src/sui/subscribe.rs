@@ -11,6 +11,7 @@ use sui_types::{event::EventID, query::EventQuery};
 use tokio::sync::{mpsc::UnboundedSender, watch};
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
+
 pub struct EventSubscriber {
     task: JoinHandle<anyhow::Result<()>>,
     close_tx: watch::Sender<bool>,
