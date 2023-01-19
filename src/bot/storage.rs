@@ -154,4 +154,9 @@ impl Storage {
         let key = keys.get_storage_key();
         self.db.scan_prefix(key.as_bytes())
     }
+    pub fn get_market_history_list(&self) -> sled::Iter {
+        let keys = Keys::new(Prefix::History).add("market".to_string());
+        let key = keys.get_storage_key();
+        self.db.scan_prefix(key.as_bytes())
+    }
 }

@@ -143,6 +143,19 @@ fn get_change_object(event: SuiEventEnvelope) -> Option<EventResult> {
             object_id,
             is_new: false,
         }),
+        SuiEvent::TransferObject {
+            package_id: _,
+            transaction_module: _,
+            sender: _,
+            recipient: _,
+            object_type,
+            object_id,
+            version: _,
+        } => Some(EventResult {
+            object_type: object_type.as_str().into(),
+            object_id,
+            is_new: true,
+        }),
         _ => None,
     }
 }
@@ -161,7 +174,7 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
                     module: "enter".to_string(),
                 },
                 cursor.clone(),
-                Some(20),
+                Some(2),
                 true,
             )
             .await
@@ -170,6 +183,7 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
             for event in page.data {
                 if let Some(event_rs) = get_change_object(event) {
                     if event_rs.object_type != ObjectType::None && event_rs.is_new {
+                        debug!("sync object: {:?}", event_rs);
                         if let Err(e) =
                             object::pull_object(ctx.clone(), event_rs.object_id, watch_tx.clone())
                                 .await

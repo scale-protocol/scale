@@ -3,3 +3,4 @@
 sui.log*
 /node
 /.vscode
+/pricedata

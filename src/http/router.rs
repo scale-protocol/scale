@@ -77,6 +77,8 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> R
             "/account/positions/:prefix/:address",
             get(get_user_position_list),
         )
+        .route("/markets/:prefix", get(get_market_list))
+        .route("/symbols", get(get_symbol_list))
         .route("/price/history", get(get_price_history))
         .route("/price/history_full", get(get_price_history_column))
         .route("/ws/:sig", get(ws_handler))
@@ -96,14 +98,18 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> R
         .layer(Extension(db));
     app.fallback(handler_404)
 }
+
 async fn handler_404() -> impl IntoResponse {
-    (StatusCode::NOT_FOUND, "nothing to see here")
+    (
+        StatusCode::NOT_FOUND,
+        "Welcome to scale robot service. No resources found.",
+    )
 }
 async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    JsonResponse::from(service::get_account_info(address, state)).to_json()
+    JsonResponse::from(service::get_account_info(state, address)).to_json()
 }
 
 async fn get_user_position_list(
@@ -136,7 +142,18 @@ async fn get_price_history_column(
     let r = service::get_price_history_column(q_m.symbol, q_m.range, db).await;
     JsonResponse::from(r).to_json()
 }
+async fn get_market_list(
+    Path(prefix): Path<String>,
+    Extension(state): Extension<SharedStateMap>,
+) -> impl IntoResponse {
+    let r = service::get_market_list(state, prefix).await;
+    JsonResponse::from(r).to_json()
+}
 
+async fn get_symbol_list(Extension(state): Extension<SharedStateMap>) -> impl IntoResponse {
+    let r = service::get_symbol_list(state).await;
+    JsonResponse::from(r).to_json()
+}
 async fn handle_error(error: BoxError) -> impl IntoResponse {
     if error.is::<tower::timeout::error::Elapsed>() {
         return (StatusCode::REQUEST_TIMEOUT, Cow::from("request timed out"));

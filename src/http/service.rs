@@ -1,7 +1,7 @@
 use crate::bot::{
     self,
     influxdb::Influxdb,
-    state::{Account, Address, OrgPrice, Position, State, Task},
+    state::{Account, Address, Market, OrgPrice, Position, State, Task},
     ws::{PriceWatchRx, SubType, WsSrvMessage},
 };
 use crate::bot::{machine, storage};
@@ -23,8 +23,8 @@ use tokio::{
 };
 
 pub fn get_account_info(
-    address: String,
     mp: bot::machine::SharedStateMap,
+    address: String,
 ) -> anyhow::Result<Option<Account>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
@@ -84,6 +84,49 @@ pub fn get_position_list(
     Ok(rs)
 }
 
+pub async fn get_market_list(
+    mp: machine::SharedStateMap,
+    prefix: String,
+) -> anyhow::Result<Vec<Market>> {
+    let prefix = storage::Prefix::from_str(prefix.as_str())?;
+    let mut rs: Vec<Market> = Vec::new();
+    match prefix {
+        storage::Prefix::Active => {
+            for i in mp.market.iter() {
+                rs.push(i.value().clone());
+            }
+        }
+        storage::Prefix::History => {
+            let items = mp.storage.get_market_history_list();
+            for i in items {
+                match i {
+                    Ok((_k, v)) => {
+                        let values: State = serde_json::from_slice(v.to_vec().as_slice())
+                            .map_err(|e| CliError::JsonError(e.to_string()))?;
+                        match values {
+                            State::Market(m) => {
+                                rs.push(m);
+                            }
+                            _ => {}
+                        }
+                    }
+                    Err(e) => {
+                        error!("{}", e);
+                    }
+                }
+            }
+        }
+        storage::Prefix::None => {}
+    }
+    Ok(rs)
+}
+pub async fn get_symbol_list(mp: machine::SharedStateMap) -> anyhow::Result<Vec<String>> {
+    let mut rs: Vec<String> = Vec::new();
+    for i in mp.ws_state.supported_symbol.iter() {
+        rs.push(i.clone());
+    }
+    Ok(rs)
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Price {
     #[serde(rename(deserialize = "_value", serialize = "value"))]
