@@ -1,14 +1,20 @@
 #！/bin/bash
-
+if [ ! -d "output" ]; then
+    mkdir output
+fi
+all_file="output/all.csv"
+if [ ! -d "${all_file}" ]; then
+    touch ${all_file}
+fi
+echo '' > ${all_file}
 for file in $(ls ./)
 do 
+    echo "handle csv file: $file"
     if [ "${file##*.}" = "csv" ]; then
-        echo "handle csv file: $file"
-        if [ ! -d "output" ]; then
-            mkdir output
-        fi
+        coin=$(sed 's/\([A-Z].*\)USDT.*/\1/g' <<< $file)
+        coin="Crypto.${coin}/USD"
         output_file="output/${file%.*}.csv"
-        echo "timestamp,price,feed,conf" > ${output_file}
-        awk -F, '{printf "%d,%d,price,0\n",$1,$2*1000000}' $file >> ${output_file}
+        awk -F, '{printf "%s,feed=price price=%d,conf=0 %d\n","'"${coin}"'",$2*1000000,$1}' $file > ${output_file}
+        # awk -F, '{printf "%s,feed=price price=%d,conf=0 %d\n","'"${coin}"'",$2*1000000,$1}' $file >> ${all_file}
     fi
 done
