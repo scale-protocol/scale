@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 fn cli() -> Command {
     Command::new("Scale contract command line operator.")
-        .about("Scale contract command line operator. More https://www.scale.exchange .")
+        .about("Scale contract command line operator. More https://www.scale.exchange.")
         .version("0.1.0")
         .subcommand_required(true)
         .arg_required_else_help(true)
