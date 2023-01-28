@@ -5,7 +5,11 @@ use crate::com;
 use crate::config::{self, Config};
 use crate::sui::{config::Config as suiConfig, tool};
 use clap::{arg, Command};
+use log::info;
 use std::path::PathBuf;
+extern crate chrono;
+extern crate env_logger;
+extern crate log;
 
 fn cli() -> Command {
     Command::new("Scale contract command line operator.")
@@ -15,7 +19,8 @@ fn cli() -> Command {
         .arg_required_else_help(true)
         .allow_external_subcommands(true)
         .author("scale development team.")
-        .arg(arg!(-f --file <CONFIG_FILE> "The custom config file."))
+        .arg(arg!(-f --file <CONFIG_FILE> "The custom config file.").value_parser(clap::value_parser!(PathBuf)))
+        .arg(arg!(-l --log <LOG> "write log to this file.").value_parser(clap::value_parser!(PathBuf)))
         .subcommand(
             Command::new("sui")
                 .about("sui blok chain")
@@ -300,9 +305,10 @@ fn aptos() -> Command {
 }
 
 pub fn run() -> anyhow::Result<()> {
-    env_logger::init();
     let matches = cli().get_matches();
     let config_file = matches.get_one::<PathBuf>("file");
+    let log_file = matches.get_one::<PathBuf>("log");
+    init_log(log_file);
     match matches.subcommand() {
         Some(("sui", matches)) => {
             let mut conf = suiConfig::default();
@@ -433,4 +439,34 @@ pub fn run() -> anyhow::Result<()> {
         _ => unreachable!(),
     }
     Ok(())
+}
+
+fn init_log(log_file: Option<&PathBuf>) {
+    use chrono::Local;
+    use std::io::Write;
+
+    let env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn");
+    let mut l = env_logger::Builder::from_env(env);
+    l.format(|buf, record| {
+        writeln!(
+            buf,
+            "{} {} [{}] {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S"),
+            record.level(),
+            record.module_path().unwrap_or("<unnamed>"),
+            &record.args()
+        )
+    });
+    if let Some(log_file) = log_file {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_file)
+            .unwrap();
+        let file = std::io::BufWriter::new(file);
+        l.target(env_logger::Target::Pipe(Box::new(file))).init();
+    } else {
+        l.init();
+    }
+    info!("env_logger initialized.");
 }
