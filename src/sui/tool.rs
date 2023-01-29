@@ -7,7 +7,6 @@ use crate::{
 use async_trait::async_trait;
 use serde_json::json;
 use std::str::FromStr;
-use sui_adapter::execution_mode::Normal;
 use sui_json_rpc_types::SuiTypeTag;
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
@@ -94,7 +93,7 @@ impl Tool {
         self.ctx
             .client
             .transaction_builder()
-            .move_call::<Normal>(
+            .move_call(
                 self.ctx.config.sui_config.active_address.ok_or_else(|| {
                     CliError::InvalidCliParams("active address not found".to_string())
                 })?,

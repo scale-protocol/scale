@@ -249,6 +249,7 @@ pub struct SuiAccount {
     pub margin_independent_buy_total: u64,
     pub margin_independent_sell_total: u64,
     pub full_position_idx: Vec<Entry>,
+    pub independent_position_idx: Vec<SuiAddress>,
 }
 
 impl From<SuiAccount> for Account {
