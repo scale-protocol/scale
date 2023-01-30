@@ -468,5 +468,5 @@ fn init_log(log_file: Option<&PathBuf>) {
     } else {
         l.init();
     }
-    info!("env_logger initialized.");
+    debug!("env_logger initialized.");
 }
