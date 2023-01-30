@@ -87,7 +87,7 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> R
                 .layer(HandleErrorLayer::new(handle_error))
                 .load_shed()
                 // .concurrency_limit(1024)
-                .timeout(Duration::from_secs(3))
+                .timeout(Duration::from_secs(10))
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(DefaultMakeSpan::default().include_headers(true)),
