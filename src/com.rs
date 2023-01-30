@@ -1,8 +1,8 @@
 use thiserror::Error;
 use tokio;
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "44hnd9cQmgwJBtawUisgRJb9aqSV6qXNGjhRERpxgtM5";
-pub const SUI_COIN_PUBLISH_TX: &str = "AjR9MfKohJLAiUcnEjoYFWKcUxMowc9G5LiLKh9SexDF";
+pub const SUI_SCALE_PUBLISH_TX: &str = "HXEPZT8r3upoFLJiVYUi4QZiRFQ8JNudWoS2HcNisjN5";
+pub const SUI_COIN_PUBLISH_TX: &str = "HF4jTB8TP7Jp9J5yqPVk8MG9JpgYFCXR53GjwdUteXSM";
 
 pub const DECIMALS: u64 = 1000000;
 
