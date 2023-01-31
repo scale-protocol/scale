@@ -5,7 +5,7 @@ use crate::com;
 use crate::config::{self, Config};
 use crate::sui::{config::Config as suiConfig, tool};
 use clap::{arg, Command};
-use log::info;
+use log::debug;
 use std::path::PathBuf;
 extern crate chrono;
 extern crate env_logger;

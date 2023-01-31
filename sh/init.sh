@@ -1,19 +1,39 @@
 #!/bin/bash
-objects=$(sui client objects)
-sui_coin=$(grep '::sui::SUI' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
-scale_coin=$(grep '0x2::coin::Coin' <<< "$objects"| grep 'scale::SCALE'  | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
-user_account=$(grep 'account::UserAccount' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
-account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
-# btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
-market='0x993db2ff6fc3a3af10b7b2af795dc82a01248cbd'
+
+dir=$(dirname $0)
+data=$dir/data
+if [ ! -d "$data" ]; then
+    mkdir $data
+fi
+if [ "$1" != "init"]; then 
+sui_coin=$(cat $data/sui_coin)
+scale_coin=$(cat $data/scale_coin)
+user_account=$(cat $data/user_account)
+account=$(cat $data/account)
+market=$(cat $data/market)
 
 echo "suicoin: $sui_coin"
 echo "scalecoin: $scale_coin"
 echo "user_account: $user_account"
 echo "account: $account"
 echo "market: $market"
+fi
 
-if [ "$1" = "coin" ]
+if [ "$1" = "init" ]
+then
+objects=$(sui client objects)
+sui_coin=$(grep '::sui::SUI' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
+scale_coin=$(grep '0x2::coin::Coin' <<< "$objects"| grep 'scale::SCALE'  | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
+user_account=$(grep 'account::UserAccount' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
+account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
+# btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
+market='0x38619c0cad99f4970ad71f70d29b00717b93fe12'
+echo $sui_coin > $data/sui_coin
+echo $scale_coin > $data/scale_coin
+echo $user_account > $data/user_account
+echo $account > $data/account
+echo $market > $data/market
+elif [ "$1" = "coin" ]
 then
     echo "airdrop coin"
     scale sui coin airdrop -c $sui_coin -a 10000000
