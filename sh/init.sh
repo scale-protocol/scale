@@ -30,7 +30,7 @@ echo $scale_coin > $data/scale_coin
 echo $user_account > $data/user_account
 account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
 # btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
-market='0xc6c88b448de2aa711a6d69fe664c90df83120b62'
+market='0x3f1a810ddf0b82adf3a3853e405bf4c82952cba7'
 
 echo $account > $data/account
 echo $market > $data/market
@@ -48,7 +48,7 @@ then {
 elif [ "$1" = "open_position" ]
 then {
     echo "open position"
-    scale sui contract open_position -m $market -t $account -l 1 -L 2 -p 1 -d 1
+    scale sui contract open_position -m $market -t $account -l 1 -L 2 -p 1 -d 2
 }
 elif [ "$1" = "close_position" ]
 then {

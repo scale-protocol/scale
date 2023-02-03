@@ -5,7 +5,7 @@ use crate::{
     sui::config::{Config, Context, Ctx},
 };
 use async_trait::async_trait;
-use log::debug;
+// use log::debug;
 use serde_json::json;
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
@@ -71,17 +71,15 @@ impl Tool {
         if let TransactionKind::Single(s) = pm.kind {
             if let SingleTransactionKind::Call(m) = s {
                 println!(
-                    "call {:?}::{:?}::{:?} success! tx: {:?}\ntype_arguments: {:?}\narguments: {:?}",
+                    "call {:?}::{:?}::{:?} success! tx: {:?}",
                     m.package,
                     m.module.to_string(),
                     m.function.to_string(),
                     tx.tx_digest,
-                    m.type_arguments,
-                    m.arguments,
                 );
             }
         }
-        debug!("{:?}", tx);
+        // debug!("{:?}", tx);
         Ok(())
     }
 
