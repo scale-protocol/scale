@@ -71,7 +71,7 @@ impl Tool {
             if let SingleTransactionKind::Call(m) = s {
                 println!(
                     "call {:?}::{:?}::{:?} success! tx: {:?}",
-                    m.package.0,
+                    m.package,
                     m.module.to_string(),
                     m.function.to_string(),
                     tx.tx_digest

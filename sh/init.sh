@@ -5,7 +5,7 @@ data=$dir/data
 if [ ! -d "$data" ]; then
     mkdir $data
 fi
-if [ "$1" != "init"]; then 
+if [ "$1" != "init" ]; then 
 sui_coin=$(cat $data/sui_coin)
 scale_coin=$(cat $data/scale_coin)
 user_account=$(cat $data/user_account)
