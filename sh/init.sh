@@ -19,18 +19,19 @@ echo "account: $account"
 echo "market: $market"
 fi
 
-if [ "$1" = "init" ]
+if [ "$1" = "write" ]
 then
 objects=$(sui client objects)
 sui_coin=$(grep '::sui::SUI' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
 scale_coin=$(grep '0x2::coin::Coin' <<< "$objects"| grep 'scale::SCALE'  | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
 user_account=$(grep 'account::UserAccount' <<< "$objects" | awk -F '|' '{gsub(/ /,"",$0);print $1}' | head -n1)
-account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
-# btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
-market='0x38619c0cad99f4970ad71f70d29b00717b93fe12'
 echo $sui_coin > $data/sui_coin
 echo $scale_coin > $data/scale_coin
 echo $user_account > $data/user_account
+account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
+# btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
+market='0xc6c88b448de2aa711a6d69fe664c90df83120b62'
+
 echo $account > $data/account
 echo $market > $data/market
 elif [ "$1" = "coin" ]

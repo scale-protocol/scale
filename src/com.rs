@@ -1,7 +1,7 @@
 use thiserror::Error;
 use tokio;
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "9fASyq3Vyag9CpaH4rVRAJFwo8XWwxa58dBamd89J22T";
+pub const SUI_SCALE_PUBLISH_TX: &str = "BKjZ49tyXBPKDq8wU9Wq6R8d5h1dMXoUMKd1zX1qnAhJ";
 pub const SUI_COIN_PUBLISH_TX: &str = "2WAXGjqr9aqpMgwM8juwFRLy7UNyL4yquuVTawwLoj2U";
 
 pub const DECIMALS: u64 = 1000000;
