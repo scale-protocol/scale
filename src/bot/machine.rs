@@ -239,7 +239,7 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                 };
                 save_as_history(mp, &mut keys, &State::Position(position))
             } else {
-                match mp.position.get(&msg.address) {
+                match mp.position.get(&position.account_id) {
                     Some(p) => {
                         p.insert(msg.address.clone(), position.clone());
                     }
