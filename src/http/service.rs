@@ -15,10 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{
-    sync::{
-        mpsc::{self, UnboundedReceiver},
-        oneshot,
-    },
+    sync::{mpsc, oneshot},
     time::{self, Duration},
 };
 
@@ -388,7 +385,7 @@ async fn broadcast_price(
     mp: machine::SharedStateMap,
     price_status: DmPriceStatus,
     db: Arc<Influxdb>,
-    mut price_ws_rx: UnboundedReceiver<OrgPrice>,
+    mut price_ws_rx: PriceWatchRx,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> anyhow::Result<()> {
     let mut timer = time::interval(Duration::from_secs(5));
@@ -398,7 +395,7 @@ async fn broadcast_price(
                 info!("got shutdown signal , break price broadcast!");
                 break;
             },
-            Some(price) = price_ws_rx.recv() => {
+            Ok(price) = price_ws_rx.recv() => {
                 // debug!("got price from ws broadcast channel: {:?}", price);
                 if let Err(e) = broadcast_price_status(mp.clone(), &price_status, &price).await {
                     error!("broadcast price status error: {}", e);

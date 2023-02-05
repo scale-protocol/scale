@@ -6,6 +6,7 @@ use crate::{
 };
 use async_trait::async_trait;
 // use log::debug;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
@@ -19,8 +20,10 @@ use sui_sdk::{
 };
 use sui_types::intent::Intent;
 use sui_types::messages::ExecuteTransactionRequestType;
+
 const COIN_PACKAGE_NAME: &str = "scale";
 const SCALE_PACKAGE_NAME: &str = "enter";
+const SCALE_ORACLE_NAME: &str = "oracle";
 pub struct Tool {
     ctx: Ctx,
 }
@@ -169,6 +172,76 @@ impl Tool {
             )
             .await?;
         self.exec(transaction_data).await
+    }
+
+    pub async fn create_price_feed(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_oracle_package_id,
+                SCALE_ORACLE_NAME,
+                "create_price_feed",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                    SuiJsonValue::new(json!(symbol))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn update_owner(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let feed = args
+            .get_one::<String>("feed")
+            .ok_or_else(|| CliError::InvalidCliParams("feed".to_string()))?;
+        let owner = args
+            .get_one::<String>("owner")
+            .ok_or_else(|| CliError::InvalidCliParams("owner".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_oracle_package_id,
+                SCALE_ORACLE_NAME,
+                "update_owner",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(&feed)?),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(&owner)?),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    async fn update_price_inner(&self, feed: &str, price: u64) -> anyhow::Result<()> {
+        let timestamp = Utc::now().timestamp();
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_oracle_package_id,
+                SCALE_ORACLE_NAME,
+                "update_price",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(feed)?),
+                    SuiJsonValue::new(json!(price.to_string()))?,
+                    SuiJsonValue::new(json!(timestamp.to_string()))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn update_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let feed = args
+            .get_one::<String>("feed")
+            .ok_or_else(|| CliError::InvalidCliParams("feed".to_string()))?;
+        let price = args
+            .get_one::<u64>("price")
+            .ok_or_else(|| CliError::InvalidCliParams("price".to_string()))?;
+        self.update_price_inner(feed.as_str(), *price).await
     }
 
     pub async fn create_account(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -835,5 +908,9 @@ impl MoveCall for Tool {
             )
             .await?;
         self.exec(transaction_data).await
+    }
+
+    async fn update_price(&self, feed: &str, price: u64) -> anyhow::Result<()> {
+        self.update_price_inner(feed, price).await
     }
 }

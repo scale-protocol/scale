@@ -26,6 +26,8 @@ pub struct Config {
     pub scale_coin_package_id: ObjectID,
     pub scale_coin_reserve_id: ObjectID,
     pub scale_coin_admin_id: ObjectID,
+    pub scale_oracle_package_id: ObjectID,
+    pub scale_oracle_admin_id: ObjectID,
     pub scale_admin_cap_id: ObjectID,
     pub price_config: config::PriceConfig,
 }
@@ -86,6 +88,8 @@ impl Default for Config {
             scale_coin_reserve_id: default_id,
             scale_coin_admin_id: default_id,
             scale_admin_cap_id: default_id,
+            scale_oracle_package_id: default_id,
+            scale_oracle_admin_id: default_id,
             price_config: config::PriceConfig::default(),
         }
     }
@@ -112,6 +116,8 @@ impl cfg for Config {
                 self.scale_coin_package_id = c.scale_coin_package_id;
                 self.scale_coin_reserve_id = c.scale_coin_reserve_id;
                 self.scale_coin_admin_id = c.scale_coin_admin_id;
+                self.scale_oracle_package_id = c.scale_oracle_package_id;
+                self.scale_oracle_admin_id = c.scale_oracle_admin_id;
                 self.price_config = c.price_config;
 
                 self.load_sui_config()?;
@@ -180,9 +186,13 @@ impl Config {
         // get coin package info
         let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
         self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.effects.events);
+        // get oracle package info
+        let coin_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
+        self.set_value(com::SUI_SCALE_PUBLISH_TX, coin_package.effects.events);
         self.save()?;
         Ok(())
     }
+
     fn set_value(&mut self, tx: &str, events: Vec<SuiEvent>) {
         debug!("get publish info: {:?}", events);
         for v in events {
@@ -211,6 +221,9 @@ impl Config {
                     if object_type.as_str().ends_with("::admin::AdminCap") {
                         self.scale_admin_cap_id = object_id;
                     }
+                    if object_type.as_str().ends_with("::oracle::AdminCap") {
+                        self.scale_oracle_admin_id = object_id;
+                    }
                 }
                 SuiEvent::Publish {
                     sender: _,
@@ -224,11 +237,15 @@ impl Config {
                     if tx == com::SUI_SCALE_PUBLISH_TX {
                         self.scale_package_id = package_id;
                     }
+                    if tx == com::SUI_ORACLE_PUBLISH_TX {
+                        self.scale_oracle_package_id = package_id;
+                    }
                 }
                 _ => {}
             }
         }
     }
+
     fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionResponse> {
         let sui_config = self.get_sui_config()?;
         com::new_tokio_one_thread().block_on(async {

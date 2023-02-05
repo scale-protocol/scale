@@ -28,8 +28,9 @@ fn cli() -> Command {
                 .arg_required_else_help(true)
                 .allow_external_subcommands(true)
                 .subcommand(sui())
-                .subcommand(sui_contract())
-                .subcommand(sui_coin()),
+                .subcommand(sui_trade())
+                .subcommand(sui_coin())
+                .subcommand(sui_oracle()),
         )
         .subcommand(
             Command::new("aptos")
@@ -48,19 +49,20 @@ fn cli() -> Command {
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
                 .arg(arg!(-w --write_price_to_db <WRITE_PRICE_TO_DB> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-d --duration <DURATION> "If this option is set, the price of the simple price prediction machine will be updated within the interval. Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5").value_parser(clap::value_parser!(u64)))
         )
 }
 
 fn sui_coin() -> Command {
     Command::new("coin")
-        .about("scale coin tool, with devnet and testnet.")
+        .about("scale sui coin tool, with devnet and testnet.")
         .args_conflicts_with_subcommands(true)
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(
             Command::new("set")
                 .about("set subscription ratio.")
-                .about("Set conversion ratio")
+                .arg_required_else_help(true)
                 .arg(
                     arg!(-r --ratio <RATIO> "How many scales can be exchanged for a sui coin")
                         .value_parser(clap::value_parser!(u64)),
@@ -68,12 +70,13 @@ fn sui_coin() -> Command {
         )
         .subcommand(
             Command::new("burn")
-                .about("withdraw sui token.")
                 .about("Burn scale coin and return sui coin")
+                .arg_required_else_help(true)
                 .arg(arg!(-c --coin <COIN> "The scale coin to burn")),
         )
         .subcommand(
             Command::new("airdrop")
+                .arg_required_else_help(true)
                 .about("Airdrop SCALE tokens. In order to prevent malicious operation of robots.")
                 .arg(arg!(-c --coin <COIN> "Sui token for payment"))
                 .arg(
@@ -82,23 +85,54 @@ fn sui_coin() -> Command {
                 ),
         )
 }
-
-fn sui_contract() -> Command {
-    Command::new("contract")
+fn sui_oracle() -> Command {
+    Command::new("oracle")
+        .about("scale sui oracle tool, with devnet and testnet.")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("create_price_feed")
+                .arg_required_else_help(true)
+                .about("create oracle price feed.")
+                .arg(arg!(-s --symbol <SYMBOL> "The symbol of the oracle.")),
+        )
+        .subcommand(
+            Command::new("update_owner")
+                .about("update oracle price feed.")
+                .arg_required_else_help(true)
+                .arg(arg!(-f --feed <FEED> "The price feed address of the oracle."))
+                .arg(arg!(-o --owner <OWNER> "The new owner of the oracle.")),
+        )
+        .subcommand(
+            Command::new("update_price")
+                .about("update price of oracle.")
+                .arg_required_else_help(true)
+                .arg(arg!(-f --feed <FEED> "The price feed address of the oracle."))
+                .arg(
+                    arg!(-p --price <PRICE> "The new price of the oracle.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+}
+fn sui_trade() -> Command {
+    Command::new("trade")
         .about(
-            "scale sui_contract tools , It is used to call the contract program more conveniently.",
+            "scale sui trade contract tools , It is used to call the contract program more conveniently.",
         )
         .args_conflicts_with_subcommands(true)
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(
             Command::new("create_account")
+            .arg_required_else_help(true)
                 .about("Create a transaction account.")
                 .arg(arg!(-c --coin <COIN> "Used to specify transaction currency.")),
         )
         .subcommand(
             Command::new("deposit")
                 .about("Withdrawal of trading account balance.")
+                .arg_required_else_help(true)
                 .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
                 .arg(arg!(-c --coin <COIN> "Coins for deduction"))
                 .arg(
@@ -109,6 +143,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("withdrawal")
                 .about("Cash deposit.")
+                .arg_required_else_help(true)
                 .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
                 .arg(
                     arg!(-a --amount <AMOUNT> "The balance to be drawn will fail if the equity is insufficient.")
@@ -118,6 +153,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("add_admin_member")
                 .about("Add a member to admin.")
+                .arg_required_else_help(true)
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id."))
                 .arg(
                     arg!(-m --member <MEMBER> "Member address to be added."),
@@ -126,6 +162,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("remove_admin_member")
                 .about("Remove a member to admin.")
+                .arg_required_else_help(true)
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id."))
                 .arg(
                     arg!(-m --member <MEMBER> "Member address to be removed."),
@@ -134,6 +171,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("create_market")
                 .about("Create a market object.")
+                .arg_required_else_help(true)
                 .arg(arg!(-c --coin <COIN> "Used to specify transaction currency."))
                 .arg(arg!(-s --symbol <SYMBOL> "The transaction pair symbol needs pyth.network to support quotation."))
                 .arg(arg!(-p --pyth_id <PYTH_ID> "Pyth.network oracle quote object ID."))
@@ -145,6 +183,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_max_leverage")
+            .arg_required_else_help(true)
                 .about("Update the max_leverage of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -153,6 +192,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_margin_fee")
+            .arg_required_else_help(true)
                 .about("Update the margin_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -161,6 +201,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_insurance_fee")
+            .arg_required_else_help(true)
                 .about("Update the insurance_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -169,6 +210,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_fund_fee")
+            .arg_required_else_help(true)
                 .about("Update the fund_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -178,6 +220,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_spread_fee")
+            .arg_required_else_help(true)
                 .about("Update the spread_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -187,6 +230,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_description")
+            .arg_required_else_help(true)
                 .about("Update the description of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
@@ -196,6 +240,7 @@ fn sui_contract() -> Command {
         .subcommand(
             Command::new("update_status")
                 .about("Update the status of market object.")
+                .arg_required_else_help(true)
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
                 .arg(arg!(-m --market <MARKET> "The market object id."))
                 .arg(arg!(-v --status <STATUS> r#"The status of the market will be modified to this value.
@@ -206,6 +251,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("update_officer")
+            .arg_required_else_help(true)
                 .about("Update the officer of market object.This must be run by the contract deployer.")
                 .arg(arg!(-m --market <MARKET> "The market object id."))
                 .arg(arg!(-v --officer <OFFICER> r#"The officer of the market will be modified to this value.
@@ -216,6 +262,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("add_factory_mould")
+            .arg_required_else_help(true)
                 .about("Add NFT style.This must be run by the contract deployer.")
                 .arg(arg!(-n --name <NAME> "The nft style name."))
                 .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
@@ -224,12 +271,14 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("remove_factory_mould")
+            .arg_required_else_help(true)
                 .about("Remove NFT style.This must be run by the contract deployer.")
                 .arg(arg!(-n --name <NAME> "The nft style name."))
                 ,
         )
         .subcommand(
             Command::new("investment")
+            .arg_required_else_help(true)
                 .about("Funding the market liquidity pool.")
                 .arg(arg!(-m --market <MARKET> "The nft style name."))
                 .arg(arg!(-c --coin <COIN> "Coins for deduction"))
@@ -238,6 +287,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("divestment")
+            .arg_required_else_help(true)
                 .about("Withdraw funds from the market liquidity pool.")
                 .arg(arg!(-m --market <MARKET> "The nft style name."))
                 .arg(arg!(-n --nft <NFT> "The NFT certificate."))
@@ -245,6 +295,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("generate_upgrade_move_token")
+            .arg_required_else_help(true)
                 .about("Issue vouchers to nft holders for fund transfer.This must be run by the contract deployer.")
                 .arg(arg!(-a --address <ADDRESS> "The wallet address of the user who holds the nft."))
                 .arg(arg!(-n --nft <NFT> "The NFT certificate."))
@@ -253,6 +304,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("divestment_by_upgrade")
+            .arg_required_else_help(true)
                 .about("The user holding the fund transfer voucher transfers the fund to the new version of the contract.")
                 .arg(arg!(-m --market <MARKET> "The market object id."))
                 .arg(arg!(-n --nft <NFT> "The NFT certificate."))
@@ -261,6 +313,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("open_position")
+            .arg_required_else_help(true)
                 .about("Open a position.")
                 .arg(arg!(-m --market <MARKET> "The market object id."))
                 .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
@@ -272,6 +325,7 @@ fn sui_contract() -> Command {
         )
         .subcommand(
             Command::new("close_position")
+            .arg_required_else_help(true)
                 .about("Close the position.")
                 .arg(arg!(-m --market <MARKET> "The market object id."))
                 .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
@@ -289,6 +343,7 @@ fn sui() -> Command {
         .subcommand(
             Command::new("set")
                 .about("set cli program config.")
+                .arg_required_else_help(true)
                 .arg(
                     arg!(-s --storage <PATH> "Parameter file storage directory.")
                         .value_parser(clap::value_parser!(PathBuf)),
@@ -339,7 +394,23 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     Ok::<(), anyhow::Error>(())
                 })?,
-                Some(("contract", matches)) => com::new_tokio_one_thread().block_on(async {
+                Some(("oracle", matches)) => com::new_tokio_one_thread().block_on(async {
+                    let tool = tool::Tool::new(conf).await?;
+                    match matches.subcommand() {
+                        Some(("create_price_feed", matches)) => {
+                            tool.create_price_feed(matches).await?;
+                        }
+                        Some(("update_owner", matches)) => {
+                            tool.update_owner(matches).await?;
+                        }
+                        Some(("update_price", matches)) => {
+                            tool.update_price(matches).await?;
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?,
+                Some(("trade", matches)) => com::new_tokio_one_thread().block_on(async {
                     let tool = tool::Tool::new(conf).await?;
                     match matches.subcommand() {
                         Some(("create_account", matches)) => {
@@ -409,6 +480,7 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     Ok::<(), anyhow::Error>(())
                 })?,
+
                 _ => unreachable!(),
             }
         }

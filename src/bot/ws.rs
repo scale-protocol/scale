@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::{future::Future, sync::Arc};
 use tokio::sync::{
-    mpsc::{self, Receiver, Sender, UnboundedReceiver},
+    broadcast,
+    mpsc::{self, Receiver, Sender},
     oneshot,
 };
 use tokio_tungstenite::{
@@ -20,7 +21,7 @@ pub struct SymbolId {
     pub symbol: String,
     pub id: String,
 }
-// key is id, value is symbol
+// key is id(address), value is symbol
 pub type DmSymbolId = DashMap<String, String>;
 pub type SharedDmSymbolId = Arc<DmSymbolId>;
 pub type SupportedSymbol = DashSet<String>;
@@ -79,7 +80,7 @@ impl WsServerState {
 }
 // key is symbol, value is address set
 pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
-pub type PriceWatchRx = UnboundedReceiver<OrgPrice>;
+pub type PriceWatchRx = broadcast::Receiver<OrgPrice>;
 #[derive(Debug, Clone)]
 pub enum WsSrvMessage {
     AccountUpdate(AccountDynamicData),

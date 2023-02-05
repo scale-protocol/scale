@@ -87,6 +87,7 @@ impl Default for Influxdb {
 pub struct PythSymbol {
     pub symbol: String,
     pub id: String,
+    pub oracle_feed_address: Option<String>,
 }
 
 impl Default for PythSymbol {
@@ -94,6 +95,7 @@ impl Default for PythSymbol {
         Self {
             symbol: "Crypto.BTC/USD".to_string(),
             id: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b".to_string(),
+            oracle_feed_address: None,
         }
     }
 }

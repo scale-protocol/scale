@@ -41,23 +41,23 @@ then
 elif [ "$1" = "scale" ] 
 then {
     echo "create market and account"
-    scale sui contract create_account -c $scale_coin
-    scale sui contract create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $scale_coin -i 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market'
-    scale sui contract add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'
+    scale sui trade create_account -c $scale_coin
+    scale sui trade create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $scale_coin -i 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market'
+    scale sui trade add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'
 }
 elif [ "$1" = "open_position" ]
 then {
     echo "open position"
-    scale sui contract open_position -m $market -t $account -l 1 -L 2 -p 1 -d 2
+    scale sui trade open_position -m $market -t $account -l 1 -L 2 -p 2 -d 2
 }
 elif [ "$1" = "close_position" ]
 then {
     echo "close position"
-    scale sui contract close_position -m $market -t $account -p $2
+    scale sui trade close_position -m $market -t $account -p $2
 }
 else {
     echo "deposit and investment"
-    scale sui contract deposit -t $account -c $scale_coin -a 1000000
-    scale sui contract investment -m $market -c $scale_coin -n 'scale'
+    scale sui trade deposit -t $account -c $scale_coin -a 1000000
+    scale sui trade investment -m $market -c $scale_coin -n 'scale'
 }
 fi

@@ -592,44 +592,13 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.5.17"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acee9fd5073ab6b045a275b3e709c163dd36c90685219cb21804a147b58dba43"
+checksum = "e5694b64066a2459918d8074c2ce0d5a88f409431994c2356617c8ae0c4721fc"
 dependencies = [
  "async-trait",
- "axum-core 0.2.9",
- "bitflags",
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "hyper",
- "itoa 1.0.5",
- "matchit 0.5.0",
- "memchr",
- "mime",
- "percent-encoding",
- "pin-project-lite",
- "serde 1.0.152",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tower",
- "tower-http",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
-name = "axum"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08b108ad2665fa3f6e6a517c3d80ec3e77d224c47d605167aefaa5d7ef97fa48"
-dependencies = [
- "async-trait",
- "axum-core 0.3.0",
- "base64",
+ "axum-core",
+ "base64 0.20.0",
  "bitflags",
  "bytes",
  "futures-util",
@@ -648,10 +617,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
- "sha-1 0.10.1",
+ "sha1",
  "sync_wrapper",
  "tokio",
- "tokio-tungstenite 0.17.2",
+ "tokio-tungstenite",
  "tower",
  "tower-http",
  "tower-layer",
@@ -660,25 +629,9 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.2.9"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37e5939e02c56fecd5c017c37df4238c0a839fa76b7f97acdd7efb804fd181cc"
-dependencies = [
- "async-trait",
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "mime",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
-name = "axum-core"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79b8558f5a0581152dc94dcd289132a1d377494bdeafcd41869b3258e3e2ad92"
+checksum = "1cae3e661676ffbacb30f1a824089a8c9150e71017f7e1e38f2aa32009188d34"
 dependencies = [
  "async-trait",
  "bytes",
@@ -697,7 +650,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9a320103719de37b7b4da4c8eb629d4573f6bcfd3dfe80d3208806895ccf81d"
 dependencies = [
- "axum 0.6.1",
+ "axum",
  "bytes",
  "futures-util",
  "http",
@@ -771,6 +724,12 @@ name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+
+[[package]]
+name = "base64"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
 
 [[package]]
 name = "base64ct"
@@ -1687,20 +1646,6 @@ dependencies = [
  "chrono",
  "nom 7.1.1",
  "once_cell",
-]
-
-[[package]]
-name = "crossbeam"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
-dependencies = [
- "cfg-if",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -2753,6 +2698,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastcrypto-tbls"
+version = "0.1.0"
+source = "git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74#f451422b7f15e75e055a1830cbe5d1547fa87b74"
+dependencies = [
+ "fastcrypto 0.1.4 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "fastcrypto-zkp"
 version = "0.1.0"
 source = "git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74#f451422b7f15e75e055a1830cbe5d1547fa87b74"
@@ -3095,16 +3049,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gethostname"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ebd34e35c46e00bb73e81363248d627782724609fe1b6396f553f68fe3862e"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3384,7 +3328,7 @@ version = "7.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f19b9f54f7c7f55e31401bb647626ce0cf0f67b0004982ce815b3ee72a02aa8"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "byteorder",
  "crossbeam-channel",
  "flate2",
@@ -3398,7 +3342,7 @@ version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3e372db8e5c0d213e0cd0b9be18be2aca3d44cf2fe30a9d46a65581cd454584"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bitflags",
  "bytes",
  "headers-core",
@@ -3839,12 +3783,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "integer-encoding"
-version = "3.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
-
-[[package]]
 name = "internment"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3956,15 +3894,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "json"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
-
-[[package]]
 name = "jsonrpsee"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d291e3a5818a2384645fd9756362e6d89cf0541b0b916fa7702ea4a9833608e"
 dependencies = [
  "jsonrpsee-client-transport",
  "jsonrpsee-core",
@@ -3979,8 +3912,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-client-transport"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965de52763f2004bc91ac5bcec504192440f0b568a5d621c59d9dbd6f886c3fb"
 dependencies = [
  "anyhow",
  "futures-channel",
@@ -4003,8 +3937,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-core"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4e70b4439a751a5de7dd5ed55eacff78ebf4ffe0fc009cb1ebb11417f5b536b"
 dependencies = [
  "anyhow",
  "arrayvec 0.7.2",
@@ -4031,8 +3966,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-http-client"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc345b0a43c6bc49b947ebeb936e886a419ee3d894421790c969cc56040542ad"
 dependencies = [
  "async-trait",
  "hyper",
@@ -4049,8 +3985,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-proc-macros"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baa6da1e4199c10d7b1d0a6e5e8bd8e55f351163b6f4b3cbb044672a69bd4c1c"
 dependencies = [
  "heck 0.4.0",
  "proc-macro-crate",
@@ -4061,8 +3998,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-server"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fb69dad85df79527c019659a992498d03f8495390496da2f07e6c24c2b356fc"
 dependencies = [
  "futures-channel",
  "futures-util",
@@ -4082,8 +4020,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-types"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bd522fe1ce3702fd94812965d7bb7a3364b1c9aba743944c5a00529aae80f8c"
 dependencies = [
  "anyhow",
  "beef",
@@ -4095,8 +4034,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-wasm-client"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a77310456f43c6c89bcba1f6b2fc2a28300da7c341f320f5128f8c83cc63232d"
 dependencies = [
  "jsonrpsee-client-transport",
  "jsonrpsee-core",
@@ -4105,8 +4045,9 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-ws-client"
-version = "0.16.1"
-source = "git+https://github.com/patrickkuo/jsonrpsee.git?rev=adc19a124ed7045744442ca67f084ddfba4ba177#adc19a124ed7045744442ca67f084ddfba4ba177"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b83daeecfc6517cfe210df24e570fb06213533dfb990318fae781f4c7119dd9"
 dependencies = [
  "http",
  "jsonrpsee-client-transport",
@@ -4405,7 +4346,7 @@ dependencies = [
  "libc",
  "log",
  "miow",
- "ntapi",
+ "ntapi 0.3.7",
  "winapi",
 ]
 
@@ -5476,7 +5417,7 @@ dependencies = [
  "anemo-tower",
  "anyhow",
  "async-trait",
- "axum 0.5.17",
+ "axum",
  "axum-server",
  "backoff",
  "bytes",
@@ -5507,7 +5448,7 @@ dependencies = [
  "anemo",
  "arc-swap",
  "async-trait",
- "axum 0.5.17",
+ "axum",
  "bincode",
  "bytes",
  "cfg-if",
@@ -5559,7 +5500,7 @@ dependencies = [
  "async-recursion",
  "async-trait",
  "backoff",
- "base64",
+ "base64 0.13.1",
  "bincode",
  "bytes",
  "dashmap",
@@ -5623,7 +5564,7 @@ version = "0.1.0"
 dependencies = [
  "anemo",
  "arc-swap",
- "base64",
+ "base64 0.13.1",
  "bincode",
  "bytes",
  "derive_builder",
@@ -5667,7 +5608,7 @@ dependencies = [
  "anemo",
  "anemo-build",
  "async-trait",
- "base64",
+ "base64 0.13.1",
  "bincode",
  "bytes",
  "dashmap",
@@ -5887,6 +5828,15 @@ name = "ntapi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc51db7b362b205941f71232e56c625156eb9a929f8cf74a428fd5bc094a4afc"
 dependencies = [
  "winapi",
 ]
@@ -6127,110 +6077,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
-dependencies = [
- "async-trait",
- "crossbeam-channel",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "js-sys",
- "lazy_static 1.4.0",
- "percent-encoding",
- "pin-project",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
-name = "opentelemetry"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
-dependencies = [
- "opentelemetry_api",
- "opentelemetry_sdk",
-]
-
-[[package]]
-name = "opentelemetry-jaeger"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e785d273968748578931e4dc3b4f5ec86b26e09d9e0d66b55adda7fce742f7a"
-dependencies = [
- "async-trait",
- "futures",
- "futures-executor",
- "once_cell",
- "opentelemetry 0.18.0",
- "opentelemetry-semantic-conventions",
- "thiserror",
- "thrift",
- "tokio",
-]
-
-[[package]]
-name = "opentelemetry-semantic-conventions"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b02e0230abb0ab6636d18e2ba8fa02903ea63772281340ccac18e0af3ec9eeb"
-dependencies = [
- "opentelemetry 0.18.0",
-]
-
-[[package]]
-name = "opentelemetry_api"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
-dependencies = [
- "fnv",
- "futures-channel",
- "futures-util",
- "indexmap",
- "js-sys",
- "once_cell",
- "pin-project-lite",
- "thiserror",
-]
-
-[[package]]
-name = "opentelemetry_sdk"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
-dependencies = [
- "async-trait",
- "crossbeam-channel",
- "dashmap",
- "fnv",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "once_cell",
- "opentelemetry_api",
- "percent-encoding",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
-name = "ordered-float"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3305af35278dd29f46fcdd139e0b1fbfae2153f0e5928b39b035542dd31e37b7"
-dependencies = [
- "num-traits 0.2.15",
-]
-
-[[package]]
 name = "ordered-float"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6448,7 +6294,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c64931a1a212348ec4f3b4362585eca7159d0d09cbdf4a7f74f02173596fd4"
 dependencies = [
- "base64",
+ "base64 0.13.1",
 ]
 
 [[package]]
@@ -7404,7 +7250,7 @@ version = "0.11.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68cc60575865c7831548863cc02356512e3f1dc2f3f82cb837d7fc4cc8f3c97c"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -7643,7 +7489,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0864aeff53f8c05aa08d86e5ef839d3dfcf07aeba2db32f12db0ef716e87bd55"
 dependencies = [
- "base64",
+ "base64 0.13.1",
 ]
 
 [[package]]
@@ -7720,7 +7566,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.6.1",
+ "axum",
  "chrono",
  "clap 4.0.30",
  "csv",
@@ -7749,7 +7595,7 @@ dependencies = [
  "tokio",
  "tokio-cron-scheduler",
  "tokio-stream",
- "tokio-tungstenite 0.18.0",
+ "tokio-tungstenite",
  "tower",
  "tower-http",
 ]
@@ -7964,7 +7810,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
 dependencies = [
- "ordered-float 2.10.0",
+ "ordered-float",
  "serde 1.0.152",
 ]
 
@@ -8058,7 +7904,7 @@ version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25bf4a5a814902cd1014dbccfa4d4560fb8432c779471e96e035602519f82eef"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "chrono",
  "hex",
  "indexmap",
@@ -8374,7 +8220,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41d1c5305e39e09653383c2c7244f2f78b3bcae37cf50c64cb4789c9f5096ec2"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bytes",
  "futures",
  "http",
@@ -8627,7 +8473,7 @@ checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "sui"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8737,7 +8583,7 @@ dependencies = [
 
 [[package]]
 name = "sui-core"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -8804,24 +8650,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sui-cost"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bcs",
- "serde 1.0.152",
- "serde_json",
- "strum",
- "strum_macros",
- "sui-adapter",
- "sui-core",
- "sui-cost-tables",
- "sui-types",
- "tokio",
- "workspace-hack",
-]
-
-[[package]]
 name = "sui-cost-tables"
 version = "0.1.0"
 dependencies = [
@@ -8843,9 +8671,11 @@ dependencies = [
  "anyhow",
  "bcs",
  "better_any",
+ "bincode",
  "curve25519-dalek-ng",
  "digest 0.10.6",
  "fastcrypto 0.1.4 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
+ "fastcrypto-tbls",
  "fastcrypto-zkp",
  "linked-hash-map",
  "move-binary-format",
@@ -8912,6 +8742,7 @@ dependencies = [
  "async-trait",
  "bcs",
  "fastcrypto 0.1.4 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
+ "fastcrypto-tbls",
  "futures",
  "hyper",
  "jsonrpsee",
@@ -8925,11 +8756,11 @@ dependencies = [
  "signature",
  "sui-adapter",
  "sui-core",
- "sui-cost",
  "sui-json",
  "sui-json-rpc-types",
  "sui-open-rpc",
  "sui-open-rpc-macros",
+ "sui-protocol-constants",
  "sui-transaction-builder",
  "sui-types",
  "tap",
@@ -8948,9 +8779,11 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bcs",
+ "bincode",
  "colored",
  "either",
  "fastcrypto 0.1.4 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
+ "fastcrypto-tbls",
  "itertools",
  "move-binary-format",
  "move-bytecode-utils",
@@ -8996,9 +8829,11 @@ version = "0.0.0"
 dependencies = [
  "anemo",
  "anemo-build",
+ "anemo-tower",
  "anyhow",
  "async-trait",
  "futures",
+ "governor",
  "multiaddr",
  "mysten-network",
  "prometheus",
@@ -9016,13 +8851,13 @@ dependencies = [
 
 [[package]]
 name = "sui-node"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anemo",
  "anemo-tower",
  "anyhow",
  "arc-swap",
- "axum 0.5.17",
+ "axum",
  "chrono",
  "clap 3.2.23",
  "futures",
@@ -9095,7 +8930,7 @@ dependencies = [
 
 [[package]]
 name = "sui-sdk"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9184,6 +9019,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "sui-json-rpc-types",
+ "sui-simulator",
  "sui-types",
  "tap",
  "telemetry-subscribers",
@@ -9271,7 +9107,6 @@ dependencies = [
  "narwhal-crypto",
  "narwhal-executor",
  "once_cell",
- "opentelemetry 0.17.0",
  "proptest",
  "rand 0.8.5",
  "roaring",
@@ -9372,6 +9207,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.27.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "975fe381e0ecba475d4acff52466906d95b153a40324956552e027b2a9eaa89e"
+dependencies = [
+ "cfg-if",
+ "core-foundation-sys",
+ "libc",
+ "ntapi 0.4.0",
+ "once_cell",
+ "rayon",
+ "winapi",
+]
+
+[[package]]
 name = "tabular"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9411,15 +9261,10 @@ version = "0.2.0"
 dependencies = [
  "crossterm 0.25.0",
  "once_cell",
- "opentelemetry 0.18.0",
- "opentelemetry-jaeger",
  "prometheus",
  "tokio",
  "tracing",
  "tracing-appender",
- "tracing-bunyan-formatter",
- "tracing-chrome",
- "tracing-opentelemetry",
  "tracing-subscriber 0.3.15",
  "workspace-hack",
 ]
@@ -9609,19 +9454,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
 dependencies = [
  "num_cpus",
-]
-
-[[package]]
-name = "thrift"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09678c4cdbb4eed72e18b7c2af1329c69825ed16fcbac62d083fc3e2b0590ff0"
-dependencies = [
- "byteorder",
- "integer-encoding",
- "log",
- "ordered-float 1.1.1",
- "threadpool",
 ]
 
 [[package]]
@@ -9828,18 +9660,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.17.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
-dependencies = [
- "futures-util",
- "log",
- "tokio",
- "tungstenite 0.17.3",
-]
-
-[[package]]
-name = "tokio-tungstenite"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54319c93411147bced34cb5609a80e0a8e44c5999c93903a81cd866630ec0bfd"
@@ -9849,7 +9669,7 @@ dependencies = [
  "native-tls",
  "tokio",
  "tokio-native-tls",
- "tungstenite 0.18.0",
+ "tungstenite",
 ]
 
 [[package]]
@@ -9914,8 +9734,8 @@ checksum = "8f219fad3b929bef19b1f86fbc0358d35daed8f2cac972037ac0dc10bbb8d5fb"
 dependencies = [
  "async-stream",
  "async-trait",
- "axum 0.6.1",
- "base64",
+ "axum",
+ "base64 0.13.1",
  "bytes",
  "futures-core",
  "futures-util",
@@ -10008,7 +9828,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f873044bf02dd1e8239e9c1293ea39dad76dc594ec16185d0a1bf31d8dc8d858"
 dependencies = [
  "async-compression",
- "base64",
+ "base64 0.13.1",
  "bitflags",
  "bytes",
  "futures-core",
@@ -10079,35 +9899,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-bunyan-formatter"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a788f2119fde477cd33823330c14004fa8cdac6892fd6f12181bbda9dbf14fc9"
-dependencies = [
- "gethostname",
- "log",
- "serde 1.0.152",
- "serde_json",
- "time 0.3.17",
- "tracing",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber 0.3.15",
-]
-
-[[package]]
-name = "tracing-chrome"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1ac1f6a3a47e9c755e65ef974653c978da2246487a16044a8ee1d9a0a67257c"
-dependencies = [
- "crossbeam",
- "json",
- "tracing",
- "tracing-subscriber 0.3.15",
-]
-
-[[package]]
 name = "tracing-core"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10139,17 +9930,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-opentelemetry"
-version = "0.18.0"
+name = "tracing-serde"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21ebb87a95ea13271332df069020513ab70bdb5637ca42d6e492dc3bbbad48de"
+checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
 dependencies = [
- "once_cell",
- "opentelemetry 0.18.0",
- "tracing",
+ "serde 1.0.152",
  "tracing-core",
- "tracing-log",
- "tracing-subscriber 0.3.15",
 ]
 
 [[package]]
@@ -10171,6 +9958,8 @@ dependencies = [
  "matchers",
  "once_cell",
  "regex",
+ "serde 1.0.152",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
@@ -10178,6 +9967,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -10224,30 +10014,11 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.17.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e27992fd6a8c29ee7eef28fc78349aa244134e10ad447ce3b9f0ac0ed0fa4ce0"
-dependencies = [
- "base64",
- "byteorder",
- "bytes",
- "http",
- "httparse",
- "log",
- "rand 0.8.5",
- "sha-1 0.10.1",
- "thiserror",
- "url",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "byteorder",
  "bytes",
  "http",
@@ -10977,17 +10748,15 @@ dependencies = [
  "auto_ops",
  "autocfg",
  "autotools",
- "axum 0.5.17",
- "axum 0.6.1",
- "axum-core 0.2.9",
- "axum-core 0.3.0",
+ "axum",
+ "axum-core",
  "axum-extra",
  "axum-server",
  "backoff",
  "backtrace",
  "base-x",
  "base16ct",
- "base64",
+ "base64 0.13.1",
  "base64ct",
  "bcs",
  "beef",
@@ -11074,7 +10843,6 @@ dependencies = [
  "crc32fast",
  "criterion",
  "criterion-plot",
- "crossbeam",
  "crossbeam-channel",
  "crossbeam-deque",
  "crossbeam-epoch",
@@ -11158,6 +10926,7 @@ dependencies = [
  "fail 0.5.1",
  "fastcrypto 0.1.4 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
  "fastcrypto-derive 0.1.2 (git+https://github.com/MystenLabs/fastcrypto?rev=f451422b7f15e75e055a1830cbe5d1547fa87b74)",
+ "fastcrypto-tbls",
  "fastcrypto-zkp",
  "fastrand",
  "fd-lock",
@@ -11192,7 +10961,6 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "generic-array",
- "gethostname",
  "getrandom 0.1.16",
  "getrandom 0.2.8",
  "ghash",
@@ -11252,7 +11020,6 @@ dependencies = [
  "inout",
  "insta",
  "instant",
- "integer-encoding",
  "internment",
  "io-lifetimes",
  "ipnet",
@@ -11265,7 +11032,6 @@ dependencies = [
  "jemalloc-sys",
  "jobserver",
  "js-sys",
- "json",
  "jsonrpsee",
  "jsonrpsee-client-transport",
  "jsonrpsee-core",
@@ -11366,6 +11132,7 @@ dependencies = [
  "nom 7.1.1",
  "nonzero_ext",
  "normalize-line-endings",
+ "ntapi 0.4.0",
  "nu-ansi-term",
  "num",
  "num-bigint",
@@ -11389,14 +11156,7 @@ dependencies = [
  "openssl-macros",
  "openssl-probe",
  "openssl-sys",
- "opentelemetry 0.17.0",
- "opentelemetry 0.18.0",
- "opentelemetry-jaeger",
- "opentelemetry-semantic-conventions",
- "opentelemetry_api",
- "opentelemetry_sdk",
- "ordered-float 1.1.1",
- "ordered-float 2.10.0",
+ "ordered-float",
  "os_str_bytes",
  "ouroboros 0.15.5",
  "ouroboros 0.9.5",
@@ -11616,6 +11376,7 @@ dependencies = [
  "syn 1.0.107",
  "sync_wrapper",
  "synstructure",
+ "sysinfo",
  "tabular",
  "tap",
  "target-lexicon",
@@ -11635,7 +11396,6 @@ dependencies = [
  "thiserror-impl",
  "thread_local",
  "threadpool",
- "thrift",
  "time 0.1.45",
  "time 0.3.17",
  "time-core",
@@ -11666,12 +11426,10 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-attributes",
- "tracing-bunyan-formatter",
- "tracing-chrome",
  "tracing-core",
  "tracing-futures",
  "tracing-log",
- "tracing-opentelemetry",
+ "tracing-serde",
  "tracing-subscriber 0.2.25",
  "tracing-subscriber 0.3.15",
  "tracing-test",
@@ -11759,7 +11517,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0ecbeb7b67ce215e40e3cc7f2ff902f94a223acf44995934763467e7b1febc8"
 dependencies = [
  "asn1-rs",
- "base64",
+ "base64 0.13.1",
  "data-encoding",
  "der-parser",
  "lazy_static 1.4.0",

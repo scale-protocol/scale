@@ -16,8 +16,8 @@ sui = {  path = "../sui/crates/sui" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream="0.1.8"
 env_logger="0.10.0"
-anyhow = "1.0.66"
-thiserror = "1.0.36"
+anyhow = "1.0.68"
+thiserror = "1.0.38"
 log = "0.4.16"
 home="0.5.4"
 serde = { version = "1", features = ["derive"] }

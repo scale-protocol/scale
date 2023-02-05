@@ -447,6 +447,7 @@ pub trait MoveCall {
     async fn burst_position(&self, account_id: Address, position_id: Address)
         -> anyhow::Result<()>;
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()>;
+    async fn update_price(&self, feed: &str, price: u64) -> anyhow::Result<()>;
 }
 #[cfg(test)]
 mod tests {

@@ -12,7 +12,7 @@ use influxdb2_client::models::DataPoint;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{broadcast, mpsc::UnboundedSender};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +42,7 @@ pub struct PriceFeed {
     pub metadata: Metadata,
     pub price: Price,
 }
+
 impl PriceFeed {
     fn get_data_points(&self, measurement: String) -> anyhow::Result<Vec<DataPoint>> {
         // let now = chrono::Utc::now();
@@ -115,8 +116,8 @@ pub async fn sub_price(
     inf_db: Influxdb,
     sds: SharedDmSymbolId,
     is_write_db: bool,
-    is_http_ws_watch: bool,
-) -> anyhow::Result<(WsClient, Option<PriceWatchRx>)> {
+    is_broadcast_price: bool,
+) -> anyhow::Result<(WsClient, PriceWatchRx)> {
     debug!("start sub price url: {:?}", price_ws_url);
     let mut sub_req = Request {
         type_field: SubType::Subscribe,
@@ -127,7 +128,7 @@ pub async fn sub_price(
     for id in sds.iter() {
         sub_req.ids.push(id.key().to_string());
     }
-    let (ws_price_tx, ws_price_rx) = tokio::sync::mpsc::unbounded_channel::<OrgPrice>();
+    let (ws_price_tx, ws_price_rx) = broadcast::channel::<OrgPrice>(sds.len());
     let mut ws_client = WsClient::new(price_ws_url, move |msg, _send_tx| {
         let sds = sds.clone();
         let watch_tx = watch_tx.clone();
@@ -154,7 +155,7 @@ pub async fn sub_price(
                 if let Err(e) = watch_tx.send(watch_msg) {
                     error!("send watch msg error: {:?}", e);
                 }
-                if is_http_ws_watch {
+                if is_broadcast_price {
                     if let Err(e) = ws_price_tx.send(op) {
                         error!("send ws price msg error: {:?}", e);
                     }
@@ -184,8 +185,5 @@ pub async fn sub_price(
     let req = serde_json::to_string(&sub_req)?;
     debug!("......sub price req: {:?}", req);
     ws_client.send(WsClientMessage::Txt(req)).await?;
-    if is_http_ws_watch {
-        return Ok((ws_client, Some(ws_price_rx)));
-    }
-    Ok((ws_client, None))
+    Ok((ws_client, ws_price_rx))
 }
