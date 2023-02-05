@@ -1,13 +1,13 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
     Account, Address, Direction, Market, MoveCall, Position, PositionStatus, PositionType, Price,
-    State, Status, Task, BURST_RATE,
+    State, Status, BURST_RATE,
 };
 use crate::bot::storage::{self, Storage};
 use crate::bot::ws::{
     AccountDynamicData, PositionDynamicData, SupportedSymbol, WsServerState, WsSrvMessage,
 };
-use crate::com;
+use crate::com::{self, Task};
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use log::*;
@@ -140,17 +140,15 @@ impl Watch {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         Self {
             watch_tx,
-            task: Task(
+            task: Task::new(
+                "watch",
                 shutdown_tx,
                 tokio::spawn(watch_message(mp, watch_rx, shutdown_rx)),
             ),
         }
     }
-    pub async fn shutdown(self) -> anyhow::Result<()> {
-        debug!("shutdown watch ...");
-        let _ = self.task.0.send(());
-        self.task.1.await??;
-        Ok(())
+    pub async fn shutdown(self) {
+        self.task.shutdown().await;
     }
 }
 
@@ -339,7 +337,8 @@ impl Liquidation {
         let fund_fee_timer = cron.add_job("0 0 0 * * *").await?;
         // create opening price cron
         let opening_price_timer = cron.add_job("0 0 0,8,16 * * *").await?;
-        let account_task = Task(
+        let account_task = Task::new(
+            "liquidation_account_task",
             shutdown_tx,
             tokio::spawn(loop_account_task(
                 mp.clone(),
@@ -358,16 +357,15 @@ impl Liquidation {
         })
     }
 
-    pub async fn shutdown(self) -> anyhow::Result<()> {
+    pub async fn shutdown(self) {
         debug!("start shutdown liquidation...");
         for task in self.position_tasks {
-            let _ = task.0.send(());
-            task.1.await??;
+            task.shutdown().await;
         }
-        let _ = self.account_tasks.0.send(());
-        self.account_tasks.1.await??;
-        self.cron.shutdown().await?;
-        Ok(())
+        self.account_tasks.shutdown().await;
+        if let Err(e) = self.cron.shutdown().await {
+            error!("shutdown cron error:{}", e);
+        }
     }
 }
 
@@ -452,7 +450,7 @@ where
 {
     debug!("start position task...");
     let mut workers: Vec<Task> = Vec::with_capacity(tasks);
-    for _ in 0..tasks {
+    for t in 0..tasks {
         // let cfg = config.clone();
         let (task_shutdown_tx, task_shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(loop_position_by_user(
@@ -462,7 +460,11 @@ where
             task_shutdown_rx,
             call.clone(),
         ));
-        workers.push(Task(task_shutdown_tx, task));
+        workers.push(Task::new(
+            &format!("liquidation_position_task_{}", t),
+            task_shutdown_tx,
+            task,
+        ));
     }
     Ok(workers)
 }

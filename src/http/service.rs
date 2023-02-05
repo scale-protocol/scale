@@ -1,11 +1,11 @@
 use crate::bot::{
     self,
     influxdb::Influxdb,
-    state::{Account, Address, Market, OrgPrice, Position, State, Task},
+    state::{Account, Address, Market, OrgPrice, Position, State},
     ws::{PriceWatchRx, SubType, WsSrvMessage},
 };
 use crate::bot::{machine, storage};
-use crate::com::{self, CliError};
+use crate::com::{self, CliError, Task};
 use axum::extract::ws::{Message, WebSocket};
 use csv::ReaderBuilder;
 use dashmap::DashMap;
@@ -361,7 +361,8 @@ impl PriceBroadcast {
         db: Arc<Influxdb>,
     ) -> Self {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let task = Task(
+        let task = Task::new(
+            "price broadcast",
             shutdown_tx,
             tokio::spawn(broadcast_price(
                 mp,
@@ -373,11 +374,8 @@ impl PriceBroadcast {
         );
         Self { task }
     }
-    pub async fn shutdown(self) -> anyhow::Result<()> {
-        debug!("shutdown price broadcast ...");
-        let _ = self.task.0.send(());
-        self.task.1.await??;
-        Ok(())
+    pub async fn shutdown(self) {
+        self.task.shutdown().await;
     }
 }
 

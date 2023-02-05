@@ -1,7 +1,7 @@
-use crate::bot::{
-    state::{MoveCall, Task},
-    ws::PriceWatchRx,
-};
+use crate::bot::state::OrgPrice;
+use crate::bot::{state::MoveCall, ws::PriceWatchRx};
+use crate::com::Task;
+use chrono::Utc;
 use dashmap::DashMap;
 use log::*;
 use std::sync::Arc;
@@ -9,8 +9,6 @@ use tokio::{
     sync::oneshot,
     time::{self, Duration},
 };
-
-use super::state::OrgPrice;
 
 // key: symbol , value: price
 pub type DmPriceFeed = DashMap<String, PriceFeed>;
@@ -34,17 +32,15 @@ impl PriceOracle {
         C: MoveCall + Send + Sync + 'static,
     {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let task = Task(
+        let task = Task::new(
+            "price oracle",
             shutdown_tx,
             tokio::spawn(update_price(dpf, price_ws_rx, duration, shutdown_rx, call)),
         );
         Self { task }
     }
-    pub async fn shutdown(self) -> anyhow::Result<()> {
-        debug!("shutdown price broadcast ...");
-        let _ = self.task.0.send(());
-        self.task.1.await??;
-        Ok(())
+    pub async fn shutdown(self) {
+        self.task.shutdown().await;
     }
 }
 
@@ -66,6 +62,7 @@ where
                 break;
             },
             Ok(price) = price_ws_rx.recv() => {
+                debug!("oracle recv price: {:?}", price);
                 if let Err(e) = recv_price(dpf.clone(),&price) {
                     error!("receiver and save oracle price error: {}", e);
                 }
@@ -106,6 +103,14 @@ where
             feed.key(),
             feed.value().price
         );
+        if feed.value().price == 0 {
+            warn!("price is 0, skip it: {:?}", feed.key());
+            continue;
+        }
+        if Utc::now().timestamp() - feed.value().timestamp > 300 {
+            warn!("price is too old, skip it: {:?}", feed.key());
+            continue;
+        }
         call.update_price(
             feed.value().feed_address.as_str(),
             feed.value().price as u64,

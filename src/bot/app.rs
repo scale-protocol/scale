@@ -51,7 +51,7 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
             .ok_or(CliError::HttpServerError("parsing none".to_string()))?;
         socket_addr = Some(addr);
     }
-    let is_write_to_db = args.get_one::<bool>("write_price_to_db").unwrap_or(&true);
+    let enable_db = args.get_one::<bool>("enable_db").unwrap_or(&false);
     let mut builder = Builder::new_multi_thread();
     match args.get_one::<usize>("threads") {
         Some(t) => {
@@ -73,7 +73,7 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
             config_file,
             runtime,
             socket_addr,
-            *is_write_to_db,
+            *enable_db,
             duration,
             tasks,
         );
@@ -116,7 +116,7 @@ fn run_sui_app(
     config_file: Option<&PathBuf>,
     runtime: Runtime,
     socket_addr: Option<SocketAddr>,
-    is_write_price_db: bool,
+    enable_db: bool,
     duration: Duration,
     tasks: usize,
 ) -> anyhow::Result<()> {
@@ -143,7 +143,7 @@ fn run_sui_app(
                 token: conf.price_config.db.token.clone(),
             },
             &conf.price_config.ws_url,
-            is_write_price_db,
+            enable_db,
             tasks,
             duration,
             Arc::new(tool),
@@ -164,14 +164,14 @@ fn run_sui_app(
         let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone()).await;
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");
-        let _ = event_task.shutdown().await;
+        event_task.shutdown().await;
         if let Some(http_srv) = http_server {
-            let _ = http_srv.shutdown().await;
+            http_srv.shutdown().await;
         }
-        let _ = ws_client.shutdown().await;
-        let _ = liquidation.shutdown().await;
+        ws_client.shutdown().await;
+        liquidation.shutdown().await;
         if let Some(oracle) = oracle {
-            let _ = oracle.shutdown().await;
+            oracle.shutdown().await;
         }
     });
     Ok(())
@@ -193,7 +193,7 @@ async fn run_bot<C>(
     socket_addr: Option<SocketAddr>,
     ic: influxdb::InfluxdbConfig,
     price_ws_url: &str,
-    is_write_db: bool,
+    enable_db: bool,
     tasks: usize,
     duration: Duration,
     call: Arc<C>,
@@ -216,7 +216,7 @@ where
         price_ws_url.to_string(),
         db.clone(),
         sds.clone(),
-        is_write_db,
+        enable_db,
         socket_addr.is_some() || duration.as_secs() > 0,
     )
     .await?;

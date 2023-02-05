@@ -48,7 +48,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-w --write_price_to_db <WRITE_PRICE_TO_DB> "If it is false, price data will not be written to influxdb").default_value("true").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-e --enable_db <DB_DISABLE> "If it is false, price data will not be written to influxdb,default false.").default_value("false").value_parser(clap::value_parser!(bool)))
                 .arg(arg!(-d --duration <DURATION> "If this option is set, the price of the simple price prediction machine will be updated within the interval. Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5").value_parser(clap::value_parser!(u64)))
         )
 }

@@ -148,7 +148,13 @@ scale store path: {}
 scale package id: {}
 scale market list id: {}
 scale nft factory id: {}
-scale admin id: {}"#,
+scale admin id: {}
+scale coin package id: {}
+scale coin reserve id: {}
+scale coin admin id: {}
+scale oracle package id: {}
+scale oracle admin id: {}
+"#,
             self.sui_cli_config_file.display(),
             self.scale_config_file.display(),
             self.scale_store_path.display(),
@@ -156,6 +162,11 @@ scale admin id: {}"#,
             self.scale_market_list_id,
             self.scale_nft_factory_id,
             self.scale_admin_cap_id,
+            self.scale_coin_package_id,
+            self.scale_coin_reserve_id,
+            self.scale_coin_admin_id,
+            self.scale_oracle_package_id,
+            self.scale_oracle_admin_id,
         );
     }
 }
@@ -179,6 +190,7 @@ impl Config {
         sui_config.active_env = self.sui_config.active_env.clone();
         Ok(sui_config)
     }
+
     fn init(&mut self) -> anyhow::Result<()> {
         // get scale move package info
         let scale_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
@@ -187,8 +199,8 @@ impl Config {
         let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
         self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.effects.events);
         // get oracle package info
-        let coin_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
-        self.set_value(com::SUI_ORACLE_PUBLISH_TX, coin_package.effects.events);
+        let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
+        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.effects.events);
         self.save()?;
         Ok(())
     }

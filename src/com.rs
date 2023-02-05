@@ -1,5 +1,11 @@
+use log::*;
 use thiserror::Error;
-use tokio;
+use tokio::{
+    runtime::Builder,
+    sync::oneshot,
+    task::JoinHandle,
+    time::{self, Duration},
+};
 
 pub const SUI_SCALE_PUBLISH_TX: &str = "BKjZ49tyXBPKDq8wU9Wq6R8d5h1dMXoUMKd1zX1qnAhJ";
 pub const SUI_COIN_PUBLISH_TX: &str = "2WAXGjqr9aqpMgwM8juwFRLy7UNyL4yquuVTawwLoj2U";
@@ -46,8 +52,42 @@ pub fn f64_round(f: f64) -> f64 {
 }
 
 pub fn new_tokio_one_thread() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
+    Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("build tokio runtime")
+}
+
+pub struct Task {
+    shutdown_tx: oneshot::Sender<()>,
+    job: JoinHandle<anyhow::Result<()>>,
+    name: String,
+}
+
+impl Task {
+    pub fn new(
+        name: &str,
+        shutdown_tx: oneshot::Sender<()>,
+        job: JoinHandle<anyhow::Result<()>>,
+    ) -> Self {
+        Self {
+            shutdown_tx,
+            job,
+            name: name.to_string(),
+        }
+    }
+
+    pub async fn shutdown(self) {
+        debug!("shutdown task {} ...", self.name);
+        let _ = self.shutdown_tx.send(());
+        if let Err(e) = time::timeout(Duration::from_secs(2), async {
+            if let Err(e) = self.job.await {
+                error!("task shutdown error: {:?}", e);
+            }
+        })
+        .await
+        {
+            error!("task shutdown await timeout: {:?}", e);
+        }
+    }
 }

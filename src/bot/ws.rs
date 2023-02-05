@@ -1,5 +1,5 @@
-use crate::bot::state::{Address, OrgPrice, Task};
-use crate::com::CliError;
+use crate::bot::state::{Address, OrgPrice};
+use crate::com::{CliError, Task};
 use dashmap::{DashMap, DashSet};
 use futures_util::{SinkExt, StreamExt};
 use log::*;
@@ -194,7 +194,8 @@ impl WsClient {
         Ok(Self {
             url,
             tx,
-            task: Task(
+            task: Task::new(
+                "ws client",
                 shutdown_tx,
                 tokio::spawn(handle(u, shutdown_rx, send_tx, rx, handle_msg)),
             ),
@@ -207,13 +208,8 @@ impl WsClient {
             .map_err(|e| CliError::WebSocketError(e.to_string()))?;
         Ok(())
     }
-    pub async fn shutdown(self) -> anyhow::Result<()> {
-        debug!("Shutdown ws client: {}", self.url);
-        self.task.0.send(()).map_err(|e| {
-            CliError::WebSocketError(format!("Send shutdown signal failed: {:?}", e))
-        })?;
-        self.task.1.await??;
-        Ok(())
+    pub async fn shutdown(self) {
+        self.task.shutdown().await;
     }
 }
 

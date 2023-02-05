@@ -4,12 +4,15 @@ use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
 use log::*;
-use std::time::Duration;
+// use std::time::Duration;
 use sui_sdk::rpc_types::{SuiEvent, SuiEventEnvelope, SuiEventFilter};
 use sui_sdk::types::base_types::ObjectID;
 use sui_types::{event::EventID, query::EventQuery};
 use tokio::sync::{mpsc::UnboundedSender, watch};
-use tokio::task::JoinHandle;
+use tokio::{
+    task::JoinHandle,
+    time::{self, Duration},
+};
 use tokio_stream::StreamExt;
 
 pub struct EventSubscriber {
@@ -102,11 +105,20 @@ impl EventSubscriber {
             }
         }
     }
-    pub async fn shutdown(self) -> anyhow::Result<()> {
-        self.close_tx.send(true)?;
-        self.task.await??;
+    pub async fn shutdown(self) {
+        if let Err(e) = self.close_tx.send(true) {
+            error!("EventSubscriber close_tx send error: {:?}", e);
+        }
+        if let Err(e) = time::timeout(Duration::from_secs(2), async {
+            if let Err(e) = self.task.await {
+                error!("task shutdown error: {:?}", e);
+            }
+        })
+        .await
+        {
+            error!("task shutdown await timeout: {:?}", e);
+        }
         info!("EventSubscriber stopped successfully!");
-        Ok(())
     }
 }
 #[derive(Debug, Clone)]
