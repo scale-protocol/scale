@@ -6,7 +6,7 @@ use crate::{
 };
 use async_trait::async_trait;
 // use log::debug;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::json;
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
