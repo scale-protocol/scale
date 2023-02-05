@@ -187,8 +187,8 @@ impl Config {
         let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
         self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.effects.events);
         // get oracle package info
-        let coin_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
-        self.set_value(com::SUI_SCALE_PUBLISH_TX, coin_package.effects.events);
+        let coin_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
+        self.set_value(com::SUI_ORACLE_PUBLISH_TX, coin_package.effects.events);
         self.save()?;
         Ok(())
     }
