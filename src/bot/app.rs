@@ -69,7 +69,7 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
         .build()
         .map_err(|e| CliError::TokioRuntimeCreateField(e.to_string()))?;
     if app == App::Sui {
-        return run_sui_app(
+        let x = run_sui_app(
             config_file,
             runtime,
             socket_addr,
@@ -77,6 +77,7 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
             duration,
             tasks,
         );
+        return x;
     } else if app == App::Aptos {
         return run_aptos_app(config_file, socket_addr, tasks, runtime);
     } else {
@@ -162,6 +163,7 @@ fn run_sui_app(
         }
         // start event task
         let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone()).await;
+        info!("bot start success");
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");
         event_task.shutdown().await;
@@ -174,7 +176,7 @@ fn run_sui_app(
             oracle.shutdown().await;
         }
     });
-    Ok(())
+    return Ok(());
 }
 
 fn run_aptos_app(

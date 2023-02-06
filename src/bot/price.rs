@@ -138,6 +138,7 @@ pub async fn sub_price(
         let ws_price_tx = ws_price_tx.clone();
         Box::pin(async move {
             if let WsClientMessage::Txt(txt) = msg {
+                // debug!("price txt: {:?}", txt);
                 let resp: Response = serde_json::from_str(&txt)?;
                 let symbol_str = sds
                     .get(&resp.price_feed.id)
@@ -171,6 +172,7 @@ pub async fn sub_price(
                         stream::iter(resp.price_feed.get_data_points(symbol_str.to_string())?),
                     )
                     .await;
+
                 // debug!(
                 //     "write price to db success! {:?}",
                 //     resp.price_feed.get_data_points(symbol_str.to_string())?

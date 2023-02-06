@@ -106,6 +106,7 @@ impl EventSubscriber {
         }
     }
     pub async fn shutdown(self) {
+        debug!("EventSubscriber shutdown");
         if let Err(e) = self.close_tx.send(true) {
             error!("EventSubscriber close_tx send error: {:?}", e);
         }

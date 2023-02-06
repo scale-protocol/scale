@@ -386,7 +386,7 @@ where
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
-                info!("Got shutdown signal,break loop account!");
+                info!("got shutdown signal,break loop account!");
                 break;
             },
             _ = fund_fee_timer.recv() => {

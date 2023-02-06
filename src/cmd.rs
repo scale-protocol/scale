@@ -520,6 +520,8 @@ fn init_log(log_file: Option<&PathBuf>) {
     let env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn");
     let mut l = env_logger::Builder::from_env(env);
     l.format(|buf, record| {
+        let mut style = buf.style();
+        style.set_intense(true);
         writeln!(
             buf,
             "{} {} [{}] {}",

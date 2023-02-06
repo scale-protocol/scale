@@ -62,7 +62,6 @@ where
                 break;
             },
             Ok(price) = price_ws_rx.recv() => {
-                debug!("oracle recv price: {:?}", price);
                 if let Err(e) = recv_price(dpf.clone(),&price) {
                     error!("receiver and save oracle price error: {}", e);
                 }
@@ -78,16 +77,16 @@ where
 }
 
 fn recv_price(dpf: Arc<DmPriceFeed>, org_price: &OrgPrice) -> anyhow::Result<()> {
-    let record = dpf.get(&org_price.symbol);
-    if let Some(record) = record {
-        let price_feed = record.value();
-        dpf.insert(
-            org_price.symbol.clone(),
-            PriceFeed {
-                feed_address: price_feed.feed_address.clone(),
-                price: org_price.price,
-                timestamp: org_price.update_time,
-            },
+    let record = dpf.get_mut(&org_price.symbol);
+    debug!("oracle recv price: {:?}", org_price);
+    if let Some(mut record) = record {
+        let price_feed = record.value_mut();
+        price_feed.price = org_price.price;
+        price_feed.timestamp = org_price.update_time;
+    } else {
+        debug!(
+            "symbol {} ,cannot found price feed record",
+            org_price.symbol
         );
     }
     Ok(())

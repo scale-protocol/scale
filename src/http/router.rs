@@ -52,7 +52,7 @@ impl HttpServer {
         info!("start web server ...");
         tokio::spawn(async move {
             if let Err(e) = server.await {
-                println!("server error: {}", e);
+                error!("server error: {}", e);
             }
         });
         let price_broadcast =

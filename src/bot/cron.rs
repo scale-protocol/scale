@@ -12,6 +12,7 @@ impl Cron {
     }
 
     pub async fn shutdown(mut self) -> anyhow::Result<()> {
+        debug!("Shutting down cron scheduler");
         self.scheduler.shutdown().await?;
         Ok(())
     }

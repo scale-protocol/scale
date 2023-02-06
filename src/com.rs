@@ -9,7 +9,7 @@ use tokio::{
 
 pub const SUI_SCALE_PUBLISH_TX: &str = "BKjZ49tyXBPKDq8wU9Wq6R8d5h1dMXoUMKd1zX1qnAhJ";
 pub const SUI_COIN_PUBLISH_TX: &str = "2WAXGjqr9aqpMgwM8juwFRLy7UNyL4yquuVTawwLoj2U";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "FdaFZ7isCRBcDsspfv9RWYyEt24QAH2np4WiNiX9Fb9h";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "9cAFra4es7uTxnW8asJSoFTyEbzaN9YAfJ11u12cFbuc";
 
 pub const DECIMALS: u64 = 1000000;
 
@@ -80,14 +80,17 @@ impl Task {
     pub async fn shutdown(self) {
         debug!("shutdown task {} ...", self.name);
         let _ = self.shutdown_tx.send(());
-        if let Err(e) = time::timeout(Duration::from_secs(2), async {
+        if let Err(e) = time::timeout(Duration::from_micros(100), async {
             if let Err(e) = self.job.await {
                 error!("task shutdown error: {:?}", e);
             }
         })
         .await
         {
-            error!("task shutdown await timeout: {:?}", e);
+            error!(
+                "task shutdown await timeout: {:?}, error: {:?}",
+                self.name, e
+            );
         }
     }
 }
