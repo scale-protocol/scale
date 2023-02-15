@@ -224,6 +224,7 @@ impl Tool {
                 SCALE_ORACLE_NAME,
                 "update_price",
                 vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(feed)?),
                     SuiJsonValue::new(json!(price.to_string()))?,
                     SuiJsonValue::new(json!(timestamp.to_string()))?,
@@ -809,6 +810,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::new(json!(lot.to_string()))?,
                     SuiJsonValue::new(json!(leverage))?,
                     SuiJsonValue::new(json!(position_type))?,
@@ -839,6 +841,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                 ],
                 vec![self.get_p(), self.get_t()],
@@ -860,6 +863,7 @@ impl MoveCall for Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         market_id.to_vec().as_slice(),
                     )?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                 ],
                 vec![self.get_p(), self.get_t()],
             )
@@ -882,6 +886,7 @@ impl MoveCall for Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         account_id.to_vec().as_slice(),
                     )?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         position_id.to_vec().as_slice(),
                     )?),

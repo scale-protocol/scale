@@ -28,6 +28,7 @@ pub struct Config {
     pub scale_coin_admin_id: ObjectID,
     pub scale_oracle_package_id: ObjectID,
     pub scale_oracle_admin_id: ObjectID,
+    pub scale_oracle_root_id: ObjectID,
     pub scale_admin_cap_id: ObjectID,
     pub price_config: config::PriceConfig,
 }
@@ -90,6 +91,7 @@ impl Default for Config {
             scale_admin_cap_id: default_id,
             scale_oracle_package_id: default_id,
             scale_oracle_admin_id: default_id,
+            scale_oracle_root_id: default_id,
             price_config: config::PriceConfig::default(),
         }
     }
@@ -118,6 +120,7 @@ impl cfg for Config {
                 self.scale_coin_admin_id = c.scale_coin_admin_id;
                 self.scale_oracle_package_id = c.scale_oracle_package_id;
                 self.scale_oracle_admin_id = c.scale_oracle_admin_id;
+                self.scale_oracle_root_id = c.scale_oracle_root_id;
                 self.price_config = c.price_config;
 
                 self.load_sui_config()?;
@@ -235,6 +238,9 @@ impl Config {
                     }
                     if object_type.as_str().ends_with("::oracle::AdminCap") {
                         self.scale_oracle_admin_id = object_id;
+                    }
+                    if object_type.as_str().ends_with("::oracle::Root") {
+                        self.scale_oracle_root_id = object_id;
                     }
                 }
                 SuiEvent::Publish {
