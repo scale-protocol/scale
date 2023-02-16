@@ -185,6 +185,7 @@ impl Tool {
                 "create_price_feed",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::new(json!(symbol))?,
                 ],
                 vec![],
@@ -207,6 +208,7 @@ impl Tool {
                 "update_owner",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(&feed)?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(&owner)?),
                 ],
