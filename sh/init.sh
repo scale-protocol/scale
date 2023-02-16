@@ -11,6 +11,8 @@ scale_coin=$(cat $data/scale_coin)
 user_account=$(cat $data/user_account)
 account=$(cat $data/account)
 market=$(cat $data/market)
+btc_price_feed=$(cat $data/btc_price_feed)
+eth_price_feed=$(cat $data/eth_price_feed)
 
 echo "suicoin: $sui_coin"
 echo "scalecoin: $scale_coin"
@@ -34,6 +36,9 @@ market='0x3f1a810ddf0b82adf3a3853e405bf4c82952cba7'
 
 echo $account > $data/account
 echo $market > $data/market
+ehco $btc_price_feed > $data/btc_price_feed
+ehco $eth_price_feed > $data/eth_price_feed
+
 elif [ "$1" = "coin" ]
 then
     echo "airdrop coin"
