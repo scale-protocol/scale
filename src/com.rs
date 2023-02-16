@@ -7,9 +7,9 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_SCALE_PUBLISH_TX: &str = "BKjZ49tyXBPKDq8wU9Wq6R8d5h1dMXoUMKd1zX1qnAhJ";
-pub const SUI_COIN_PUBLISH_TX: &str = "2WAXGjqr9aqpMgwM8juwFRLy7UNyL4yquuVTawwLoj2U";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "9cAFra4es7uTxnW8asJSoFTyEbzaN9YAfJ11u12cFbuc";
+pub const SUI_SCALE_PUBLISH_TX: &str = "FxEQaXqdxHgrasTRnuUmqhTwRjxVZBsxtMTvHf2FpESs";
+pub const SUI_COIN_PUBLISH_TX: &str = "Hc4h8k4mXEAv3h7RPxphtkxaeCWte3X5iHTcaJg2QsXk";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "As21KD8yBFk6WSmbckhWM1erp9KJ4mNRMcowR1XPNY31";
 
 pub const DECIMALS: u64 = 1000000;
 
