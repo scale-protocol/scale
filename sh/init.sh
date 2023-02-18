@@ -19,6 +19,8 @@ echo "scalecoin: $scale_coin"
 echo "user_account: $user_account"
 echo "account: $account"
 echo "market: $market"
+echo "btc_price_feed: $btc_price_feed"
+echo "eth_price_feed: $eth_price_feed"
 fi
 
 if [ "$1" = "write" ]
