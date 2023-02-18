@@ -36,8 +36,8 @@ account=$(sui client object --json $user_account | jq -r '.data.fields.account_i
 
 echo $account > $data/account
 # echo $market > $data/market
-ehco $btc_price_feed > $data/btc_price_feed
-ehco $eth_price_feed > $data/eth_price_feed
+# echo $btc_price_feed > $data/btc_price_feed
+# echo $eth_price_feed > $data/eth_price_feed
 
 elif [ "$1" = "coin" ]
 then
