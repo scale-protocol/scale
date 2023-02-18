@@ -32,10 +32,10 @@ echo $scale_coin > $data/scale_coin
 echo $user_account > $data/user_account
 account=$(sui client object --json $user_account | jq -r '.data.fields.account_id.fields.id')
 # btc_market=(scale sui config get | grep 'scale market list id' | awk '{print $5}' | scale client object | )
-market='0x3f1a810ddf0b82adf3a3853e405bf4c82952cba7'
+# market='0x3f1a810ddf0b82adf3a3853e405bf4c82952cba7'
 
 echo $account > $data/account
-echo $market > $data/market
+# echo $market > $data/market
 ehco $btc_price_feed > $data/btc_price_feed
 ehco $eth_price_feed > $data/eth_price_feed
 
@@ -60,6 +60,12 @@ elif [ "$1" = "close_position" ]
 then {
     echo "close position"
     scale sui trade close_position -m $market -t $account -p $2
+}
+elif [ "$1" = "oracle" ]
+then {
+    echo "pracle"
+    scale sui oracle create_price_feed -s Crypto.BTC/USD
+    scale sui oracle create_price_feed -s Crypto.ETH/USD
 }
 else {
     echo "deposit and investment"
