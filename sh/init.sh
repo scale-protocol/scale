@@ -44,7 +44,7 @@ echo $account > $data/account
 elif [ "$1" = "coin" ]
 then
     echo "airdrop coin"
-    scale sui coin airdrop -c $sui_coin -a 1000000000000
+    scale sui coin airdrop -c $sui_coin -a 3000000000000
 elif [ "$1" = "scale" ] 
 then {
     echo "create market and account"
@@ -71,7 +71,7 @@ then {
 }
 else {
     echo "deposit and investment"
-    scale sui trade deposit -t $account -c $scale_coin -a 1000000
+    scale sui trade deposit -t $account -c $scale_coin -a 100000000000
     scale sui trade investment -m $market -c $scale_coin -n 'scale'
 }
 fi
