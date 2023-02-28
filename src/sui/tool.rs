@@ -1,4 +1,5 @@
 use crate::bot::state::{Address, MoveCall};
+use crate::com;
 use crate::{
     bot::state::DENOMINATOR,
     com::CliError,
@@ -7,7 +8,7 @@ use crate::{
 use async_trait::async_trait;
 // use log::debug;
 use chrono::Utc;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
 use sui_keys::keystore::AccountKeystore;
@@ -67,7 +68,7 @@ impl Tool {
             .client
             .quorum_driver()
             .execute_transaction(
-                Transaction::from_data(pm.clone(), Intent::default(), signature).verify()?,
+                Transaction::from_data(pm.clone(), Intent::default(), vec![signature]).verify()?,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
             .await?;
@@ -133,9 +134,9 @@ impl Tool {
     }
 
     pub async fn coin_burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
+        let coins = args
+            .get_many::<Vec<String>>("coin")
+            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -143,7 +144,7 @@ impl Tool {
                 "burn",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
-                    SuiJsonValue::new(json!(coin))?,
+                    SuiJsonValue::new(json!(coins))?,
                 ],
                 vec![],
             )
@@ -152,9 +153,9 @@ impl Tool {
     }
 
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
+        let coins = args
+            .get_many::<Vec<String>>("coin")
+            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -165,7 +166,7 @@ impl Tool {
                 "airdrop",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
-                    SuiJsonValue::new(json!(coin))?,
+                    SuiJsonValue::new(json!(coins))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![],
@@ -267,9 +268,9 @@ impl Tool {
         let account = args
             .get_one::<String>("account")
             .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
+        let coins = args
+            .get_many::<Vec<String>>("coin")
+            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -280,7 +281,7 @@ impl Tool {
                 "deposit",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::new(json!(coin))?,
+                    SuiJsonValue::new(json!(coins))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![self.get_t()],
@@ -678,9 +679,10 @@ impl Tool {
         let market = args
             .get_one::<String>("market")
             .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
+        let coins = args
+            .get_many::<Vec<String>>("coin")
+            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+        // let coins = coins.map(|c| c.as_str()).collect::<Vec<&str>>();
         let name = args
             .get_one::<String>("name")
             .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
@@ -692,7 +694,7 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(coin.as_str())?),
+                    SuiJsonValue::new(json!(coins))?,
                     SuiJsonValue::from_object_id(self.ctx.config.scale_nft_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                 ],
@@ -792,8 +794,9 @@ impl Tool {
             .get_one::<String>("account")
             .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
         let lot = args
-            .get_one::<u64>("lot")
+            .get_one::<f64>("lot")
             .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+        let lot = (lot * com::DENOMINATOR as f64) as u64;
         let leverage = args
             .get_one::<u8>("leverage")
             .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
@@ -852,6 +855,7 @@ impl Tool {
         self.exec(transaction_data).await
     }
 }
+
 #[async_trait]
 impl MoveCall for Tool {
     async fn trigger_update_opening_price(&self, market_id: Address) -> anyhow::Result<()> {

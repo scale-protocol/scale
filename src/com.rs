@@ -12,6 +12,7 @@ pub const SUI_COIN_PUBLISH_TX: &str = "76Hw6DtZsHa7sHADhFsSCktWxBmGkyEEtK4iWiG7C
 pub const SUI_ORACLE_PUBLISH_TX: &str = "A348EaeFpBgoKHUTJf7Coh2k4xjgsaZMEbTC3F6XBJyF";
 
 pub const DECIMALS: u64 = 1000000;
+pub const DENOMINATOR: u64 = 10000;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {
