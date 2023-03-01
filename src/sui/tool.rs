@@ -685,6 +685,9 @@ impl Tool {
         let name = args
             .get_one::<String>("name")
             .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+        let amount = args
+            .get_one::<u64>("amount")
+            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -696,6 +699,7 @@ impl Tool {
                     SuiJsonValue::new(json!(coins))?,
                     SuiJsonValue::from_object_id(self.ctx.config.scale_nft_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
+                    SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![self.get_p(), self.get_t()],
             )

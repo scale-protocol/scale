@@ -283,6 +283,7 @@ fn sui_trade() -> Command {
                 .arg(arg!(-m --market <MARKET> "The nft style name."))
                 .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
                 .arg(arg!(-n --name <NAME> "The nft style name. NFT credentials of the specified style will be obtained."))
+                .arg(arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained."))
                 ,
         )
         .subcommand(
