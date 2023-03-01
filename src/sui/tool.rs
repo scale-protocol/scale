@@ -679,7 +679,7 @@ impl Tool {
             .get_one::<String>("market")
             .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
         let coins = args
-            .get_many::<String>("coin")
+            .get_many::<String>("coins")
             .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         // let coins = coins.map(|c| c.as_str()).collect::<Vec<&str>>();
         let name = args

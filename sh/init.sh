@@ -72,6 +72,6 @@ then {
 else {
     echo "deposit and investment"
     scale sui trade deposit -t $account -c $scale_coin -a 100000000000
-    scale sui trade investment -m $market -c $scale_coin -n 'scale'
+    scale sui trade investment -m $market -c $scale_coin -n 'scale' -a 0
 }
 fi
