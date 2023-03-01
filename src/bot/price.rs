@@ -187,5 +187,5 @@ pub async fn sub_price(
     let req = serde_json::to_string(&sub_req)?;
     debug!("......sub price req: {:?}", req);
     ws_client.send(WsClientMessage::Txt(req)).await?;
-    Ok((ws_client, ws_price_rx))
+    Ok((ws_client, PriceWatchRx(ws_price_rx)))
 }

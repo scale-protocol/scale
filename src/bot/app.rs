@@ -229,7 +229,7 @@ where
                 mp.clone(),
                 Arc::new(db),
                 sds,
-                price_ws_rx.resubscribe(),
+                price_ws_rx.clone(),
             )
             .await,
         )

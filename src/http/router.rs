@@ -42,7 +42,8 @@ impl HttpServer {
         sds: SharedDmSymbolId,
         price_ws_rx: PriceWatchRx,
     ) -> Self {
-        let router = router(mp.clone(), db.clone(), sds);
+        let price_status = service::new_price_status();
+        let router = router(mp.clone(), db.clone(), sds, price_status.clone(), price_ws_rx);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -56,7 +57,7 @@ impl HttpServer {
             }
         });
         let price_broadcast =
-            service::PriceBroadcast::new(mp, service::DmPriceStatus::new(), price_ws_rx, db).await;
+            service::PriceBroadcast::new(mp, price_status, db).await;
         Self {
             shutdown_tx,
             price_broadcast,
@@ -70,7 +71,13 @@ impl HttpServer {
     }
 }
 
-pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> Router {
+pub fn router(
+    mp: SharedStateMap,
+    db: Arc<Influxdb>,
+    sds: SharedDmSymbolId,
+    price_status: service::DmPriceStatus,
+    price_ws_rx: PriceWatchRx,
+) -> Router {
     let app: Router = Router::new()
         .route("/account/info/:address", get(get_user_info))
         .route(
@@ -95,6 +102,8 @@ pub fn router(mp: SharedStateMap, db: Arc<Influxdb>, sds: SharedDmSymbolId) -> R
         )
         .layer(Extension(mp))
         .layer(Extension(sds))
+        .layer(Extension(price_status))
+        .layer(Extension(price_ws_rx))
         .layer(Extension(db));
     app.fallback(handler_404)
 }
@@ -174,25 +183,20 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     Path(sig): Path<String>,
     Extension(state): Extension<SharedStateMap>,
+    Extension(price_status): Extension<service::DmPriceStatus>,
+    Extension(price_ws_rx): Extension<PriceWatchRx>,
 ) -> impl IntoResponse {
     let jr = JsonResponse::<()>::default();
-    if sig.is_empty() {
-        return jr
+    let mut address = None;
+    if !sig.is_empty() {
+        if let Ok(add) = <Address as std::str::FromStr>::from_str(sig.as_str()) {
+            address = Some(add);
+        }else{
+            return jr
             .err(CliError::InvalidWsAddressSigner.into())
             .to_json()
             .into_response();
-    }
-    // todo check signer and get wallet address
-    let address = <Address as std::str::FromStr>::from_str(sig.as_str());
-    match address {
-        Ok(address) => {
-            return ws.on_upgrade(|socket| service::handle_ws(state, socket, address));
-        }
-        Err(e) => {
-            return jr
-                .err(CliError::WebSocketError(e.to_string()).into())
-                .to_json()
-                .into_response();
         }
     }
+    return ws.on_upgrade(|socket| service::handle_ws(state, socket, address, price_status, price_ws_rx));
 }

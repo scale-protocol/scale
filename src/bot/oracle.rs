@@ -61,7 +61,7 @@ where
                 info!("got shutdown signal , break price broadcast!");
                 break;
             },
-            Ok(price) = price_ws_rx.recv() => {
+            Ok(price) = price_ws_rx.0.recv() => {
                 if let Err(e) = recv_price(dpf.clone(),&price) {
                     error!("receiver and save oracle price error: {}", e);
                 }

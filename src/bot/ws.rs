@@ -41,14 +41,14 @@ pub fn new_shared_dm_symbol_id(
 #[derive(Clone)]
 pub struct WsServerState {
     pub conns: DashMap<Address, Sender<WsSrvMessage>>,
-    pub sub_idx_map: DmPriceSubMap,
+    // pub sub_idx_map: DmPriceSubMap,
     pub supported_symbol: SupportedSymbol,
 }
 impl WsServerState {
     pub fn new(supported_symbol: SupportedSymbol) -> Self {
         Self {
             conns: DashMap::new(),
-            sub_idx_map: DashMap::new(),
+            // sub_idx_map: DashMap::new(),
             supported_symbol,
         }
     }
@@ -65,22 +65,29 @@ impl WsServerState {
         self.conns.remove(address);
     }
 
-    pub fn add_symbol_sub(&self, symbol: String, address: Address) {
-        self.sub_idx_map
-            .entry(symbol)
-            .or_insert_with(DashSet::new)
-            .insert(address);
-    }
+    // pub fn add_symbol_sub(&self, symbol: String, address: Address) {
+    //     self.sub_idx_map
+    //         .entry(symbol)
+    //         .or_insert_with(DashSet::new)
+    //         .insert(address);
+    // }
 
-    pub fn remove_symbol_sub(&self, symbol: &String, address: &Address) {
-        if let Some(set) = self.sub_idx_map.get_mut(symbol) {
-            set.remove(address);
-        }
-    }
+    // pub fn remove_symbol_sub(&self, symbol: &String, address: &Address) {
+    //     if let Some(set) = self.sub_idx_map.get_mut(symbol) {
+    //         set.remove(address);
+    //     }
+    // }
 }
 // key is symbol, value is address set
-pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
-pub type PriceWatchRx = broadcast::Receiver<OrgPrice>;
+// pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
+
+pub struct PriceWatchRx(pub broadcast::Receiver<OrgPrice>);
+
+impl Clone for PriceWatchRx {
+    fn clone(&self) -> Self {
+        Self(self.0.resubscribe())
+    }
+}
 #[derive(Debug, Clone)]
 pub enum WsSrvMessage {
     AccountUpdate(AccountDynamicData),

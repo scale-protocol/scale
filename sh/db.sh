@@ -2,12 +2,11 @@
 DB="https://ifd.scale.exchange"
 ORG="scale"
 BUCKET="pyth.network"
-
+DB_TOKEN=""
 if [ ! -d "$1" ]; then
     echo "please input the path of data"
     exit 1
 fi
-
 # write data to influxdb
 write_data() {
     echo "write ${1} data to influxdb"

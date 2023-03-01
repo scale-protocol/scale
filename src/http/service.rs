@@ -8,7 +8,7 @@ use crate::bot::{machine, storage};
 use crate::com::{self, CliError, Task};
 use axum::extract::ws::{Message, WebSocket};
 use csv::ReaderBuilder;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use influxdb2_client::models::Query;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -295,8 +295,11 @@ pub struct PriceStatus {
     pub current_price: i64,
 }
 // key: symbol , value: PriceStatus
-pub type DmPriceStatus = DashMap<String, PriceStatus>;
+pub type DmPriceStatus = Arc<DashMap<String, PriceStatus>>;
 
+pub fn new_price_status() -> DmPriceStatus {
+    Arc::new(DashMap::new())
+}
 async fn update_price_status(
     mp: machine::SharedStateMap,
     dps: &DmPriceStatus,
@@ -330,24 +333,20 @@ async fn update_price_status(
     Ok(())
 }
 
-async fn broadcast_price_status(
-    mp: machine::SharedStateMap,
+fn get_broadcast_price_status(
+    symbols_sub_set: &DashSet<String>,
     dps: &DmPriceStatus,
     org_price: &OrgPrice,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<WsSrvMessage>> {
     if let Some(price_status) = dps.get(&org_price.symbol) {
         let mut price_status = price_status.value().clone();
         price_status.current_price = org_price.price;
         let message = serde_json::to_string(&price_status)?;
-        if let Some(set) = mp.ws_state.sub_idx_map.get(&org_price.symbol) {
-            for idx in set.iter() {
-                if let Some(w) = mp.ws_state.conns.get(&idx) {
-                    w.send(WsSrvMessage::PriceUpdate(message.clone())).await?;
-                }
-            }
+        if symbols_sub_set.contains(&org_price.symbol) {
+            return Ok(Some(WsSrvMessage::PriceUpdate(message.clone())));
         }
     }
-    Ok(())
+    Ok(None)
 }
 pub struct PriceBroadcast {
     task: Task,
@@ -357,7 +356,6 @@ impl PriceBroadcast {
     pub async fn new(
         mp: machine::SharedStateMap,
         price_status: DmPriceStatus,
-        price_ws_rx: PriceWatchRx,
         db: Arc<Influxdb>,
     ) -> Self {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -368,7 +366,6 @@ impl PriceBroadcast {
                 mp,
                 price_status,
                 db.clone(),
-                price_ws_rx,
                 shutdown_rx,
             )),
         );
@@ -383,7 +380,6 @@ async fn broadcast_price(
     mp: machine::SharedStateMap,
     price_status: DmPriceStatus,
     db: Arc<Influxdb>,
-    mut price_ws_rx: PriceWatchRx,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> anyhow::Result<()> {
     let mut timer = time::interval(Duration::from_secs(5));
@@ -393,12 +389,6 @@ async fn broadcast_price(
                 info!("got shutdown signal , break price broadcast!");
                 break;
             },
-            Ok(price) = price_ws_rx.recv() => {
-                // debug!("got price from ws broadcast channel: {:?}", price);
-                if let Err(e) = broadcast_price_status(mp.clone(), &price_status, &price).await {
-                    error!("broadcast price status error: {}", e);
-                }
-            }
             _ = timer.tick() => {
                 if let Err(e) = update_price_status(mp.clone(), &price_status, db.clone()).await {
                     error!("update price status error: {}", e);
@@ -415,10 +405,18 @@ pub struct SubRequest {
     pub sub_type: SubType,
 }
 
-pub async fn handle_ws(mp: machine::SharedStateMap, mut socket: WebSocket, address: Address) {
+pub async fn handle_ws(
+    mp: machine::SharedStateMap, 
+    mut socket: WebSocket,
+    address: Option<Address>,
+    price_status: DmPriceStatus,
+    mut price_ws_rx: PriceWatchRx,
+) {
     let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
-    mp.ws_state.add_conn(address.clone(), tx);
-    let mut symbols: Vec<String> = Vec::new();
+    if let Some(address) = address.clone() {
+        mp.ws_state.add_conn(address.clone(), tx);
+    }
+    let symbols_set:DashSet<String> = DashSet::new();
     loop {
         tokio::select! {
             Some(msg) = rx.recv() => {
@@ -427,13 +425,23 @@ pub async fn handle_ws(mp: machine::SharedStateMap, mut socket: WebSocket, addre
                     break;
                 }
             }
+            Ok(price) = price_ws_rx.0.recv() => {
+                // debug!("got price from ws broadcast channel: {:?}", price);
+                if let Ok(m) = get_broadcast_price_status(&symbols_set, &price_status, &price) {
+                    if let Some(m) = m {
+                        if let Err(e) = socket.send(Message::Text(m.into_txt())).await {
+                            error!("send ws message error: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
             ws_msg = socket.recv() => {
                 match ws_msg {
                     Some(Ok(msg))=>{
                         match msg {
                             Message::Text(t) => {
-                                debug!("client sent str: {:?}", t);
-                                handle_ws_events(mp.clone(), t, &address, &mut symbols);
+                                handle_ws_events(mp.clone(), t, &symbols_set);
                             }
                             Message::Binary(_) => {
                                 debug!("client sent binary data");
@@ -471,17 +479,16 @@ pub async fn handle_ws(mp: machine::SharedStateMap, mut socket: WebSocket, addre
         }
     }
     info!("client disconnected, clean connection :{:?}", address);
-    mp.ws_state.remove_conn(&address);
-    for symbol in symbols {
-        mp.ws_state.remove_symbol_sub(&symbol, &address);
+    if let Some(address) = address {
+        mp.ws_state.remove_conn(&address);
     }
 }
 
 fn handle_ws_events(
     mp: machine::SharedStateMap,
     msg: String,
-    address: &Address,
-    symbols: &mut Vec<String>,
+    // address: &Address,
+    symbols_set: &DashSet<String>,
 ) {
     let sub_req: SubRequest = serde_json::from_str(msg.as_str()).unwrap();
     let symbol = sub_req.symbol;
@@ -491,12 +498,13 @@ fn handle_ws_events(
     let sub_type = sub_req.sub_type;
     match sub_type {
         SubType::Subscribe => {
-            mp.ws_state.add_symbol_sub(symbol.clone(), address.copy());
-            symbols.push(symbol);
+            // mp.ws_state.add_symbol_sub(symbol.clone(), address.copy());
+            symbols_set.insert(symbol.clone());
         }
         SubType::Unsubscribe => {
-            mp.ws_state.remove_symbol_sub(&symbol, &address);
-            symbols.retain(|s| s != &symbol);
+            // mp.ws_state.remove_symbol_sub(&symbol, &address);
+            // symbols.retain(|s| s != &symbol);
+            symbols_set.remove(&symbol);
         }
         SubType::None => {}
     }
