@@ -135,8 +135,8 @@ impl Tool {
 
     pub async fn coin_burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let coins = args
-            .get_many::<Vec<String>>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -153,9 +153,8 @@ impl Tool {
     }
 
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coins = args
-            .get_many::<Vec<String>>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+        let coins = args.get_many::<String>("coins")
+        .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -269,8 +268,8 @@ impl Tool {
             .get_one::<String>("account")
             .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
         let coins = args
-            .get_many::<Vec<String>>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -680,7 +679,7 @@ impl Tool {
             .get_one::<String>("market")
             .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
         let coins = args
-            .get_many::<Vec<String>>("coin")
+            .get_many::<String>("coin")
             .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
         // let coins = coins.map(|c| c.as_str()).collect::<Vec<&str>>();
         let name = args

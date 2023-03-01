@@ -4,7 +4,7 @@ use crate::bot;
 use crate::com;
 use crate::config::{self, Config};
 use crate::sui::{config::Config as suiConfig, tool};
-use clap::{arg, Command};
+use clap::{arg, Command,ArgAction};
 use log::debug;
 use std::path::PathBuf;
 extern crate chrono;
@@ -72,13 +72,13 @@ fn sui_coin() -> Command {
             Command::new("burn")
                 .about("Burn scale coin and return sui coin")
                 .arg_required_else_help(true)
-                .arg(arg!(-c --coin <COIN> "The scale coin to burn")),
+                .arg(arg!(-c --coins <COINS> "The scale coins to burn").action(ArgAction::Append)),
         )
         .subcommand(
             Command::new("airdrop")
                 .arg_required_else_help(true)
                 .about("Airdrop SCALE tokens. In order to prevent malicious operation of robots.")
-                .arg(arg!(-c --coin <COIN> "Sui token for payment"))
+                .arg(arg!(-c --coins <COINS> "Sui tokens for payment").action(ArgAction::Append))
                 .arg(
                     arg!(-a --amount <AMOUNT> "How much scale coin is expected to be redeemed.")
                         .value_parser(clap::value_parser!(u64)),
@@ -134,7 +134,7 @@ fn sui_trade() -> Command {
                 .about("Withdrawal of trading account balance.")
                 .arg_required_else_help(true)
                 .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
-                .arg(arg!(-c --coin <COIN> "Coins for deduction"))
+                .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
                 .arg(
                     arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
                         .value_parser(clap::value_parser!(u64)),
@@ -281,7 +281,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Funding the market liquidity pool.")
                 .arg(arg!(-m --market <MARKET> "The nft style name."))
-                .arg(arg!(-c --coin <COIN> "Coins for deduction"))
+                .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
                 .arg(arg!(-n --name <NAME> "The nft style name. NFT credentials of the specified style will be obtained."))
                 ,
         )
