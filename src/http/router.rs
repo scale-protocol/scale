@@ -88,7 +88,7 @@ pub fn router(
         .route("/symbols", get(get_symbol_list))
         .route("/price/history", get(get_price_history))
         .route("/price/history_full", get(get_price_history_column))
-        .route("/ws/:sig", get(ws_handler))
+        .route("/ws", get(ws_handler))
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(handle_error))
@@ -134,6 +134,12 @@ struct HistoryParams {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     range: Option<String>,
     symbol: Option<String>,
+}
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct WsParams {
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    account: Option<String>,
 }
 
 async fn get_price_history(
@@ -181,15 +187,15 @@ async fn handle_error(error: BoxError) -> impl IntoResponse {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    Path(sig): Path<String>,
+    Query(q): Query<WsParams>,
     Extension(state): Extension<SharedStateMap>,
     Extension(price_status): Extension<service::DmPriceStatus>,
     Extension(price_ws_rx): Extension<PriceWatchRx>,
 ) -> impl IntoResponse {
     let jr = JsonResponse::<()>::default();
     let mut address = None;
-    if !sig.is_empty() {
-        if let Ok(add) = <Address as std::str::FromStr>::from_str(sig.as_str()) {
+    if let Some(account) = q.account {
+        if let Ok(add) = <Address as std::str::FromStr>::from_str(account.as_str()) {
             address = Some(add);
         }else{
             return jr
@@ -198,5 +204,15 @@ async fn ws_handler(
             .into_response();
         }
     }
+    // if !account.is_some() {
+    //     if let Ok(add) = <Address as std::str::FromStr>::from_str(account.as_str()) {
+    //         address = Some(add);
+    //     }else{
+    //         return jr
+    //         .err(CliError::InvalidWsAddressSigner.into())
+    //         .to_json()
+    //         .into_response();
+    //     }
+    // }
     return ws.on_upgrade(|socket| service::handle_ws(state, socket, address, price_status, price_ws_rx));
 }

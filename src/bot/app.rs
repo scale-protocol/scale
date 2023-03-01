@@ -131,7 +131,16 @@ fn run_sui_app(
     state_mp.load_active_account_from_local()?;
     let mp: machine::SharedStateMap = Arc::new(state_mp);
     runtime.block_on(async move {
-        let tool = Tool::new(conf.clone()).await.expect("tool init error");
+        let tool:Tool;
+        match Tool::new(conf.clone()).await{
+            Ok(t) => {
+                tool = t;
+            }
+            Err(e) => {
+                error!("tool init error: {}", e);
+                return;
+            }
+        }
         let run = run_bot(
             mp.clone(),
             price_feed.clone(),

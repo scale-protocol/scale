@@ -330,8 +330,8 @@ impl Liquidation {
             tasks = 2;
         }
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let (task_tx, task_rx) = flume::bounded::<Address>(tasks);
-        let (fund_task_tx, fund_task_rx) = flume::bounded::<Address>(tasks);
+        let (task_tx, task_rx) = flume::unbounded::<Address>();
+        let (fund_task_tx, fund_task_rx) = flume::unbounded::<Address>();
         let cron = Cron::new().await?;
         // create fund fee cron
         let fund_fee_timer = cron.add_job("0 0 0 * * *").await?;
