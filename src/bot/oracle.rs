@@ -55,6 +55,7 @@ where
     C: MoveCall + Send + Sync + 'static,
 {
     let mut timer = time::interval(duration);
+    info!("start price oracle task");
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
