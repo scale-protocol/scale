@@ -595,12 +595,12 @@ async fn compute_pl_all_position<C>(
                     } else {
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
                             // close position force
-                            if let Err(e) = call
-                                .burst_position(account.id.clone(), position.id.copy())
-                                .await
-                            {
-                                error!("burst position error: {}", e);
-                            }
+                            // if let Err(e) = call
+                            //     .burst_position(account.id.clone(), position.id.copy())
+                            //     .await
+                            // {
+                            //     error!("burst position error: {}", e);
+                            // }
                         }
                     }
                     position_data.push(PositionDynamicData {
