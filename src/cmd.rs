@@ -527,10 +527,12 @@ fn init_log(log_file: Option<&PathBuf>) {
         style.set_intense(true);
         writeln!(
             buf,
-            "{} {} [{}] {}",
+            "{} {} [{}-{}{}] {}",
             Local::now().format("%Y-%m-%d %H:%M:%S"),
             record.level(),
             record.module_path().unwrap_or("<unnamed>"),
+            record.file().unwrap_or("unknown"),
+            record.line().unwrap_or(0),
             &record.args()
         )
     });
