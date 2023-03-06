@@ -306,7 +306,7 @@ fn save_to_active(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
         }
         Err(e) => {
             error!(
-                "save a account as active error:{}, key:{}",
+                "save a account as active error: {}, key:{}",
                 e,
                 ks.get_storage_key()
             );
@@ -646,9 +646,17 @@ async fn compute_pl_all_position<C>(
             // }
             match p.direction {
                 Direction::Buy => {
+                    if margin_full_buy_total < p.margin{
+                        warn!("margin_full_buy_total < p.margin");
+                        continue;
+                    }
                     margin_full_buy_total -= p.margin;
                 }
                 Direction::Sell => {
+                    if margin_full_sell_total < p.margin {
+                        warn!("margin_full_sell_total < p.margin");
+                        continue;
+                    }
                     margin_full_sell_total -= p.margin;
                 }
                 Direction::Flat => {}

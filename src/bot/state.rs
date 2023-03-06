@@ -289,7 +289,7 @@ pub struct Account {
     pub margin_full_sell_total: u64,
     pub margin_independent_buy_total: u64,
     pub margin_independent_sell_total: u64,
-    pub full_position_idx: HashMap<Vec<u8>, Address>,
+    pub full_position_idx: HashMap<String, Address>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

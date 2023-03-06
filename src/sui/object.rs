@@ -254,9 +254,9 @@ pub struct SuiAccount {
 
 impl From<SuiAccount> for Account {
     fn from(a: SuiAccount) -> Self {
-        let mut full_position_idx: HashMap<Vec<u8>, Address> = HashMap::new();
+        let mut full_position_idx: HashMap<String, Address> = HashMap::new();
         for e in a.full_position_idx {
-            let (key, value): (Vec<u8>, Address) = e.into();
+            let (key, value): (String, Address) = e.into();
             full_position_idx.insert(key, value);
         }
         Self {
@@ -283,13 +283,14 @@ pub struct PFK {
     pub direction: u8,
 }
 
-impl From<PFK> for Vec<u8> {
+impl From<PFK> for String {
     fn from(p: PFK) -> Self {
-        let mut v = Vec::new();
-        v.extend_from_slice(&p.market_id.bytes.to_vec());
-        v.extend_from_slice(&p.account_id.bytes.to_vec());
-        v.push(p.direction);
-        v
+        format!(
+            "{}-{}-{}",
+            p.market_id.bytes.to_string(),
+            p.account_id.bytes.to_string(),
+            p.direction
+        )
     }
 }
 #[derive(Debug, Deserialize, Serialize)]
@@ -298,7 +299,7 @@ pub struct Entry {
     pub value: ID,
 }
 
-impl From<Entry> for (Vec<u8>, Address) {
+impl From<Entry> for (String, Address) {
     fn from(e: Entry) -> Self {
         (e.key.into(), Address::new(e.value.bytes.to_vec()))
     }
