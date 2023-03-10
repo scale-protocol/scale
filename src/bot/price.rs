@@ -129,7 +129,10 @@ pub async fn sub_price(
         sub_req.ids.push(id.key().to_string());
     }
     let (ws_price_tx, ws_price_rx) = broadcast::channel::<OrgPrice>(sds.len());
-    let mut ws_client = WsClient::new(price_ws_url, move |msg, _send_tx| {
+
+    let req = serde_json::to_string(&sub_req)?;
+
+    let ws_client = WsClient::new(price_ws_url,Some(WsClientMessage::Txt(req)), move |msg, _send_tx| {
         let sds = sds.clone();
         let watch_tx = watch_tx.clone();
         let influxdb_client = inf_db.client.clone();
@@ -183,9 +186,5 @@ pub async fn sub_price(
         })
     })
     .await?;
-
-    let req = serde_json::to_string(&sub_req)?;
-    debug!("......sub price req: {:?}", req);
-    ws_client.send(WsClientMessage::Txt(req)).await?;
     Ok((ws_client, PriceWatchRx(ws_price_rx)))
 }

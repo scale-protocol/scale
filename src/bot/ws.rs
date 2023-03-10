@@ -4,6 +4,7 @@ use dashmap::{DashMap, DashSet};
 use futures_util::{SinkExt, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::pin::Pin;
 use std::{future::Future, sync::Arc};
 use tokio::{
@@ -186,8 +187,20 @@ pub enum WsClientMessage {
     Txt(String),
     Bin(Vec<u8>),
 }
+impl fmt::Display for WsClientMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Txt(txt) => write!(f, "{}", txt),
+            Self::Bin(bin) => write!(f, "{:?}", bin),
+        }
+    }
+}
 impl WsClient {
-    pub async fn new<F>(url: String, handle_msg: F) -> anyhow::Result<Self>
+    pub async fn new<F>(
+        url: String,
+        start_msg: Option<WsClientMessage>,
+        handle_msg: F,
+    ) -> anyhow::Result<Self>
     where
         F: 'static,
         F: Fn(
@@ -207,7 +220,7 @@ impl WsClient {
             task: Task::new(
                 "ws client",
                 shutdown_tx,
-                tokio::spawn(handle(u, shutdown_rx, send_tx, rx, handle_msg)),
+                tokio::spawn(handle(u, shutdown_rx, send_tx, rx, start_msg, handle_msg)),
             ),
         })
     }
@@ -228,6 +241,7 @@ async fn handle<F>(
     mut shutdown_rx: oneshot::Receiver<()>,
     send_tx: Sender<WsClientMessage>,
     mut send_rx: Receiver<WsClientMessage>,
+    start_msg: Option<WsClientMessage>,
     handle_msg: F,
 ) -> anyhow::Result<()>
 where
@@ -253,9 +267,21 @@ where
         };
         // ws_stream
         let (mut sender, mut receiver) = ws_stream.split();
+        // send sub msg
+        let msg = start_msg.clone();
+        match msg {
+            Some(WsClientMessage::Txt(txt)) => {
+                sender.send(Message::Text(txt)).await?;
+            }
+            Some(WsClientMessage::Bin(bin)) => {
+                sender.send(Message::Binary(bin)).await?;
+            }
+            None => {}
+        }
         debug!("Start ws client: {}", url);
-        let timeout = time::sleep(Duration::from_secs(5));
-        tokio::pin!(timeout);
+        let duration = Duration::from_secs(10);
+        let mut timer = time::interval(duration);
+        timer.tick().await;
         'sub: loop {
             tokio::select! {
                 _ = (&mut shutdown_rx) => {
@@ -267,6 +293,7 @@ where
                     break 'connection;
                 },
                 msg = send_rx.recv() => {
+                    timer.reset();
                     match msg {
                         Some(WsClientMessage::Txt(txt)) => {
                             debug!("Send text message: {}", txt);
@@ -283,9 +310,11 @@ where
                     }
                 },
                 Some(Ok(msg)) = receiver.next() => {
+                    timer.reset();
                     match msg {
                         Message::Text(text) => {
                             // debug!("Received text message: {}", text);
+                            debug!("Received text message");
                             if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Txt(text), &send_tx)).await{
                                 error!("Handle text message error: {:?}", e);
                             }
@@ -306,7 +335,6 @@ where
                         }
                         Message::Frame(_) => {
                             debug!("Received frame message");
-                            break;
                         }
                         Message::Close(close) => {
                             debug!("Received close message: {:?}", close);
@@ -314,8 +342,13 @@ where
                         }
                     }
                 },
-                _ = (&mut timeout) => {
-                    info!("reseved timeout, reset connection");
+                _ = timer.tick() => {
+                    info!("recv timeout, reset connection");
+                    // sender.send(Message::Close(Some(CloseFrame {
+                    //     code: CloseCode::Normal,
+                    //     reason: "Reset".into(),
+                    // }))).await?;
+                    time::sleep(duration).await;
                     break 'sub;
                 }
             }
