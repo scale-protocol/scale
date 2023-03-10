@@ -2,7 +2,7 @@
 DB="https://ifd.scale.exchange"
 ORG="scale"
 BUCKET="pyth.network"
-DB_TOKEN=""
+DB_TOKEN="b-HbA75meluyiNCR16mtC-ybMGUqN6dUG2lux1_i-oFFdKjhiFEJzL5yHcwDo9Fyv8VyRf5mJU4XrO28fmckaA=="
 if [ ! -d "$1" ]; then
     echo "please input the path of data"
     exit 1

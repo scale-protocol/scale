@@ -1,7 +1,7 @@
 symbols=("ETHUSDT" "BTCUSDT") # add symbols here to download
 # intervals=("1m" "3m" "5m" "15m" "30m" "1h" "2h" "4h" "6h" "8h" "12h" "1d" "3d" "1w" "1mo")
 years=("2023")
-months=(02 03)
+months=(03)
 days=(01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
 intervals=("1m")
 # years=("2022")

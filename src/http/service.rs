@@ -173,7 +173,7 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
         "1H" => Ok(("-1h".to_string(), "5s".to_string())),
         "1D" => Ok(("-1d".to_string(), "1m".to_string())),
         "1W" => Ok(("-1w".to_string(), "1h".to_string())),
-        "1M" => Ok(("-1m".to_string(), "1h".to_string())),
+        "1M" => Ok(("-1mo".to_string(), "1h".to_string())),
         "1Y" => Ok(("-1y".to_string(), "1h".to_string())),
         _ => Err(CliError::InvalidRange.into()),
     }
