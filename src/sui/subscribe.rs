@@ -1,5 +1,4 @@
 use crate::bot::machine::Message;
-use crate::com::CliError;
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
@@ -13,7 +12,8 @@ use tokio::{
     task::JoinHandle,
     time::{self, Duration},
 };
-use tokio_stream::StreamExt;
+// use tokio_stream::StreamExt;
+use futures::StreamExt;
 
 pub struct EventSubscriber {
     task: JoinHandle<anyhow::Result<()>>,
@@ -30,81 +30,59 @@ impl EventSubscriber {
     }
     async fn run(
         ctx: Ctx,
-        close_rx: watch::Receiver<bool>,
-        watch_tx: UnboundedSender<Message>,
-    ) -> anyhow::Result<()> {
-        let mut next_retrying_time = Duration::from_secs(1);
-        while let Err(e) =
-            Self::loop_event_message(ctx.clone(), close_rx.clone(), watch_tx.clone()).await
-        {
-            debug!("Error: {:?}", e);
-            let err = e.root_cause().downcast_ref::<CliError>();
-            if let Some(ce) = err {
-                debug!("CliError: {:?}", ce);
-                if *ce == CliError::WebSocketConnectionClosed {
-                    error!(
-                        "WebSocket connection closed, retrying in {:?} seconds",
-                        next_retrying_time
-                    );
-                    tokio::time::sleep(next_retrying_time).await;
-                    next_retrying_time = next_retrying_time * 2;
-                    if next_retrying_time > Duration::from_secs(90) {
-                        next_retrying_time = Duration::from_secs(1);
-                    }
-                } else {
-                    return Err(e);
-                }
-            } else {
-                return Err(e);
-            }
-        }
-        Ok(())
-    }
-    async fn loop_event_message(
-        ctx: Ctx,
         mut close_rx: watch::Receiver<bool>,
         watch_tx: UnboundedSender<Message>,
     ) -> anyhow::Result<()> {
-        // let x = ObjectID::from_str("0x2").unwrap();
-        let filter = SuiEventFilter::All(vec![
-            SuiEventFilter::Package(ctx.config.scale_package_id),
-            // SuiEventFilter::Module("enter".to_string()),
-        ]);
-        let mut sub = ctx.client.event_api().subscribe_event(filter).await?;
-        debug!("event sub created");
-        loop {
-            tokio::select! {
-                _ = close_rx.changed() => {
-                    debug!("event sub got close signal");
-                    return Ok(());
-                }
-                rs = sub.next() => {
-                    // debug!("event sub got result: {:?}", rs);
-                    match rs {
-                        Some(Ok(event)) => {
-                            // debug!("event sub got event: {:?}", event);
-                            if let Some(event_rs) = get_change_object(event) {
-                                // debug!("event sub got event_rs: {:?}", event_rs);
-                                if event_rs.object_type != ObjectType::None {
-                                    if let Err(e) = object::pull_object(ctx.clone(), event_rs.object_id,watch_tx.clone()).await{
-                                        error!("event sub got error: {:?}", e);
+        'connection: loop {
+            debug!("event sub connecting ...");
+            let filter = SuiEventFilter::All(vec![
+                SuiEventFilter::Package(ctx.config.scale_package_id),
+                // SuiEventFilter::Module("enter".to_string()),
+            ]);
+            let client = ctx.config
+            .get_sui_config()?
+            .get_active_env()?
+            .create_rpc_client(Some(Duration::from_secs(10)))
+            .await?;
+            let mut sub = client.event_api().subscribe_event(filter).await?;
+            debug!("event sub created ...");
+            // let mut timer = time::interval(Duration::from_secs(5));
+            'sub: loop {
+                tokio::select! {
+                    _ = close_rx.changed() => {
+                        debug!("event sub got close signal");
+                        break 'connection;
+                    }
+                    rs = sub.next() =>{
+                        match rs {
+                            Some(Ok(event)) => {
+                                debug!("event sub got event: {:?}", event);
+                                if let Some(event_rs) = get_change_object(event) {
+                                    // debug!("event sub got event_rs: {:?}", event_rs);
+                                    if event_rs.object_type != ObjectType::None {
+                                        if let Err(e) = object::pull_object(ctx.clone(), event_rs.object_id,watch_tx.clone()).await {
+                                            error!("pull object error: {:?}", e);
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Some(Err(e)) => {
-                            error!("event sub got error: {:?}", e);
-                            return Err(CliError::WebSocketConnectionClosed.into());
-                        }
-                        None => {
-                            debug!("event sub got None");
-                            return Err(CliError::WebSocketConnectionClosed.into());
+                            Some(Err(e)) => {
+                                error!("event sub got error: {:?}", e);
+                            }
+                            None => {
+                                debug!("event sub got None");
+                                break 'sub;
+                            }
                         }
                     }
                 }
             }
+            drop(sub);
+            info!("sui event sub reconnecting ...");
         }
+        Ok(())
     }
+
     pub async fn shutdown(self) {
         debug!("EventSubscriber shutdown");
         if let Err(e) = self.close_tx.send(true) {
@@ -167,7 +145,7 @@ fn get_change_object(event: SuiEventEnvelope) -> Option<EventResult> {
         } => Some(EventResult {
             object_type: object_type.as_str().into(),
             object_id,
-            is_new: true,
+            is_new: false,
         }),
         _ => None,
     }

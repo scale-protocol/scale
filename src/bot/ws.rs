@@ -6,10 +6,13 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::{future::Future, sync::Arc};
-use tokio::sync::{
-    broadcast,
-    mpsc::{self, Receiver, Sender},
-    oneshot,
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{self, Receiver, Sender},
+        oneshot,
+    },
+    time::{self, Duration},
 };
 use tokio_tungstenite::{
     connect_async,
@@ -236,78 +239,87 @@ where
         + Send
         + Sync,
 {
-    let ws_stream = match connect_async(url.clone()).await {
-        Ok((stream, response)) => {
-            debug!("Server response was {:?}", response);
-            stream
-        }
-        Err(e) => {
-            error!("WebSocket handshake for client failed with {:?}!", e);
-            return Err(e.into());
-        }
-    };
-    // ws_stream
-    let (mut sender, mut receiver) = ws_stream.split();
-    debug!("Start ws client: {}", url);
-    loop {
-        tokio::select! {
-            _ = (&mut shutdown_rx) => {
-                info!("Got shutdown signal , break loop price ws client!");
-                sender.send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Normal,
-                    reason: "Shutdown".into(),
-                }))).await?;
-                break;
-            },
-            msg = send_rx.recv() => {
-                match msg {
-                    Some(WsClientMessage::Txt(txt)) => {
-                        debug!("Send text message: {}", txt);
-                        sender.send(Message::Text(txt)).await?;
-                    }
-                    Some(WsClientMessage::Bin(bin)) => {
-                        debug!("Send binary message: {:?}", bin);
-                        sender.send(Message::Binary(bin)).await?;
-                    }
-                    None => {
-                        debug!("Send message channel closed");
-                        break;
-                    }
-                }
-            },
-            Some(Ok(msg)) = receiver.next() => {
-                match msg {
-                    Message::Text(text) => {
-                        // debug!("Received text message: {}", text);
-                        if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Txt(text), &send_tx)).await{
-                            error!("Handle text message error: {:?}", e);
+    'connection: loop {
+        let ws_stream = match connect_async(url.clone()).await {
+            Ok((stream, response)) => {
+                debug!("Server response was {:?}", response);
+                stream
+            }
+            Err(e) => {
+                error!("WebSocket handshake for client failed with {:?}!", e);
+                return Err(e.into());
+            }
+        };
+        // ws_stream
+        let (mut sender, mut receiver) = ws_stream.split();
+        debug!("Start ws client: {}", url);
+        let timeout = time::sleep(Duration::from_secs(5));
+        tokio::pin!(timeout);
+        'sub: loop {
+            tokio::select! {
+                _ = (&mut shutdown_rx) => {
+                    info!("Got shutdown signal , break loop price ws client!");
+                    sender.send(Message::Close(Some(CloseFrame {
+                        code: CloseCode::Normal,
+                        reason: "Shutdown".into(),
+                    }))).await?;
+                    break 'connection;
+                },
+                msg = send_rx.recv() => {
+                    match msg {
+                        Some(WsClientMessage::Txt(txt)) => {
+                            debug!("Send text message: {}", txt);
+                            sender.send(Message::Text(txt)).await?;
+                        }
+                        Some(WsClientMessage::Bin(bin)) => {
+                            debug!("Send binary message: {:?}", bin);
+                            sender.send(Message::Binary(bin)).await?;
+                        }
+                        None => {
+                            debug!("Send message channel closed");
+                            break 'connection;
                         }
                     }
-                    Message::Binary(bin) => {
-                        // debug!("Received binary message: {:?}", bin);
-                        if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Bin(bin), &send_tx)).await{
-                            error!("Handle binary message error: {:?}", e);
+                },
+                Some(Ok(msg)) = receiver.next() => {
+                    match msg {
+                        Message::Text(text) => {
+                            // debug!("Received text message: {}", text);
+                            if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Txt(text), &send_tx)).await{
+                                error!("Handle text message error: {:?}", e);
+                            }
+                        }
+                        Message::Binary(bin) => {
+                            // debug!("Received binary message: {:?}", bin);
+                            if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Bin(bin), &send_tx)).await{
+                                error!("Handle binary message error: {:?}", e);
+                            }
+                        }
+                        Message::Ping(ping) => {
+                            debug!("Received ping message: {:?}", ping);
+                            sender.send(Message::Pong(ping)).await?;
+                        }
+                        Message::Pong(pong) => {
+                            debug!("Received pong message: {:?}", pong);
+                            sender.send(Message::Ping(pong)).await?;
+                        }
+                        Message::Frame(_) => {
+                            debug!("Received frame message");
+                            break;
+                        }
+                        Message::Close(close) => {
+                            debug!("Received close message: {:?}", close);
+                            break 'sub;
                         }
                     }
-                    Message::Ping(ping) => {
-                        debug!("Received ping message: {:?}", ping);
-                        sender.send(Message::Pong(ping)).await?;
-                    }
-                    Message::Pong(pong) => {
-                        debug!("Received pong message: {:?}", pong);
-                        sender.send(Message::Ping(pong)).await?;
-                    }
-                    Message::Close(close) => {
-                        debug!("Received close message: {:?}", close);
-                        break;
-                    }
-                    Message::Frame(_) => {
-                        debug!("Received frame message");
-                        break;
-                    }
+                },
+                _ = (&mut timeout) => {
+                    info!("reseved timeout, reset connection");
+                    break 'sub;
                 }
-            },
+            }
         }
+        info!("price ws client disconnected, reconnecting...");
     }
     Ok(())
 }

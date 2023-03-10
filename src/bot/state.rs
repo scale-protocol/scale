@@ -398,6 +398,9 @@ impl Position {
         } else {
             let max = market.long_position_total.max(market.short_position_total);
             let min = market.long_position_total.min(market.short_position_total);
+            if min == 0 {
+                return 0;
+            }
             (max * market.get_fund_fee() * self.get_fund_size() / min) as i64
         }
     }

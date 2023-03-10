@@ -65,13 +65,21 @@ then {
 }
 elif [ "$1" = "oracle" ]
 then {
-    echo "pracle"
+    echo "oracle"
     scale sui oracle create_price_feed -s Crypto.BTC/USD
     scale sui oracle create_price_feed -s Crypto.ETH/USD
 }
-else {
-    echo "deposit and investment"
-    # scale sui trade deposit -t $account -c $scale_coin -a 100000000000
+elif [ "$1" = "deposit" ]
+then {
+    echo "deposit"
+    scale sui trade deposit -t $account -c $scale_coin -a 1000
+}
+elif [ "$1" = "investment" ]
+then {
+    echo "investment"
     scale sui trade investment -m $market -c $scale_coin -n 'scale' -a 0
+}
+else {
+    echo "usage: sh init.sh [write|coin|scale|open_position|close_position|oracle|deposit|investment]"
 }
 fi

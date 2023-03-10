@@ -7,7 +7,8 @@ use sui::config::{SuiClientConfig, SuiEnv};
 use sui_keys::keystore::{FileBasedKeystore, Keystore};
 use sui_sdk::rpc_types::{SuiEvent, SuiTransactionResponse};
 use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
-use sui_sdk::SuiClient;
+// use sui_sdk::SuiClient;
+use sui_sdk::{SuiClient};
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -58,7 +59,7 @@ impl Context {
             client: config
                 .get_sui_config()?
                 .get_active_env()?
-                .create_rpc_client(Some(Duration::from_secs(1000)))
+                .create_rpc_client(Some(Duration::from_secs(10)))
                 .await?,
         }))
     }
