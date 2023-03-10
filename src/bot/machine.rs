@@ -557,7 +557,21 @@ where
             .await;
         }
         None => {
-            debug!("no position for state map: {:?}", address.to_string());
+            debug!("no position for state map: {:?},try send account data", address.to_string());
+            let mut account_data = AccountDynamicData::default();
+            account_data.balance = account.balance as i64;
+            account_data.equity = account.balance as i64;
+            let ws_tx = mp.ws_state.conns.get(&account.id);
+            if let Some(tx) = ws_tx {
+                let r = tx
+                    .value()
+                    .send(WsSrvMessage::AccountUpdate(account_data.clone()))
+                    .await;
+                if let Err(e) = r {
+                    error!("send account dynamic data to ws channel data error: {}", e);
+                }
+                debug!("send account dynamic data to ws channel data,account id: {:?}", account.id);
+            }
         }
     }
 }
