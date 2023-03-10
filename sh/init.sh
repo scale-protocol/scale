@@ -56,7 +56,7 @@ then {
 elif [ "$1" = "open_position" ]
 then {
     echo "open position"
-    scale sui trade open_position -m $market -t $account -l 1000 -L 2 -p 2 -d 1
+    scale sui trade open_position -m $market -t $account -l 1 -L 2 -p 2 -d 2
 }
 elif [ "$1" = "close_position" ]
 then {

@@ -488,7 +488,7 @@ where
             account_address = task_rx.recv_async() => {
                 match account_address {
                     Ok(address) => {
-                        debug!("got account address from task recv: {:?}",address);
+                        debug!("got account address from task recv: {:?}",address.to_string());
                         let account = mp.account.get(&address);
                         match account {
                             Some(account) => {
@@ -557,7 +557,7 @@ where
             .await;
         }
         None => {
-            debug!("no position for state map: {:?}", address);
+            debug!("no position for state map: {:?}", address.to_string());
         }
     }
 }
@@ -686,10 +686,11 @@ async fn compute_pl_all_position<C>(
         if let Err(e) = r {
             error!("send account dynamic data to ws channel data error: {}", e);
         }
+        debug!("send account dynamic data to ws channel data: {:?}", account_data);
         if !position_data.is_empty() {
             let r = tx
                 .value()
-                .send(WsSrvMessage::PositionUpdate(position_data))
+                .send(WsSrvMessage::PositionUpdate(position_data.clone()))
                 .await;
             if let Err(e) = r {
                 error!(
@@ -698,5 +699,6 @@ async fn compute_pl_all_position<C>(
                 );
             }
         }
+        debug!("send positions dynamic data to ws channel data: {:?}", position_data)
     }
 }
