@@ -34,7 +34,7 @@ impl EventSubscriber {
         watch_tx: UnboundedSender<Message>,
     ) -> anyhow::Result<()> {
         'connection: loop {
-            debug!("event sub connecting ...");
+            info!("event sub connecting ...");
             let filter = SuiEventFilter::All(vec![
                 SuiEventFilter::Package(ctx.config.scale_package_id),
                 // SuiEventFilter::Module("enter".to_string()),
@@ -152,7 +152,7 @@ fn get_change_object(event: SuiEventEnvelope) -> Option<EventResult> {
 }
 
 pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> anyhow::Result<()> {
-    debug!("sync all objects");
+    info!("start sync all objects");
     tokio::spawn(async move {
         // get all events
         let mut cursor: Option<EventID> = None;
@@ -189,5 +189,6 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
             }
         }
     });
+    info!("end sync all objects");
     Ok(())
 }

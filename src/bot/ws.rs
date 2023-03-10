@@ -240,6 +240,7 @@ where
         + Sync,
 {
     'connection: loop {
+        info!("Start price ws client: {}", url);
         let ws_stream = match connect_async(url.clone()).await {
             Ok((stream, response)) => {
                 debug!("Server response was {:?}", response);
@@ -321,5 +322,6 @@ where
         }
         info!("price ws client disconnected, reconnecting...");
     }
+    info!("price ws client shutdown");
     Ok(())
 }
