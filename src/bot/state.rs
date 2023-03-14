@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Error};
 use std::str::FromStr;
+use crate::com;
 
 pub const DENOMINATOR: u64 = 10000;
 pub const BURST_RATE: f64 = 0.5;
@@ -354,7 +355,7 @@ impl Position {
     }
 
     fn fund_size(size: u64, lot: u64, price: u64) -> u64 {
-        size * lot * price
+        size * lot * price / com::DENOMINATOR128
     }
 
     pub fn get_size(&self) -> u64 {
@@ -401,7 +402,9 @@ impl Position {
             if min == 0 {
                 return 0;
             }
-            (max * market.get_fund_fee() * self.get_fund_size() / min) as i64
+            // todo check overflow
+           let r = max * market.get_fund_fee() * (self.get_fund_size() / com::DENOMINATOR) / min;
+           (r * com::DENOMINATOR ) as i64
         }
     }
 }

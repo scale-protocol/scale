@@ -96,6 +96,8 @@ impl Clone for PriceWatchRx {
 pub enum WsSrvMessage {
     AccountUpdate(AccountDynamicData),
     PositionUpdate(Vec<PositionDynamicData>),
+    PositionOpen(PositionDynamicData),
+    PositionClose(PositionDynamicData),
     PriceUpdate(String),
     Close,
 }
@@ -112,6 +114,14 @@ impl WsSrvMessage {
                 serde_json::to_string(&positions)
                     .unwrap_or_default()
                     .as_str(),
+            ),
+            Self::PositionOpen(position) => Self::json_warp(
+                "position_open",
+                serde_json::to_string(&position).unwrap_or_default().as_str(),
+            ),
+            Self::PositionClose(position) => Self::json_warp(
+                "position_close",
+                serde_json::to_string(&position).unwrap_or_default().as_str(),
             ),
             Self::PriceUpdate(price) => Self::json_warp("price_update", price.as_str()),
             Self::Close => Self::json_warp("close", ""),

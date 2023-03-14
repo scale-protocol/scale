@@ -84,6 +84,10 @@ pub fn router(
             "/account/positions/:prefix/:address",
             get(get_user_position_list),
         )
+        .route(
+            "/account/position/:address/:position_address",
+            get(get_position_info),
+        )
         .route("/markets/:prefix", get(get_market_list))
         .route("/symbols", get(get_symbol_list))
         .route("/price/history", get(get_price_history))
@@ -120,7 +124,12 @@ async fn get_user_info(
 ) -> impl IntoResponse {
     JsonResponse::from(service::get_account_info(state, address)).to_json()
 }
-
+async fn get_position_info(
+    Path((address,position_address)): Path<(String,String)>,
+    Extension(state): Extension<SharedStateMap>,
+) -> impl IntoResponse {
+    JsonResponse::from(service::get_position_info(state, address,position_address)).to_json()
+}
 async fn get_user_position_list(
     Path((prefix, address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,

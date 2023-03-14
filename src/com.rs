@@ -13,6 +13,7 @@ pub const SUI_SCALE_PUBLISH_TX: &str = "BpmBrK4Nrm5Yg7Dtrh5gJbsQm9oso4Q3b1jzs7Lt
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
+pub const DENOMINATOR128: u64 = 10000;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {

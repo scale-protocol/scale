@@ -1,4 +1,4 @@
-use crate::bot::state::{Address, State};
+use crate::bot::state::{Address, State,Position};
 use crate::com;
 use sled::{Batch, Db};
 use std::fmt;
@@ -147,6 +147,7 @@ impl Storage {
         }
         Ok(())
     }
+
     pub fn get_position_history_list(&self, address: &Address) -> sled::Iter {
         let keys = Keys::new(Prefix::History)
             .add("position".to_string())
@@ -154,6 +155,22 @@ impl Storage {
         let key = keys.get_storage_key();
         self.db.scan_prefix(key.as_bytes())
     }
+
+    pub fn get_position_info(&self, address: &Address,position_address: &Address)-> Option<Position>{
+        let keys = Keys::new(Prefix::History)
+            .add("position".to_string())
+            .add(address.to_string())
+            .add(position_address.to_string());
+        let key = keys.get_storage_key();
+        let r = self.db.get(key.as_bytes());
+        if let Ok(Some(v)) = r {
+            let p: Position = serde_json::from_slice(v.as_ref()).unwrap();
+            Some(p)
+        } else {
+            None
+        }
+    }
+
     pub fn get_market_history_list(&self) -> sled::Iter {
         let keys = Keys::new(Prefix::History).add("market".to_string());
         let key = keys.get_storage_key();

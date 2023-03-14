@@ -29,6 +29,26 @@ pub fn get_account_info(
     Ok(r.map(|a| a.value().clone()))
 }
 
+pub fn get_position_info(
+    mp: bot::machine::SharedStateMap,
+    address: String,
+    position_address: String,
+) -> anyhow::Result<Option<Position>> {
+    let address = Address::from_str(address.as_str())
+        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+    let position_address = Address::from_str(position_address.as_str())
+        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+    let r = mp.position.get(&address);
+    if let Some(p) = r {
+        let v = p.value();
+        let s = v.get(&position_address);
+        if let Some(p) = s {
+            return Ok(Some(p.clone()));
+        }
+    }
+    Ok(mp.storage.get_position_info(&address, &position_address))
+}
+
 pub fn get_position_list(
     mp: machine::SharedStateMap,
     prefix: String,
@@ -170,11 +190,11 @@ fn get_price_history_query(
 
 fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
     match range {
-        "1H" => Ok(("-1h".to_string(), "5s".to_string())),
-        "1D" => Ok(("-1d".to_string(), "1m".to_string())),
-        "1W" => Ok(("-1w".to_string(), "1h".to_string())),
-        "1M" => Ok(("-1mo".to_string(), "1h".to_string())),
-        "1Y" => Ok(("-1y".to_string(), "1h".to_string())),
+        "1H" => Ok(("-1y".to_string(), "5h".to_string())),
+        "1D" => Ok(("-1y".to_string(), "1d".to_string())),
+        "1W" => Ok(("-1y".to_string(), "1w".to_string())),
+        "1M" => Ok(("-1y".to_string(), "1mo".to_string())),
+        "1Y" => Ok(("-10y".to_string(), "1y".to_string())),
         _ => Err(CliError::InvalidRange.into()),
     }
 }

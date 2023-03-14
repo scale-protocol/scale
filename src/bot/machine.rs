@@ -168,7 +168,7 @@ async fn watch_message(
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg);
+                        keep_message(mp.clone(), msg).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -180,7 +180,7 @@ async fn watch_message(
     Ok(())
 }
 
-fn keep_message(mp: SharedStateMap, msg: Message) {
+async fn keep_message(mp: SharedStateMap, msg: Message) {
     let tag = msg.state.to_string();
     let keys = storage::Keys::new(storage::Prefix::Active);
     match msg.state {
@@ -223,6 +223,10 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                 .add(tag)
                 .add(position.account_id.to_string())
                 .add(msg.address.to_string());
+            let mut position_create = false;
+            let mut position_close = false;
+            let account_id = position.account_id.copy();
+            let position_id = position.id.copy();
             if msg.status == Status::Deleted
                 || position.status == PositionStatus::NormalClosing
                 || position.status == PositionStatus::ForcedClosing
@@ -235,21 +239,46 @@ fn keep_message(mp: SharedStateMap, msg: Message) {
                         // nothing to do
                     }
                 };
-                save_as_history(mp, &mut keys, &State::Position(position))
+                // close position
+                position_close = true;
+                save_as_history(mp.clone(), &mut keys, &State::Position(position))
             } else {
                 match mp.position.get(&position.account_id) {
                     Some(p) => {
-                        p.insert(msg.address.clone(), position.clone());
+                        if let None = p.insert(msg.address.clone(), position.clone()) {
+                            // create position
+                            position_create = true;
+                        }
                     }
                     None => {
                         let p: DmPosition = dashmap::DashMap::new();
                         p.insert(msg.address.clone(), position.clone());
-                        mp.position.insert((&position.account_id).copy(), p);
+                        if let None = mp.position.insert((&position.account_id).copy(), p) {
+                            // create position
+                            position_create = true;
+                        }
                     }
                 };
-                save_to_active(mp, &mut keys, &State::Position(position))
+                save_to_active(mp.clone(), &mut keys, &State::Position(position))
+            }
+            let mut position_data = PositionDynamicData::default();
+            position_data.id = position_id;
+            debug!("====> position id: {:?}===>CREAte?{:?},close?{:?}", position_data.id.to_string(), position_create, position_close);
+            if let Some(tx) = mp.ws_state.conns.get(&account_id) {
+                let mut message: Option<WsSrvMessage> = None;
+                if position_create {
+                    message = Some(WsSrvMessage::PositionOpen(position_data));
+                } else if position_close {
+                    message = Some(WsSrvMessage::PositionClose(position_data));
+                }
+                if let Some(m) = message {
+                    if let Err(e) = tx.value().send(m).await {
+                        error!("send position dynamic data to ws channel data error: {}", e);
+                    }
+                }
             }
         }
+
         State::Price(org_price) => {
             let idx_set = &mp.price_market_idx;
             let market_mp = &mp.market;
@@ -557,7 +586,10 @@ where
             .await;
         }
         None => {
-            debug!("no position for state map: {:?},try send account data", address.to_string());
+            debug!(
+                "no position for state map: {:?},try send account data",
+                address.to_string()
+            );
             let mut account_data = AccountDynamicData::default();
             account_data.balance = account.balance as i64;
             account_data.equity = account.balance as i64;
@@ -570,7 +602,10 @@ where
                 if let Err(e) = r {
                     error!("send account dynamic data to ws channel data error: {}", e);
                 }
-                debug!("send account dynamic data to ws channel data,account id: {:?}", account.id);
+                debug!(
+                    "send account dynamic data to ws channel data,account id: {:?}",
+                    account.id
+                );
             }
         }
     }
@@ -660,7 +695,7 @@ async fn compute_pl_all_position<C>(
             // }
             match p.direction {
                 Direction::Buy => {
-                    if margin_full_buy_total < p.margin{
+                    if margin_full_buy_total < p.margin {
                         warn!("margin_full_buy_total < p.margin");
                         continue;
                     }
@@ -700,7 +735,10 @@ async fn compute_pl_all_position<C>(
         if let Err(e) = r {
             error!("send account dynamic data to ws channel data error: {}", e);
         }
-        debug!("send account dynamic data to ws channel data: {:?}", account_data);
+        debug!(
+            "send account dynamic data to ws channel data: {:?}",
+            account_data
+        );
         if !position_data.is_empty() {
             let r = tx
                 .value()
@@ -713,6 +751,9 @@ async fn compute_pl_all_position<C>(
                 );
             }
         }
-        debug!("send positions dynamic data to ws channel data: {:?}", position_data)
+        debug!(
+            "send positions dynamic data to ws channel data: {:?}",
+            position_data
+        )
     }
 }
