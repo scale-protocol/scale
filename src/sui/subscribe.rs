@@ -39,6 +39,7 @@ impl EventSubscriber {
                 SuiEventFilter::Package(ctx.config.scale_package_id),
                 // SuiEventFilter::Module("enter".to_string()),
             ]);
+            // todo: If the server is not running for the first time, it will continuously retry.
             let client = ctx.config
             .get_sui_config()?
             .get_active_env()?

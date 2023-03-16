@@ -5,6 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::pin::Pin;
 use std::{future::Future, sync::Arc};
 use tokio::{
@@ -263,6 +264,7 @@ where
         + Send
         + Sync,
 {
+    let first_runing = Arc::new(AtomicBool::new(true));
     'connection: loop {
         info!("Start price ws client: {}", url);
         let ws_stream = match connect_async(url.clone()).await {
@@ -272,6 +274,11 @@ where
             }
             Err(e) => {
                 error!("WebSocket handshake for client failed with {:?}!", e);
+                // If the server is not running for the first time, it will continuously retry.
+                if !first_runing.load(Ordering::Relaxed) {
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    continue 'connection;
+                }
                 return Err(e.into());
             }
         };
@@ -279,6 +286,7 @@ where
         let (mut sender, mut receiver) = ws_stream.split();
         // send sub msg
         let msg = start_msg.clone();
+        first_runing.store(false, Ordering::Relaxed);
         match msg {
             Some(WsClientMessage::Txt(txt)) => {
                 sender.send(Message::Text(txt)).await?;
@@ -292,6 +300,7 @@ where
         let duration = Duration::from_secs(10);
         let mut timer = time::interval(duration);
         timer.tick().await;
+
         'sub: loop {
             tokio::select! {
                 _ = (&mut shutdown_rx) => {
@@ -303,7 +312,6 @@ where
                     break 'connection;
                 },
                 msg = send_rx.recv() => {
-                    timer.reset();
                     match msg {
                         Some(WsClientMessage::Txt(txt)) => {
                             debug!("Send text message: {}", txt);

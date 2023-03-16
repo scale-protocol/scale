@@ -130,6 +130,7 @@ async fn get_position_info(
 ) -> impl IntoResponse {
     JsonResponse::from(service::get_position_info(state, address,position_address)).to_json()
 }
+
 async fn get_user_position_list(
     Path((prefix, address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
