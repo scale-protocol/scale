@@ -173,9 +173,9 @@ pub struct Market {
 }
 impl Market {
     pub fn get_price(&self, real_price: u64) -> Price {
-        let spread = self.get_spread_fee(real_price) * real_price / DENOMINATOR;
+        let spread = self.get_spread_fee(real_price) * real_price;
         // To increase the calculation accuracy
-        let half_spread = spread * DENOMINATOR / 2;
+        let half_spread = spread / 2;
         Price {
             buy_price: (real_price * DENOMINATOR + half_spread) / DENOMINATOR,
             sell_price: (real_price * DENOMINATOR - half_spread) / DENOMINATOR,
@@ -192,7 +192,7 @@ impl Market {
         if self.opening_price == 0 {
             return 150;
         };
-        let change = change_price / self.opening_price * DENOMINATOR;
+        let change = change_price * DENOMINATOR / self.opening_price;
         if change <= 300 {
             return 30;
         };
@@ -355,7 +355,7 @@ impl Position {
     }
 
     fn fund_size(size: u64, lot: u64, price: u64) -> u64 {
-        size * lot * price / com::DENOMINATOR128
+        size * (lot / com::DENOMINATOR128) * price
     }
 
     pub fn get_size(&self) -> u64 {
@@ -363,7 +363,7 @@ impl Position {
     }
 
     fn size(lot: u64, size: u64) -> u64 {
-        size * lot
+        size * (lot/com::DENOMINATOR128)
     }
 
     pub fn get_margin_size(&self, market: &Market) -> u64 {
