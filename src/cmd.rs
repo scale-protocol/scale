@@ -322,7 +322,7 @@ fn sui_trade() -> Command {
                 .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                 .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
                 .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
-                .arg(arg!(-p --position_type <POSITION_TYPE> "The position type. 1 full position mode, 2 independent position modes").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-p --position_type <POSITION_TYPE> "The position type. 1 full position mode, 2 isolated position modes").value_parser(clap::value_parser!(u8)))
                 .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
                 ,
         )

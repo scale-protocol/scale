@@ -242,14 +242,14 @@ pub struct SuiAccount {
     pub margin_total: u64,
     /// Total amount of used margin in full warehouse mode.
     pub margin_full_total: u64,
-    /// Total amount of used margin in independent position mode.
-    pub margin_independent_total: u64,
+    /// Total amount of used margin in isolated position mode.
+    pub margin_isolated_total: u64,
     pub margin_full_buy_total: u64,
     pub margin_full_sell_total: u64,
-    pub margin_independent_buy_total: u64,
-    pub margin_independent_sell_total: u64,
+    pub margin_isolated_buy_total: u64,
+    pub margin_isolated_sell_total: u64,
     pub full_position_idx: Vec<Entry>,
-    pub independent_position_idx: Vec<SuiAddress>,
+    pub isolated_position_idx: Vec<SuiAddress>,
 }
 
 impl From<SuiAccount> for Account {
@@ -267,11 +267,11 @@ impl From<SuiAccount> for Account {
             profit: a.profit.into(),
             margin_total: a.margin_total,
             margin_full_total: a.margin_full_total,
-            margin_independent_total: a.margin_independent_total,
+            margin_isolated_total: a.margin_isolated_total,
             margin_full_buy_total: a.margin_full_buy_total,
             margin_full_sell_total: a.margin_full_sell_total,
-            margin_independent_buy_total: a.margin_independent_buy_total,
-            margin_independent_sell_total: a.margin_independent_sell_total,
+            margin_isolated_buy_total: a.margin_isolated_buy_total,
+            margin_isolated_sell_total: a.margin_isolated_sell_total,
             full_position_idx,
         }
     }
@@ -325,11 +325,11 @@ pub struct SuiPosition {
     offset: u64,
     /// Initial position margin
     margin: u64,
-    /// Current actual margin balance of independent
+    /// Current actual margin balance of isolated
     margin_balance: Balance,
     /// leverage size
     leverage: u8,
-    /// 1 full position mode, 2 independent position modes.
+    /// 1 full position mode, 2 isolated position modes.
     #[serde(alias = "type")]
     position_type: u8,
     /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending.

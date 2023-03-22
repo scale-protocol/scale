@@ -284,12 +284,12 @@ pub struct Account {
     pub margin_total: u64,
     /// Total amount of used margin in full warehouse mode.
     pub margin_full_total: u64,
-    /// Total amount of used margin in independent position mode.
-    pub margin_independent_total: u64,
+    /// Total amount of used margin in isolated position mode.
+    pub margin_isolated_total: u64,
     pub margin_full_buy_total: u64,
     pub margin_full_sell_total: u64,
-    pub margin_independent_buy_total: u64,
-    pub margin_independent_sell_total: u64,
+    pub margin_isolated_buy_total: u64,
+    pub margin_isolated_sell_total: u64,
     pub full_position_idx: HashMap<String, Address>,
 }
 
@@ -299,11 +299,11 @@ pub struct Position {
     pub offset: u64,
     /// Initial position margin
     pub margin: u64,
-    /// Current actual margin balance of independent
+    /// Current actual margin balance of isolated
     pub margin_balance: u64,
     /// leverage size
     pub leverage: u8,
-    /// 1 full position mode, 2 independent position modes.
+    /// 1 full position mode, 2 isolated position modes.
     #[serde(rename = "type")]
     pub position_type: PositionType,
     /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending.
@@ -351,7 +351,7 @@ pub struct Position {
 
 impl Position {
     pub fn get_fund_size(&self) -> u64 {
-        Self::fund_size(self.size, self.lot, self.open_price)
+        Self::fund_size(self.size, self.lot, self.open_real_price)
     }
 
     fn fund_size(size: u64, lot: u64, price: u64) -> u64 {
@@ -420,7 +420,7 @@ pub enum PositionStatus {
 #[repr(u8)]
 pub enum PositionType {
     Full = 1,
-    Independent,
+    isolated,
 }
 #[derive(
     Clone, Debug, Copy, TryFromPrimitive, PartialEq, Deserialize, Serialize, Eq, Ord, PartialOrd,
