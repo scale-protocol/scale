@@ -153,8 +153,9 @@ pub struct Market {
     /// Total amount of short positions in the market
     pub short_position_total: u64,
     /// Transaction pair (token type, such as BTC, ETH)
-    /// len: 4+20
     pub symbol: String,
+    pub symbol_short: String,
+    pub icon: String,
     /// market description
     pub description: String,
     /// Market operator,
@@ -303,7 +304,7 @@ pub struct Position {
     pub margin_balance: u64,
     /// leverage size
     pub leverage: u8,
-    /// 1 full position mode, 2 isolated position modes.
+    /// 1 cross position mode, 2 isolated position modes.
     #[serde(rename = "type")]
     pub position_type: PositionType,
     /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending.
@@ -395,7 +396,7 @@ impl Position {
             return 0;
         };
         if self.direction == dominant_direction {
-            -(self.get_fund_size() as i64 * market.get_fund_fee() as i64)
+            -((self.get_fund_size() * market.get_fund_fee() / com::DENOMINATOR) as i64)
         } else {
             let max = market.long_position_total.max(market.short_position_total);
             let min = market.long_position_total.min(market.short_position_total);
@@ -403,8 +404,8 @@ impl Position {
                 return 0;
             }
             // todo check overflow
-           let r = max * market.get_fund_fee() * (self.get_fund_size() / com::DENOMINATOR) / min;
-           (r * com::DENOMINATOR ) as i64
+           let r = max * market.get_fund_fee() / com::DENOMINATOR * self.get_fund_size() / min;
+           r as i64
         }
     }
 }
@@ -419,8 +420,8 @@ pub enum PositionStatus {
 #[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
 #[repr(u8)]
 pub enum PositionType {
-    Full = 1,
-    isolated,
+    Cross = 1,
+    Isolated,
 }
 #[derive(
     Clone, Debug, Copy, TryFromPrimitive, PartialEq, Deserialize, Serialize, Eq, Ord, PartialOrd,

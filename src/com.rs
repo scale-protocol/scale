@@ -7,7 +7,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_COIN_PUBLISH_TX: &str = "FgQZvWB1NqG61FbwZBW14aJA6YL9AkZAzNEucXqV9BGq";
+pub const SUI_COIN_PUBLISH_TX: &str = "91UkrJc3dnJwuxk16JYJag6BTu5zyaP4xfCF2Hu5qN1f";
 pub const SUI_ORACLE_PUBLISH_TX: &str = "6LC6cZEK1AMBDYqbfkG4nPG36fPFzdJYtjJz2JCD9TwW";
 pub const SUI_SCALE_PUBLISH_TX: &str = "BpmBrK4Nrm5Yg7Dtrh5gJbsQm9oso4Q3b1jzs7LtxDG6";
 

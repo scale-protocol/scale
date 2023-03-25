@@ -174,8 +174,9 @@ fn sui_trade() -> Command {
                 .arg_required_else_help(true)
                 .arg(arg!(-c --coin <COIN> "Used to specify transaction currency."))
                 .arg(arg!(-s --symbol <SYMBOL> "The transaction pair symbol needs pyth.network to support quotation."))
+                .arg(arg!(-i --icon <ICON> "The icon of the market."))
                 .arg(arg!(-p --pyth_id <PYTH_ID> "Pyth.network oracle quote object ID."))
-                .arg(arg!(-i --size <SIZE> "The basic unit of open position is 1 by default, and the final position size is equal to size * lot.").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-z --size <SIZE> "The basic unit of open position is 1 by default, and the final position size is equal to size * lot.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-o --opening_price <OPENING_PRICE> "The opening price of the current day is used to calculate the spread, and the subsequent value will be automatically triggered and updated by the robot.").value_parser(clap::value_parser!(u64)))
                 .arg(
                     arg!(-d --description <DESCRIPTION> "The description")

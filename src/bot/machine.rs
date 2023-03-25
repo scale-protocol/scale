@@ -639,7 +639,7 @@ async fn compute_pl_all_position<C>(
                     let pl_and_fund_fee = pl + fund_fee;
                     account_data.profit += pl;
                     account_data.equity += pl_and_fund_fee;
-                    if position.position_type == PositionType::Full {
+                    if position.position_type == PositionType::Cross {
                         pl_full += pl_and_fund_fee;
                     } else {
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {

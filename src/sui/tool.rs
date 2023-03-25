@@ -363,6 +363,9 @@ impl Tool {
         let symbol = args
             .get_one::<String>("symbol")
             .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        let icon = args
+            .get_one::<String>("icon")
+            .ok_or_else(|| CliError::InvalidCliParams("icon".to_string()))?;
         let description = args
             .get_one::<String>("description")
             .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
@@ -384,6 +387,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(coin.as_str())?),
                     SuiJsonValue::new(json!(symbol.as_bytes()))?,
+                    SuiJsonValue::new(json!(icon.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(size.to_string()))?,
                     SuiJsonValue::new(json!(opening_price.to_string()))?,

@@ -146,6 +146,7 @@ pub struct SuiMarket {
     /// Transaction pair (token type, such as BTC, ETH)
     /// len: 4+20
     pub symbol: String,
+    pub icon: String,
     /// market description
     pub description: String,
     /// Market operator,
@@ -177,7 +178,9 @@ impl From<SuiMarket> for Market {
             status: MarketStatus::try_from(m.status).unwrap(),
             long_position_total: m.long_position_total,
             short_position_total: m.short_position_total,
-            symbol: m.symbol,
+            symbol: m.symbol.clone(),
+            symbol_short: m.symbol.replace("Crypto.", "").replace("/", "-"),
+            icon: m.icon,
             description: m.description,
             officer: Officer::try_from(m.officer).unwrap(),
             pool: m.pool.into(),
