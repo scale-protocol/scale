@@ -48,7 +48,7 @@ then
 elif [ "$1" = "scale" ] 
 then {
     echo "create market and account"
-    scale sui trade create_account -c $scale_coin
+    # scale sui trade create_account -c $scale_coin
     scale sui trade create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $btc_price_feed -z 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market' -i 'https://bafybeibicbqm5zwxovveyxanp46njyniixuqn2ic3vv3q5n247qtfnvteu.ipfs.w3s.link/btc.svg'
     scale sui trade create_market -c $scale_coin -s 'Crypto.ETH/USD' -p $eth_price_feed -z 1 -o 2000000000 -d 'this is Crypto.ETH/USD trade market' -i 'https://bafybeigphp4mwadmmns34bnwuavplqlbmch22w6krxwdqaemmqmtmvmsna.ipfs.w3s.link/eth.svg'
     scale sui trade add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'

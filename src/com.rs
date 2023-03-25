@@ -8,8 +8,8 @@ use tokio::{
 };
 
 pub const SUI_COIN_PUBLISH_TX: &str = "91UkrJc3dnJwuxk16JYJag6BTu5zyaP4xfCF2Hu5qN1f";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "6LC6cZEK1AMBDYqbfkG4nPG36fPFzdJYtjJz2JCD9TwW";
-pub const SUI_SCALE_PUBLISH_TX: &str = "BpmBrK4Nrm5Yg7Dtrh5gJbsQm9oso4Q3b1jzs7LtxDG6";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "DEABtKsYud84kxH2NVFYE68HPfu3U2WEGhGAbtn1vUZ2";
+pub const SUI_SCALE_PUBLISH_TX: &str = "28Lki1i8h5Gps3NeCKi51B9s3mN2r9tBx6sD6AaSKLm9";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
