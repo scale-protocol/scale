@@ -210,6 +210,13 @@ fn sui_trade() -> Command {
                 ,
         )
         .subcommand(
+            Command::new("trigger_update_opening_price")
+            .arg_required_else_help(true)
+                .about("trigger update opening price.")
+                .arg(arg!(-m --market <MARKET> "The market object id."))
+                ,
+        )
+        .subcommand(
             Command::new("update_fund_fee")
             .arg_required_else_help(true)
                 .about("Update the fund_fee of market object.")
@@ -437,6 +444,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("update_insurance_fee", matches)) => {
                             tool.update_insurance_fee(matches).await?;
+                        }
+                        Some(("trigger_update_opening_price", matches)) => {
+                            tool.trigger_update_opening_price(matches).await?;
                         }
                         Some(("update_margin_fee", matches)) => {
                             tool.update_margin_fee(matches).await?;

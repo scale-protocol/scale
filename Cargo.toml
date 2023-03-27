@@ -34,7 +34,7 @@ chrono={version = "0.4.23",features = ["serde"]}
 axum= {version="0.6.1",features = ["ws", "headers"] }
 futures = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-tower-http = { version = "0.3.0", features = ["trace"] }
+tower-http = { version = "0.4.0", features = ["trace"] }
 tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] }
 headers = "0.3"
 fastcrypto="0.1.0"

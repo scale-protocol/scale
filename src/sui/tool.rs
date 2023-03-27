@@ -733,6 +733,26 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+    
+    pub async fn trigger_update_opening_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let market = args
+        .get_one::<String>("market")
+        .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_PACKAGE_NAME,
+                "trigger_update_opening_price",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
 
     pub async fn generate_upgrade_move_token(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let market = args
