@@ -6,20 +6,21 @@ use crate::{
     sui::config::{Config, Context, Ctx},
 };
 use async_trait::async_trait;
-// use log::debug;
 use chrono::Utc;
+// use log::*;
 use serde_json::{json, Value as JsonValue};
+use shared_crypto::intent::Intent;
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
     json::SuiJsonValue,
+    rpc_types::SuiTransactionBlockResponseOptions,
     types::{
         base_types::ObjectID,
-        messages::{SingleTransactionKind, Transaction, TransactionData, TransactionKind},
+        messages::{Command, Transaction, TransactionData, TransactionKind},
     },
 };
-use sui_types::intent::Intent;
 use sui_types::messages::ExecuteTransactionRequestType;
 
 const COIN_PACKAGE_NAME: &str = "scale";
@@ -63,27 +64,27 @@ impl Tool {
             &pm,
             Intent::default(),
         )?;
+        let opt = SuiTransactionBlockResponseOptions::default();
         let tx = self
             .ctx
             .client
             .quorum_driver()
-            .execute_transaction(
+            .execute_transaction_block(
                 Transaction::from_data(pm.clone(), Intent::default(), vec![signature]).verify()?,
+                opt,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
             .await?;
-        if let TransactionKind::Single(s) = pm.kind {
-            if let SingleTransactionKind::Call(m) = s {
-                println!(
-                    "call {:?}::{:?}::{:?} success! tx: {:?}",
-                    m.package,
-                    m.module.to_string(),
-                    m.function.to_string(),
-                    tx.tx_digest,
-                );
-            }
+        let TransactionData::V1(v) = pm;
+        if let TransactionKind::ProgrammableTransaction(s) = v.kind {
+            s.commands.into_iter().for_each(|c| match c {
+                Command::MoveCall(m) => {
+                    println!("call: {}::{}::{}", m.package, m.module, m.function);
+                }
+                _ => {}
+            });
         }
-        // debug!("{:?}", tx);
+        println!("exec: {:?} , error: {:?}", tx.digest.to_string(),tx.errors);
         Ok(())
     }
 
@@ -136,7 +137,9 @@ impl Tool {
     pub async fn coin_burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -153,8 +156,11 @@ impl Tool {
     }
 
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coins = args.get_many::<String>("coins")
-        .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+        let coins = args
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -269,7 +275,9 @@ impl Tool {
             .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -684,7 +692,9 @@ impl Tool {
             .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?.map(|c| json!(c)).collect::<Vec<JsonValue>>();
+            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
         // let coins = coins.map(|c| c.as_str()).collect::<Vec<&str>>();
         let name = args
             .get_one::<String>("name")
@@ -733,11 +743,14 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
-    
-    pub async fn trigger_update_opening_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+
+    pub async fn trigger_update_opening_price(
+        &self,
+        args: &clap::ArgMatches,
+    ) -> anyhow::Result<()> {
         let market = args
-        .get_one::<String>("market")
-        .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+            .get_one::<String>("market")
+            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
-use sui_sdk::rpc_types::{SuiObjectRead, SuiRawData};
+use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, SuiAddress},
@@ -54,63 +54,76 @@ pub async fn pull_object(
     id: ObjectID,
     watch_tx: UnboundedSender<Message>,
 ) -> anyhow::Result<()> {
-    let rs = ctx.client.read_api().get_object(id).await?;
-    match rs {
-        SuiObjectRead::Exists(o) => match o.data {
-            SuiRawData::MoveObject(m) => {
-                let t: ObjectType = m.type_.as_str().into();
-                debug!("got move object data type: {:?}", t);
-                match t {
-                    ObjectType::Market => {
-                        let sui_market: SuiMarket = m.deserialize()?;
-                        debug!("market: {:?}", sui_market);
-                        let market = Market::from(sui_market);
-                        if let Err(e) = watch_tx.send(Message {
-                            address: market.id.clone(),
-                            state: State::Market(market),
-                            status: Status::Normal,
-                        }) {
-                            error!("send market message error: {:?}", e);
-                        };
-                    }
-                    ObjectType::Account => {
-                        let sui_account: SuiAccount = m.deserialize()?;
-                        debug!("account: {:?}", sui_account);
-                        let account = Account::from(sui_account);
-                        if let Err(e) = watch_tx.send(Message {
-                            address: account.id.clone(),
-                            state: State::Account(account),
-                            status: Status::Normal,
-                        }) {
-                            error!("send account message error: {:?}", e);
-                        };
-                    }
-                    ObjectType::Position => {
-                        let sui_position: SuiPosition = m.deserialize()?;
-                        debug!("position: {:?}", sui_position);
-                        let position = Position::from(sui_position);
-                        if let Err(e) = watch_tx.send(Message {
-                            address: position.id.clone(),
-                            state: State::Position(position),
-                            status: Status::Normal,
-                        }) {
-                            error!("send position message error: {:?}", e);
-                        };
-                    }
-                    _ => {
-                        debug!("pull object nothing to do ")
+    let opt = SuiObjectDataOptions {
+        show_type: false,
+        show_owner: false,
+        show_previous_transaction: false,
+        show_display: false,
+        show_content: true,
+        show_bcs: false,
+        show_storage_rebate: false,
+    };
+    let rs = ctx
+        .client
+        .read_api()
+        .get_object_with_options(id, opt)
+        .await?;
+    if let Some(e) = rs.error {
+        error!("get object error: {:?}", e);
+        return Ok(());
+    }
+    if let Some(data) = rs.data {
+        if let Some(bcs) = data.bcs {
+            match bcs {
+                SuiRawData::MoveObject(m) => {
+                    let t: ObjectType = m.type_.clone().name.into_string().as_str().into();
+                    debug!("got move object data type: {:?}", t);
+                    match t {
+                        ObjectType::Market => {
+                            let sui_market: SuiMarket = m.deserialize()?;
+                            debug!("market: {:?}", sui_market);
+                            let market = Market::from(sui_market);
+                            if let Err(e) = watch_tx.send(Message {
+                                address: market.id.clone(),
+                                state: State::Market(market),
+                                status: Status::Normal,
+                            }) {
+                                error!("send market message error: {:?}", e);
+                            };
+                        }
+                        ObjectType::Account => {
+                            let sui_account: SuiAccount = m.deserialize()?;
+                            debug!("account: {:?}", sui_account);
+                            let account = Account::from(sui_account);
+                            if let Err(e) = watch_tx.send(Message {
+                                address: account.id.clone(),
+                                state: State::Account(account),
+                                status: Status::Normal,
+                            }) {
+                                error!("send account message error: {:?}", e);
+                            };
+                        }
+                        ObjectType::Position => {
+                            let sui_position: SuiPosition = m.deserialize()?;
+                            debug!("position: {:?}", sui_position);
+                            let position = Position::from(sui_position);
+                            if let Err(e) = watch_tx.send(Message {
+                                address: position.id.clone(),
+                                state: State::Position(position),
+                                status: Status::Normal,
+                            }) {
+                                error!("send position message error: {:?}", e);
+                            };
+                        }
+                        ObjectType::None => {
+                            error!("got none object type");
+                        }
                     }
                 }
+                _ => {
+                    error!("got none move object data");
+                }
             }
-            SuiRawData::Package(p) => {
-                debug!("got package: {:?}", p);
-            }
-        },
-        SuiObjectRead::NotExists(id) => {
-            warn!("Object not exists: {:?}", id);
-        }
-        SuiObjectRead::Deleted(s) => {
-            warn!("Object deleted: {:?}", s);
         }
     }
     Ok(())

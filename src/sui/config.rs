@@ -5,10 +5,14 @@ use std::sync::Arc;
 use std::{fs, path::PathBuf, str::FromStr, time::Duration};
 use sui::config::{SuiClientConfig, SuiEnv};
 use sui_keys::keystore::{FileBasedKeystore, Keystore};
-use sui_sdk::rpc_types::{SuiEvent, SuiTransactionResponse};
-use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
+use sui_sdk::rpc_types::{
+    ObjectChange, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
+};
+use sui_sdk::types::{
+    base_types::{ObjectID, SuiAddress, TransactionDigest},
+};
 // use sui_sdk::SuiClient;
-use sui_sdk::{SuiClient};
+use sui_sdk::SuiClient;
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -198,74 +202,85 @@ impl Config {
     fn init(&mut self) -> anyhow::Result<()> {
         // get scale move package info
         let scale_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
-        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.effects.events);
+        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
         // get coin package info
         let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
-        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.effects.events);
+        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.object_changes);
         // get oracle package info
         let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
-        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.effects.events);
+        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
         self.save()?;
         Ok(())
     }
 
-    fn set_value(&mut self, tx: &str, events: Vec<SuiEvent>) {
-        debug!("get publish info: {:?}", events);
-        for v in events {
-            match v {
-                SuiEvent::NewObject {
-                    package_id: _,
-                    transaction_module: _,
-                    sender: _,
-                    recipient: _,
-                    object_type,
-                    object_id,
-                    version: _,
-                } => {
-                    if object_type.as_str().ends_with("::scale::AdminCap") {
-                        self.scale_coin_admin_id = object_id;
+    fn set_value(&mut self, tx: &str, change: Option<Vec<ObjectChange>>) {
+        debug!("get publish changes info: {:?}", change);
+        if let Some(change) = change {
+            for v in change {
+                match v {
+                    ObjectChange::Created {
+                        sender: _,
+                        owner: _,
+                        object_type,
+                        object_id,
+                        version: _,
+                        digest: _,
+                    } => {
+                        if object_type.module.as_str() == "scale" {
+                            if object_type.name.as_str() == "AdminCap" {
+                                self.scale_coin_admin_id = object_id;
+                            }
+                            if object_type.name.as_str() == "Reserve" {
+                                self.scale_coin_reserve_id = object_id;
+                            }
+                        }
+                        if object_type.module.as_str() == "market"
+                            && object_type.name.as_str() == "MarketList"
+                        {
+                            self.scale_market_list_id = object_id;
+                        }
+                        if object_type.module.as_str() == "nft"
+                            && object_type.name.as_str() == "ScaleNFTFactory"
+                        {
+                            self.scale_nft_factory_id = object_id;
+                        }
+                        if object_type.module.as_str() == "admin"
+                            && object_type.name.as_str() == "AdminCap"
+                        {
+                            self.scale_admin_cap_id = object_id;
+                        }
+                        if object_type.module.as_str() == "oracle" {
+                            if object_type.name.as_str() == "AdminCap" {
+                                self.scale_oracle_admin_id = object_id;
+                            }
+                            if object_type.name.as_str() == "Root" {
+                                self.scale_oracle_root_id = object_id;
+                            }
+                        }
                     }
-                    if object_type.as_str().ends_with("::scale::Reserve") {
-                        self.scale_coin_reserve_id = object_id;
+                    ObjectChange::Published {
+                        package_id,
+                        version: _,
+                        digest: _,
+                        modules: _,
+                    } => {
+                        if tx == com::SUI_COIN_PUBLISH_TX {
+                            self.scale_coin_package_id = package_id;
+                        }
+                        if tx == com::SUI_SCALE_PUBLISH_TX {
+                            self.scale_package_id = package_id;
+                        }
+                        if tx == com::SUI_ORACLE_PUBLISH_TX {
+                            self.scale_oracle_package_id = package_id;
+                        }
                     }
-                    if object_type.as_str().ends_with("::market::MarketList") {
-                        self.scale_market_list_id = object_id;
-                    }
-                    if object_type.as_str().ends_with("::nft::ScaleNFTFactory") {
-                        self.scale_nft_factory_id = object_id;
-                    }
-                    if object_type.as_str().ends_with("::admin::AdminCap") {
-                        self.scale_admin_cap_id = object_id;
-                    }
-                    if object_type.as_str().ends_with("::oracle::AdminCap") {
-                        self.scale_oracle_admin_id = object_id;
-                    }
-                    if object_type.as_str().ends_with("::oracle::Root") {
-                        self.scale_oracle_root_id = object_id;
-                    }
+                    _ => {}
                 }
-                SuiEvent::Publish {
-                    sender: _,
-                    package_id,
-                    version: _,
-                    digest: _,
-                } => {
-                    if tx == com::SUI_COIN_PUBLISH_TX {
-                        self.scale_coin_package_id = package_id;
-                    }
-                    if tx == com::SUI_SCALE_PUBLISH_TX {
-                        self.scale_package_id = package_id;
-                    }
-                    if tx == com::SUI_ORACLE_PUBLISH_TX {
-                        self.scale_oracle_package_id = package_id;
-                    }
-                }
-                _ => {}
             }
         }
     }
 
-    fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionResponse> {
+    fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionBlockResponse> {
         let sui_config = self.get_sui_config()?;
         com::new_tokio_one_thread().block_on(async {
             debug!("get move package info");
@@ -273,12 +288,26 @@ impl Config {
                 let client = active_envs
                     .create_rpc_client(Some(Duration::from_secs(1000)))
                     .await;
+                // let len = tx.len();
+                // if len > 32 {
+                //     return Err(CliError::CliError("tx is too long".to_string()).into());
+                // }
+                // let mut dg: [u8; 32] = Default::default();
+                // dg[..len].clone_from_slice(tx.as_bytes());
                 match client {
                     Ok(client) => {
-                        let pm = TransactionDigest::from_str(tx).unwrap();
+                        let td = TransactionDigest::from_str(tx)?;
+                        let opt = SuiTransactionBlockResponseOptions {
+                            show_input: false,
+                            show_raw_input: false,
+                            show_effects: false,
+                            show_events: false,
+                            show_object_changes: true,
+                            show_balance_changes: false,
+                        };
                         let rs = client
                             .read_api()
-                            .get_transaction(pm)
+                            .get_transaction_with_options(td, opt)
                             .await
                             .map_err(|e| CliError::RpcError(e.to_string()))?;
                         Ok(rs)

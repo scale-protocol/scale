@@ -12,6 +12,7 @@ sui-keys = {  path = "../sui/crates/sui-keys" }
 sui-types = {  path = "../sui/crates/sui-types" }
 sui-adapter = {  path = "../sui/crates/sui-adapter" }
 sui-json-rpc-types = {  path = "../sui/crates/sui-json-rpc-types" }
+shared-crypto = { path = "../sui/crates/shared-crypto" }
 sui = {  path = "../sui/crates/sui" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream="0.1.8"
@@ -40,3 +41,4 @@ headers = "0.3"
 fastcrypto="0.1.0"
 influxdb2_client= {path="../influxdb2_client"}
 csv="1.1.6"
+move-core-types = { git = "https://github.com/move-language/move", rev = "60cec12b1ed9382836aa4c141e445656d39375e1", features = ["address32"] }

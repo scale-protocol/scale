@@ -4,9 +4,10 @@ use crate::sui::object;
 use crate::sui::object::ObjectType;
 use log::*;
 // use std::time::Duration;
-use sui_sdk::rpc_types::{SuiEvent, SuiEventEnvelope, SuiEventFilter};
+use sui_sdk::rpc_types::{SuiEvent, EventFilter};
 use sui_sdk::types::base_types::ObjectID;
-use sui_types::{event::EventID, query::EventQuery};
+use sui_types::{event::EventID};
+use move_core_types::identifier::Identifier;
 use tokio::sync::{mpsc::UnboundedSender, watch};
 use tokio::{
     task::JoinHandle,
@@ -35,8 +36,8 @@ impl EventSubscriber {
     ) -> anyhow::Result<()> {
         'connection: loop {
             info!("event sub connecting ...");
-            let filter = SuiEventFilter::All(vec![
-                SuiEventFilter::Package(ctx.config.scale_package_id),
+            let filter = EventFilter::All(vec![
+                EventFilter::Package(ctx.config.scale_package_id),
                 // SuiEventFilter::Module("enter".to_string()),
             ]);
             // todo: If the server is not running for the first time, it will continuously retry.
@@ -108,48 +109,8 @@ pub struct EventResult {
     pub is_new: bool,
 }
 
-fn get_change_object(event: SuiEventEnvelope) -> Option<EventResult> {
-    match event.event {
-        SuiEvent::NewObject {
-            package_id: _,
-            transaction_module: _,
-            sender: _,
-            recipient: _,
-            object_type,
-            object_id,
-            version: _,
-        } => Some(EventResult {
-            object_type: object_type.as_str().into(),
-            object_id,
-            is_new: true,
-        }),
-        SuiEvent::MutateObject {
-            package_id: _,
-            transaction_module: _,
-            sender: _,
-            object_type,
-            object_id,
-            version: _,
-        } => Some(EventResult {
-            object_type: object_type.as_str().into(),
-            object_id,
-            is_new: false,
-        }),
-        SuiEvent::TransferObject {
-            package_id: _,
-            transaction_module: _,
-            sender: _,
-            recipient: _,
-            object_type,
-            object_id,
-            version: _,
-        } => Some(EventResult {
-            object_type: object_type.as_str().into(),
-            object_id,
-            is_new: false,
-        }),
-        _ => None,
-    }
+fn get_change_object(_event: SuiEvent) -> Option<EventResult> {
+    None
 }
 
 pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> anyhow::Result<()> {
@@ -160,10 +121,10 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
         while let Ok(page) = ctx
             .client
             .event_api()
-            .get_events(
-                EventQuery::MoveModule {
+            .query_events(
+                EventFilter::MoveModule {
                     package: ctx.config.scale_package_id,
-                    module: "enter".to_string(),
+                    module: Identifier::from_utf8("enter".as_bytes().to_vec()).unwrap(),
                 },
                 cursor.clone(),
                 Some(2),
@@ -171,6 +132,7 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
             )
             .await
         {
+            log::debug!("page: {:?}", page);
             cursor = page.next_cursor;
             for event in page.data {
                 if let Some(event_rs) = get_change_object(event) {
