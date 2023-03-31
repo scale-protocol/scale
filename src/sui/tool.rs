@@ -48,7 +48,7 @@ impl Tool {
     pub fn get_p(&self) -> SuiTypeTag {
         SuiTypeTag::from(
             sui_types::parse_sui_type_tag(
-                format!("{}::pool::Tag", self.ctx.config.scale_package_id).as_str(),
+                format!("{}::pool::Scale", self.ctx.config.scale_package_id).as_str(),
             )
             .expect("cannot parse SuiTypeTag"),
         )

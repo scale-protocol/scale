@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiRawData};
+use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, SuiAddress},
@@ -17,6 +17,8 @@ use sui_sdk::types::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 extern crate serde;
+
+const OBJECT_MAX_REQUEST_LIMIT: usize = 100;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ObjectType {
     Market,
@@ -26,11 +28,11 @@ pub enum ObjectType {
 }
 impl<'a> From<&'a str> for ObjectType {
     fn from(value: &'a str) -> Self {
-        if value.contains("::market::Market") {
+        if value.contains("Market") {
             Self::Market
-        } else if value.contains("::account::Account") {
+        } else if value.contains("Account") {
             Self::Account
-        } else if value.contains("::position::Position") {
+        } else if value.contains("Position") {
             Self::Position
         } else {
             Self::None
@@ -48,6 +50,71 @@ impl fmt::Display for ObjectType {
         write!(f, "{}", t)
     }
 }
+pub async fn pull_dynamic_fields(
+    ctx: Ctx,
+    id: ObjectID,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
+    let mut cursor: Option<ObjectID> = None;
+    let mut object_ids: Vec<ObjectID> = Vec::new();
+    while let Ok(page) = ctx
+        .client
+        .read_api()
+        .get_dynamic_fields(id, cursor, Some(50))
+        .await
+    {
+        cursor = page.next_cursor;
+        for obj in page.data {
+            object_ids.push(obj.object_id);
+        }
+    }
+    if object_ids.len() > 0 {
+        pull_objects(ctx, object_ids, watch_tx).await?;
+    }
+    Ok(())
+}
+pub async fn pull_objects(
+    ctx: Ctx,
+    mut ids: Vec<ObjectID>,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
+    while ids.len() > OBJECT_MAX_REQUEST_LIMIT {
+        let ids_new = ids.split_off(OBJECT_MAX_REQUEST_LIMIT);
+        pull_objects_whith_limit(ctx.clone(), ids_new, watch_tx.clone()).await?;
+    }
+    pull_objects_whith_limit(ctx, ids, watch_tx).await?;
+    Ok(())
+}
+
+pub async fn pull_objects_whith_limit(
+    ctx: Ctx,
+    ids: Vec<ObjectID>,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
+    if ids.len() > OBJECT_MAX_REQUEST_LIMIT || ids.len() == 0 {
+        return Ok(());
+    }
+    let rs = ctx
+        .client
+        .read_api()
+        .multi_get_object_with_options(
+            ids,
+            SuiObjectDataOptions {
+                show_type: false,
+                show_owner: false,
+                show_previous_transaction: false,
+                show_display: false,
+                show_content: false,
+                show_bcs: true,
+                show_storage_rebate: false,
+            },
+        )
+        .await?;
+    for r in rs {
+        prase_object_response(r, watch_tx.clone()).await?;
+    }
+    Ok(())
+}
 
 pub async fn pull_object(
     ctx: Ctx,
@@ -59,8 +126,8 @@ pub async fn pull_object(
         show_owner: false,
         show_previous_transaction: false,
         show_display: false,
-        show_content: true,
-        show_bcs: false,
+        show_content: false,
+        show_bcs: true,
         show_storage_rebate: false,
     };
     let rs = ctx
@@ -68,10 +135,19 @@ pub async fn pull_object(
         .read_api()
         .get_object_with_options(id, opt)
         .await?;
+    prase_object_response(rs, watch_tx).await?;
+    Ok(())
+}
+
+pub async fn prase_object_response(
+    rs: SuiObjectResponse,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
     if let Some(e) = rs.error {
         error!("get object error: {:?}", e);
         return Ok(());
     }
+    // debug!("get object: {:?}", rs);
     if let Some(data) = rs.data {
         if let Some(bcs) = data.bcs {
             match bcs {

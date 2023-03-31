@@ -1,3 +1,4 @@
+use crate::com;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use fastcrypto::encoding::{decode_bytes_hex, Encoding, Hex};
@@ -6,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Error};
 use std::str::FromStr;
-use crate::com;
 
 pub const DENOMINATOR: u64 = 10000;
 pub const BURST_RATE: f64 = 0.5;
@@ -364,7 +364,7 @@ impl Position {
     }
 
     fn size(lot: u64, size: u64) -> u64 {
-        size * (lot/com::DENOMINATOR128)
+        size * (lot / com::DENOMINATOR128)
     }
 
     pub fn get_margin_size(&self, market: &Market) -> u64 {
@@ -404,8 +404,8 @@ impl Position {
                 return 0;
             }
             // todo check overflow
-           let r = max * market.get_fund_fee() / com::DENOMINATOR * self.get_fund_size() / min;
-           r as i64
+            let r = max * market.get_fund_fee() / com::DENOMINATOR * self.get_fund_size() / min;
+            r as i64
         }
     }
 }

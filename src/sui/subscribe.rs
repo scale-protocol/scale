@@ -1,13 +1,15 @@
+use std::str::FromStr;
+
 use crate::bot::machine::Message;
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
 use log::*;
 // use std::time::Duration;
-use sui_sdk::rpc_types::{SuiEvent, EventFilter};
+use move_core_types::{identifier::Identifier, language_storage::TypeTag};
+use sui_sdk::rpc_types::{EventFilter, SuiEvent};
 use sui_sdk::types::base_types::ObjectID;
-use sui_types::{event::EventID};
-use move_core_types::identifier::Identifier;
+use sui_types::event::EventID;
 use tokio::sync::{mpsc::UnboundedSender, watch};
 use tokio::{
     task::JoinHandle,
@@ -15,7 +17,7 @@ use tokio::{
 };
 // use tokio_stream::StreamExt;
 use futures::StreamExt;
-
+use serde_json::Value;
 pub struct EventSubscriber {
     task: JoinHandle<anyhow::Result<()>>,
     close_tx: watch::Sender<bool>,
@@ -41,11 +43,12 @@ impl EventSubscriber {
                 // SuiEventFilter::Module("enter".to_string()),
             ]);
             // todo: If the server is not running for the first time, it will continuously retry.
-            let client = ctx.config
-            .get_sui_config()?
-            .get_active_env()?
-            .create_rpc_client(Some(Duration::from_secs(10)))
-            .await?;
+            let client = ctx
+                .config
+                .get_sui_config()?
+                .get_active_env()?
+                .create_rpc_client(Some(Duration::from_secs(10)))
+                .await?;
             let mut sub = client.event_api().subscribe_event(filter).await?;
             debug!("event sub created ...");
             // let mut timer = time::interval(Duration::from_secs(5));
@@ -106,10 +109,23 @@ impl EventSubscriber {
 pub struct EventResult {
     pub object_type: ObjectType,
     pub object_id: ObjectID,
-    pub is_new: bool,
+    pub is_created: bool,
 }
 
-fn get_change_object(_event: SuiEvent) -> Option<EventResult> {
+fn get_change_object(event: SuiEvent) -> Option<EventResult> {
+    if event.type_.type_params.len() > 0 {
+        if let TypeTag::Struct(v) = &event.type_.type_params[0] {
+            if let Value::Object(obj) = &event.parsed_json {
+                let ot: ObjectType = v.name.as_str().into();
+                return Some(EventResult {
+                    object_type: ot,
+                    object_id: ObjectID::from_str(obj.get("id").unwrap().as_str().unwrap())
+                        .unwrap(),
+                    is_created: event.type_.name.as_str() == "Created",
+                });
+            }
+        }
+    }
     None
 }
 
@@ -118,6 +134,7 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
     tokio::spawn(async move {
         // get all events
         let mut cursor: Option<EventID> = None;
+        let mut object_ids: Vec<ObjectID> = Vec::new();
         while let Ok(page) = ctx
             .client
             .event_api()
@@ -127,29 +144,27 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
                     module: Identifier::from_utf8("enter".as_bytes().to_vec()).unwrap(),
                 },
                 cursor.clone(),
-                Some(2),
+                Some(100),
                 true,
             )
             .await
         {
-            log::debug!("page: {:?}", page);
             cursor = page.next_cursor;
             for event in page.data {
                 if let Some(event_rs) = get_change_object(event) {
-                    if event_rs.object_type != ObjectType::None && event_rs.is_new {
+                    println!("sync object: {:?}", event_rs);
+                    if event_rs.object_type != ObjectType::None && event_rs.is_created {
                         debug!("sync object: {:?}", event_rs);
-                        if let Err(e) =
-                            object::pull_object(ctx.clone(), event_rs.object_id, watch_tx.clone())
-                                .await
-                        {
-                            error!("event sub got error: {:?}", e);
-                        }
+                        object_ids.push(event_rs.object_id);
                     }
                 }
             }
-            if cursor.is_none() {
+            if page.has_next_page == false || cursor.is_none() {
                 break;
             }
+        }
+        if let Err(e) = object::pull_objects(ctx.clone(), object_ids, watch_tx).await {
+            error!("pull objects error: {:?}", e);
         }
     });
     info!("end sync all objects");
