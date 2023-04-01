@@ -72,7 +72,7 @@ then {
 elif [ "$1" = "deposit" ]
 then {
     echo "deposit"
-    scale sui trade deposit -t $account -c $scale_coin -a 100000000000
+    scale sui trade deposit -t $account -c $scale_coin -a 100
 }
 elif [ "$1" = "investment" ]
 then {

@@ -263,7 +263,12 @@ async fn keep_message(mp: SharedStateMap, msg: Message) {
             }
             let mut position_data = PositionDynamicData::default();
             position_data.id = position_id;
-            debug!("====> position id: {:?}===>CREAte?{:?},close?{:?}", position_data.id.to_string(), position_create, position_close);
+            debug!(
+                "position id: {:?}===>CREAte?{:?},close?{:?}",
+                position_data.id.to_string(),
+                position_create,
+                position_close
+            );
             if let Some(tx) = mp.ws_state.conns.get(&account_id) {
                 let mut message: Option<WsSrvMessage> = None;
                 if position_create {

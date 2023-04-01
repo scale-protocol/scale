@@ -5,8 +5,8 @@ use futures_util::{SinkExt, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{future::Future, sync::Arc};
 use tokio::{
     sync::{
@@ -118,11 +118,15 @@ impl WsSrvMessage {
             ),
             Self::PositionOpen(position) => Self::json_warp(
                 "position_open",
-                serde_json::to_string(&position).unwrap_or_default().as_str(),
+                serde_json::to_string(&position)
+                    .unwrap_or_default()
+                    .as_str(),
             ),
             Self::PositionClose(position) => Self::json_warp(
                 "position_close",
-                serde_json::to_string(&position).unwrap_or_default().as_str(),
+                serde_json::to_string(&position)
+                    .unwrap_or_default()
+                    .as_str(),
             ),
             Self::PriceUpdate(price) => Self::json_warp("price_update", price.as_str()),
             Self::Close => Self::json_warp("close", ""),
@@ -289,6 +293,7 @@ where
         first_runing.store(false, Ordering::Relaxed);
         match msg {
             Some(WsClientMessage::Txt(txt)) => {
+                debug!("Send text sub message: {}", txt);
                 sender.send(Message::Text(txt)).await?;
             }
             Some(WsClientMessage::Bin(bin)) => {
@@ -331,8 +336,7 @@ where
                     timer.reset();
                     match msg {
                         Message::Text(text) => {
-                            // debug!("Received text message: {}", text);
-                            debug!("Received text message");
+                            debug!("Received text message: {}", text);
                             if let Err(e)=tokio::spawn(handle_msg(WsClientMessage::Txt(text), &send_tx)).await{
                                 error!("Handle text message error: {:?}", e);
                             }

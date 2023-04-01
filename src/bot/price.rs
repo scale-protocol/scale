@@ -132,59 +132,63 @@ pub async fn sub_price(
 
     let req = serde_json::to_string(&sub_req)?;
 
-    let ws_client = WsClient::new(price_ws_url,Some(WsClientMessage::Txt(req)), move |msg, _send_tx| {
-        let sds = sds.clone();
-        let watch_tx = watch_tx.clone();
-        let influxdb_client = inf_db.client.clone();
-        let org = inf_db.org.clone();
-        let bucket = inf_db.bucket.clone();
-        let ws_price_tx = ws_price_tx.clone();
-        Box::pin(async move {
-            if let WsClientMessage::Txt(txt) = msg {
-                // debug!("price txt: {:?}", txt);
-                let resp: Response = serde_json::from_str(&txt)?;
-                let symbol_str = sds
-                    .get(&resp.price_feed.id)
-                    .ok_or_else(|| CliError::UnknownSymbol)?;
-                let op = OrgPrice {
-                    price: resp.price_feed.price.get_real_price(),
-                    update_time: resp.price_feed.price.publish_time,
-                    symbol: symbol_str.to_string(),
-                };
-                let watch_msg = Message {
-                    address: Address::from_str(resp.price_feed.id.as_str())?,
-                    state: State::Price(op.clone()),
-                    status: Status::Normal,
-                };
-                if let Err(e) = watch_tx.send(watch_msg) {
-                    error!("send watch msg error: {:?}", e);
-                }
-                if is_broadcast_price {
-                    if let Err(e) = ws_price_tx.send(op) {
-                        error!("send ws price msg error: {:?}", e);
+    let ws_client = WsClient::new(
+        price_ws_url,
+        Some(WsClientMessage::Txt(req)),
+        move |msg, _send_tx| {
+            let sds = sds.clone();
+            let watch_tx = watch_tx.clone();
+            let influxdb_client = inf_db.client.clone();
+            let org = inf_db.org.clone();
+            let bucket = inf_db.bucket.clone();
+            let ws_price_tx = ws_price_tx.clone();
+            Box::pin(async move {
+                if let WsClientMessage::Txt(txt) = msg {
+                    // debug!("price txt: {:?}", txt);
+                    let resp: Response = serde_json::from_str(&txt)?;
+                    let symbol_str = sds
+                        .get(&resp.price_feed.id)
+                        .ok_or_else(|| CliError::UnknownSymbol)?;
+                    let op = OrgPrice {
+                        price: resp.price_feed.price.get_real_price(),
+                        update_time: resp.price_feed.price.publish_time,
+                        symbol: symbol_str.to_string(),
+                    };
+                    let watch_msg = Message {
+                        address: Address::from_str(resp.price_feed.id.as_str())?,
+                        state: State::Price(op.clone()),
+                        status: Status::Normal,
+                    };
+                    if let Err(e) = watch_tx.send(watch_msg) {
+                        error!("send watch msg error: {:?}", e);
                     }
-                }
-                if !enable_db {
-                    return Ok(());
-                }
-                let _db_rs = influxdb_client
-                    .write(
-                        org.as_str(),
-                        bucket.as_str(),
-                        Precision::Seconds,
-                        stream::iter(resp.price_feed.get_data_points(symbol_str.to_string())?),
-                    )
-                    .await;
+                    if is_broadcast_price {
+                        if let Err(e) = ws_price_tx.send(op) {
+                            error!("send ws price msg error: {:?}", e);
+                        }
+                    }
+                    if !enable_db {
+                        return Ok(());
+                    }
+                    let _db_rs = influxdb_client
+                        .write(
+                            org.as_str(),
+                            bucket.as_str(),
+                            Precision::Seconds,
+                            stream::iter(resp.price_feed.get_data_points(symbol_str.to_string())?),
+                        )
+                        .await;
 
-                // debug!(
-                //     "write price to db success! {:?}",
-                //     resp.price_feed.get_data_points(symbol_str.to_string())?
-                // );
-                // debug!("......write price resp.....: {:?}", _db_rs);
-            }
-            Ok(())
-        })
-    })
+                    // debug!(
+                    //     "write price to db success! {:?}",
+                    //     resp.price_feed.get_data_points(symbol_str.to_string())?
+                    // );
+                    // debug!("......write price resp.....: {:?}", _db_rs);
+                }
+                Ok(())
+            })
+        },
+    )
     .await?;
     Ok((ws_client, PriceWatchRx(ws_price_rx)))
 }

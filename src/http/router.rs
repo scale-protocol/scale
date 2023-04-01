@@ -43,7 +43,13 @@ impl HttpServer {
         price_ws_rx: PriceWatchRx,
     ) -> Self {
         let price_status = service::new_price_status();
-        let router = router(mp.clone(), db.clone(), sds, price_status.clone(), price_ws_rx);
+        let router = router(
+            mp.clone(),
+            db.clone(),
+            sds,
+            price_status.clone(),
+            price_ws_rx,
+        );
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -56,8 +62,7 @@ impl HttpServer {
                 error!("server error: {}", e);
             }
         });
-        let price_broadcast =
-            service::PriceBroadcast::new(mp, price_status, db).await;
+        let price_broadcast = service::PriceBroadcast::new(mp, price_status, db).await;
         Self {
             shutdown_tx,
             price_broadcast,
@@ -118,6 +123,7 @@ async fn handler_404() -> impl IntoResponse {
         "Welcome to scale robot service. No resources found.",
     )
 }
+
 async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
@@ -125,10 +131,10 @@ async fn get_user_info(
     JsonResponse::from(service::get_account_info(state, address)).to_json()
 }
 async fn get_position_info(
-    Path((address,position_address)): Path<(String,String)>,
+    Path((address, position_address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    JsonResponse::from(service::get_position_info(state, address,position_address)).to_json()
+    JsonResponse::from(service::get_position_info(state, address, position_address)).to_json()
 }
 
 async fn get_user_position_list(
@@ -207,11 +213,11 @@ async fn ws_handler(
     if let Some(account) = q.account {
         if let Ok(add) = <Address as std::str::FromStr>::from_str(account.as_str()) {
             address = Some(add);
-        }else{
+        } else {
             return jr
-            .err(CliError::InvalidWsAddressSigner.into())
-            .to_json()
-            .into_response();
+                .err(CliError::InvalidWsAddressSigner.into())
+                .to_json()
+                .into_response();
         }
     }
     // if !account.is_some() {
@@ -224,5 +230,7 @@ async fn ws_handler(
     //         .into_response();
     //     }
     // }
-    return ws.on_upgrade(|socket| service::handle_ws(state, socket, address, price_status, price_ws_rx));
+    return ws.on_upgrade(|socket| {
+        service::handle_ws(state, socket, address, price_status, price_ws_rx)
+    });
 }

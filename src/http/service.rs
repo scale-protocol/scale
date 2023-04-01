@@ -144,6 +144,12 @@ pub async fn get_symbol_list(mp: machine::SharedStateMap) -> anyhow::Result<Vec<
     }
     Ok(rs)
 }
+pub struct PriceCache<T> {
+    start: i64,
+    end: i64,
+    value: T,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Price {
     #[serde(rename(deserialize = "_value", serialize = "value"))]
@@ -382,12 +388,7 @@ impl PriceBroadcast {
         let task = Task::new(
             "price broadcast",
             shutdown_tx,
-            tokio::spawn(broadcast_price(
-                mp,
-                price_status,
-                db.clone(),
-                shutdown_rx,
-            )),
+            tokio::spawn(broadcast_price(mp, price_status, db.clone(), shutdown_rx)),
         );
         Self { task }
     }
@@ -426,7 +427,7 @@ pub struct SubRequest {
 }
 
 pub async fn handle_ws(
-    mp: machine::SharedStateMap, 
+    mp: machine::SharedStateMap,
     mut socket: WebSocket,
     address: Option<Address>,
     price_status: DmPriceStatus,
@@ -436,7 +437,7 @@ pub async fn handle_ws(
     if let Some(address) = address.clone() {
         mp.ws_state.add_conn(address.clone(), tx);
     }
-    let symbols_set:DashSet<String> = DashSet::new();
+    let symbols_set: DashSet<String> = DashSet::new();
     loop {
         tokio::select! {
             Some(msg) = rx.recv() => {
