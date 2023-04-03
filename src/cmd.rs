@@ -4,7 +4,7 @@ use crate::bot;
 use crate::com;
 use crate::config::{self, Config};
 use crate::sui::{config::Config as suiConfig, tool};
-use clap::{arg, Command,ArgAction};
+use clap::{arg, ArgAction, Command};
 use log::debug;
 use std::path::PathBuf;
 extern crate chrono;
@@ -49,7 +49,9 @@ fn cli() -> Command {
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
                 .arg(arg!(-e --enable_db <DB_DISABLE> "If it is false, price data will not be written to influxdb,default false.").default_value("false").value_parser(clap::value_parser!(bool)))
-                .arg(arg!(-d --duration <DURATION> "If this option is set, the price of the simple price prediction machine will be updated within the interval. Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-d --duration <DURATION> r#"If this option is set, the price of the simple price prediction machine will be updated within the interval.
+                 Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5.
+                  -1 means disable updates, 0 means unlimited time updates."#).value_parser(clap::value_parser!(i64)))
         )
 }
 

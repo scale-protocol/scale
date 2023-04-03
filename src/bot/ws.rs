@@ -96,7 +96,7 @@ impl Clone for PriceWatchRx {
 #[derive(Debug, Clone)]
 pub enum WsSrvMessage {
     AccountUpdate(AccountDynamicData),
-    PositionUpdate(Vec<PositionDynamicData>),
+    PositionUpdate(PositionDynamicData),
     PositionOpen(PositionDynamicData),
     PositionClose(PositionDynamicData),
     PriceUpdate(String),

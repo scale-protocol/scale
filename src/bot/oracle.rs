@@ -15,6 +15,7 @@ pub type DmPriceFeed = DashMap<String, PriceFeed>;
 pub struct PriceOracle {
     task: Task,
 }
+#[derive(Debug, Clone)]
 pub struct PriceFeed {
     pub feed_address: String,
     pub price: i64,
@@ -25,26 +26,41 @@ impl PriceOracle {
     pub async fn new<C>(
         dpf: Arc<DmPriceFeed>,
         price_ws_rx: PriceWatchRx,
-        duration: Duration,
+        duration: i64,
         call: Arc<C>,
     ) -> Self
     where
         C: MoveCall + Send + Sync + 'static,
     {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let task = Task::new(
-            "price oracle",
-            shutdown_tx,
-            tokio::spawn(update_price(dpf, price_ws_rx, duration, shutdown_rx, call)),
-        );
-        Self { task }
+        if duration == 0 {
+            let task = Task::new(
+                "price oracle",
+                shutdown_tx,
+                tokio::spawn(update_price_now(dpf, price_ws_rx, shutdown_rx, call)),
+            );
+            return Self { task };
+        } else {
+            let task = Task::new(
+                "price oracle",
+                shutdown_tx,
+                tokio::spawn(update_price_interval(
+                    dpf,
+                    price_ws_rx,
+                    Duration::from_secs(duration as u64),
+                    shutdown_rx,
+                    call,
+                )),
+            );
+            return Self { task };
+        }
     }
     pub async fn shutdown(self) {
         self.task.shutdown().await;
     }
 }
 
-async fn update_price<C>(
+async fn update_price_interval<C>(
     dpf: Arc<DmPriceFeed>,
     mut price_ws_rx: PriceWatchRx,
     duration: Duration,
@@ -55,7 +71,7 @@ where
     C: MoveCall + Send + Sync + 'static,
 {
     let mut timer = time::interval(duration);
-    info!("start price oracle task");
+    info!("start interval price oracle task");
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
@@ -73,6 +89,65 @@ where
                 }
             }
         }
+    }
+    Ok(())
+}
+
+async fn update_price_now<C>(
+    dpf: Arc<DmPriceFeed>,
+    mut price_ws_rx: PriceWatchRx,
+    mut shutdown_rx: oneshot::Receiver<()>,
+    call: Arc<C>,
+) -> anyhow::Result<()>
+where
+    C: MoveCall + Send + Sync + 'static,
+{
+    info!("start price oracle task");
+    loop {
+        tokio::select! {
+            _ = (&mut shutdown_rx) => {
+                info!("got shutdown signal , break price broadcast!");
+                break;
+            },
+            Ok(price) = price_ws_rx.0.recv() => {
+                if let Err(e) = recv_price(dpf.clone(),&price) {
+                    error!("receiver and save oracle price error: {}", e);
+                }else{
+                    if let Err(e) = update_time_now(dpf.clone(),&price,call.clone()).await {
+                        error!("update price status error: {}", e);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn update_time_now<C>(
+    dpf: Arc<DmPriceFeed>,
+    org_price: &OrgPrice,
+    call: Arc<C>,
+) -> anyhow::Result<()>
+where
+    C: MoveCall + Send + Sync + 'static,
+{
+    let record = dpf.get(&org_price.symbol);
+    debug!("oracle recv price: {:?}", org_price);
+    if let Some(record) = record {
+        let mut price_feed = record.value().clone();
+        price_feed.price = org_price.price;
+        price_feed.timestamp = org_price.update_time;
+        if price_feed.price == 0 {
+            warn!("price is 0, skip it: {:?}", org_price.symbol);
+            return Ok(());
+        }
+        call.update_price(price_feed.feed_address.as_str(), price_feed.price as u64)
+            .await?;
+    } else {
+        debug!(
+            "symbol {} ,cannot found price feed record",
+            org_price.symbol
+        );
     }
     Ok(())
 }

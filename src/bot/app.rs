@@ -21,7 +21,6 @@ use std::{
         Arc,
     },
 };
-use tokio::time::Duration;
 use tokio::{runtime::Builder, runtime::Runtime, signal};
 
 pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -37,10 +36,13 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
         Some(i) => i.to_string(),
         None => "127.0.0.1".to_string(),
     };
-    let duration = match args.get_one::<u64>("duration") {
-        Some(d) => Duration::from_secs(*d),
-        None => Duration::from_secs(0),
+    let mut duration: i64 = match args.get_one::<i64>("duration") {
+        Some(d) => *d,
+        None => -1,
     };
+    if duration < 0 {
+        duration = -1;
+    }
     let address = format!("{}:{}", ip, port);
     let mut socket_addr: Option<SocketAddr> = None;
     if port > 0 {
@@ -118,7 +120,7 @@ fn run_sui_app(
     runtime: Runtime,
     socket_addr: Option<SocketAddr>,
     enable_db: bool,
-    duration: Duration,
+    duration: i64,
     tasks: usize,
 ) -> anyhow::Result<()> {
     let mut conf = SuiConfig::default();
@@ -131,8 +133,8 @@ fn run_sui_app(
     state_mp.load_active_account_from_local()?;
     let mp: machine::SharedStateMap = Arc::new(state_mp);
     runtime.block_on(async move {
-        let tool:Tool;
-        match Tool::new(conf.clone()).await{
+        let tool: Tool;
+        match Tool::new(conf.clone()).await {
             Ok(t) => {
                 tool = t;
             }
@@ -206,7 +208,7 @@ async fn run_bot<C>(
     price_ws_url: &str,
     enable_db: bool,
     tasks: usize,
-    duration: Duration,
+    duration: i64,
     call: Arc<C>,
 ) -> anyhow::Result<(
     machine::Watch,
@@ -228,24 +230,15 @@ where
         db.clone(),
         sds.clone(),
         enable_db,
-        socket_addr.is_some() || duration.as_secs() > 0,
+        socket_addr.is_some() || duration >= 0,
     )
     .await?;
     let http_srv = if let Some(addr) = socket_addr {
-        Some(
-            HttpServer::new(
-                &addr,
-                mp.clone(),
-                Arc::new(db),
-                sds,
-                price_ws_rx.clone(),
-            )
-            .await,
-        )
+        Some(HttpServer::new(&addr, mp.clone(), Arc::new(db), sds, price_ws_rx.clone()).await)
     } else {
         None
     };
-    let oracle = if duration.as_secs() > 0 {
+    let oracle = if duration >= 0 {
         Some(PriceOracle::new(dpf.clone(), price_ws_rx, duration, call).await)
     } else {
         None

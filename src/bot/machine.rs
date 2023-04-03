@@ -34,7 +34,8 @@ type DmPrice = DashMap<Address, Price>;
 type DmAccountPosition = DashMap<Address, DmPosition>;
 // key is symbol,value is market address set
 type DmIdxPriceMarket = DashMap<String, DashSet<Address>>;
-
+type DmAccountDynamicData = DashMap<Address, AccountDynamicData>;
+type DmPositionDynamicData = DashMap<Address, PositionDynamicData>;
 #[derive(Clone)]
 pub struct StateMap {
     pub market: DmMarket,
@@ -44,6 +45,8 @@ pub struct StateMap {
     pub price_market_idx: DmIdxPriceMarket,
     pub storage: Storage,
     pub ws_state: WsServerState,
+    pub account_dynamic_data: DmAccountDynamicData,
+    pub position_dynamic_data: DmPositionDynamicData,
 }
 impl StateMap {
     pub fn new(store_path: PathBuf, supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
@@ -61,6 +64,8 @@ impl StateMap {
             price_idx,
             price_market_idx,
             ws_state: WsServerState::new(supported_symbol),
+            account_dynamic_data: DashMap::new(),
+            position_dynamic_data: DashMap::new(),
         })
     }
 
@@ -212,10 +217,30 @@ async fn keep_message(mp: SharedStateMap, msg: Message) {
 
             if msg.status == Status::Deleted {
                 mp.account.remove(&msg.address);
-                save_as_history(mp, &mut keys, &State::Account(account))
+                save_as_history(mp.clone(), &mut keys, &State::Account(account.clone()))
             } else {
                 mp.account.insert(msg.address.clone(), account.clone());
-                save_to_active(mp, &mut keys, &State::Account(account))
+                save_to_active(mp.clone(), &mut keys, &State::Account(account.clone()))
+            }
+            if let Some(tx) = mp.ws_state.conns.get(&msg.address) {
+                let mut account_data = AccountDynamicData::default();
+                if let Some(data) = mp.account_dynamic_data.get(&msg.address) {
+                    account_data = data.clone();
+                } else {
+                    account_data.equity = account.balance as i64;
+                }
+                account_data.balance = account.balance as i64;
+                let r = tx
+                    .value()
+                    .send(WsSrvMessage::AccountUpdate(account_data.clone()))
+                    .await;
+                if let Err(e) = r {
+                    error!("send account dynamic data to ws channel data error: {}", e);
+                }
+                debug!(
+                    "send account dynamic data to ws channel data: {:?}",
+                    account_data
+                );
             }
         }
         State::Position(position) => {
@@ -261,6 +286,7 @@ async fn keep_message(mp: SharedStateMap, msg: Message) {
                 };
                 save_to_active(mp.clone(), &mut keys, &State::Position(position))
             }
+            // let position_data = mp.position_dynamic_data.get(&msg.address.clone());
             let mut position_data = PositionDynamicData::default();
             position_data.id = position_id;
             debug!(
@@ -580,64 +606,35 @@ where
     match mp.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
-            compute_pl_all_position(
-                &mp.market,
-                account,
-                &positions,
-                &mp.price_idx,
-                &mp.ws_state,
-                call,
-            )
-            .await;
+            compute_pl_all_position(mp.clone(), account, &positions, call).await;
         }
         None => {
-            debug!(
-                "no position for state map: {:?},try send account data",
-                address.to_string()
-            );
-            let mut account_data = AccountDynamicData::default();
-            account_data.balance = account.balance as i64;
-            account_data.equity = account.balance as i64;
-            let ws_tx = mp.ws_state.conns.get(&account.id);
-            if let Some(tx) = ws_tx {
-                let r = tx
-                    .value()
-                    .send(WsSrvMessage::AccountUpdate(account_data.clone()))
-                    .await;
-                if let Err(e) = r {
-                    error!("send account dynamic data to ws channel data error: {}", e);
-                }
-                debug!(
-                    "send account dynamic data to ws channel data,account id: {:?}",
-                    account.id
-                );
-            }
+            debug!("no position for state map : {:?}", address);
         }
     }
 }
 
 async fn compute_pl_all_position<C>(
-    dm_market: &DmMarket,
+    mp: SharedStateMap,
     account: &Account,
     dm_position: &DmPosition,
-    dm_price: &DmPrice,
-    ws_state: &WsServerState,
+    // dm_price: &DmPrice,
+    // ws_state: &WsServerState,
     call: Arc<C>,
 ) where
     C: MoveCall,
 {
     let mut account_data = AccountDynamicData::default();
+    account_data.balance = account.balance as i64;
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
     let mut pl_full = 0i64;
-    let ws_tx = ws_state.conns.get(&account.id);
-    let mut position_data: Vec<PositionDynamicData> = Vec::with_capacity(dm_position.len());
     for v in dm_position.iter() {
         let position = v.value();
         if position.status != PositionStatus::Normal {
             continue;
         }
-        match dm_market.get(&position.market_id) {
-            Some(market) => match dm_price.get(&position.market_id) {
+        match mp.market.get(&position.market_id) {
+            Some(market) => match mp.price_idx.get(&position.market_id) {
                 Some(price) => {
                     let pl = position.get_pl(&price);
                     let fund_fee = position.get_position_fund_fee(&market);
@@ -657,11 +654,27 @@ async fn compute_pl_all_position<C>(
                             // }
                         }
                     }
-                    position_data.push(PositionDynamicData {
+                    let position_dynamic_data = PositionDynamicData {
                         id: position.id.copy(),
                         profit_rate: com::f64_round(pl as f64 / position.margin as f64),
                         profit: pl,
-                    });
+                    };
+                    // send position dynamic data to ws
+                    if let Some(tx) = mp.ws_state.conns.get(&account.id) {
+                        let r = tx
+                            .value()
+                            .send(WsSrvMessage::PositionUpdate(position_dynamic_data.clone()))
+                            .await;
+                        if let Err(e) = r {
+                            error!("send position dynamic data to ws channel data error: {}", e);
+                        }
+                        debug!(
+                            "send position dynamic data to ws channel data,position id: {:?}",
+                            position.id
+                        );
+                    }
+                    mp.position_dynamic_data
+                        .insert(position.id.copy(), position_dynamic_data);
                     position_sort.push(PositionSort {
                         profit: pl_and_fund_fee,
                         position_address: position.id.copy(),
@@ -731,8 +744,10 @@ async fn compute_pl_all_position<C>(
         account_data.profit_rate =
             com::f64_round(account_data.profit as f64 / account.margin_total as f64);
     }
+    mp.account_dynamic_data
+        .insert(account.id.copy(), account_data.clone());
     // send to ws
-    if let Some(tx) = ws_tx {
+    if let Some(tx) = mp.ws_state.conns.get(&account.id) {
         let r = tx
             .value()
             .send(WsSrvMessage::AccountUpdate(account_data.clone()))
@@ -744,21 +759,5 @@ async fn compute_pl_all_position<C>(
             "send account dynamic data to ws channel data: {:?}",
             account_data
         );
-        if !position_data.is_empty() {
-            let r = tx
-                .value()
-                .send(WsSrvMessage::PositionUpdate(position_data.clone()))
-                .await;
-            if let Err(e) = r {
-                error!(
-                    "send positions dynamic data to ws channel data error: {}",
-                    e
-                );
-            }
-        }
-        debug!(
-            "send positions dynamic data to ws channel data: {:?}",
-            position_data
-        )
     }
 }
