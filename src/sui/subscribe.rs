@@ -152,7 +152,6 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
             cursor = page.next_cursor;
             for event in page.data {
                 if let Some(event_rs) = get_change_object(event) {
-                    println!("sync object: {:?}", event_rs);
                     if event_rs.object_type != ObjectType::None && event_rs.is_created {
                         debug!("sync object: {:?}", event_rs);
                         object_ids.push(event_rs.object_id);
