@@ -35,14 +35,14 @@ impl PriceOracle {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         if duration == 0 {
             let task = Task::new(
-                "price oracle",
+                "price now oracle",
                 shutdown_tx,
                 tokio::spawn(update_price_now(dpf, price_ws_rx, shutdown_rx, call)),
             );
             return Self { task };
         } else {
             let task = Task::new(
-                "price oracle",
+                "price interval oracle",
                 shutdown_tx,
                 tokio::spawn(update_price_interval(
                     dpf,
@@ -102,7 +102,7 @@ async fn update_price_now<C>(
 where
     C: MoveCall + Send + Sync + 'static,
 {
-    info!("start price oracle task");
+    info!("start now price oracle task");
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
@@ -110,12 +110,8 @@ where
                 break;
             },
             Ok(price) = price_ws_rx.0.recv() => {
-                if let Err(e) = recv_price(dpf.clone(),&price) {
-                    error!("receiver and save oracle price error: {}", e);
-                }else{
-                    if let Err(e) = update_time_now(dpf.clone(),&price,call.clone()).await {
-                        error!("update price status error: {}", e);
-                    }
+                if let Err(e) = update_time_now(dpf.clone(),&price,call.clone()).await {
+                    error!("update price status error: {}", e);
                 }
             }
         }
@@ -132,7 +128,7 @@ where
     C: MoveCall + Send + Sync + 'static,
 {
     let record = dpf.get(&org_price.symbol);
-    debug!("oracle recv price: {:?}", org_price);
+    debug!("oracle update price now: {:?}", org_price);
     if let Some(record) = record {
         let mut price_feed = record.value().clone();
         price_feed.price = org_price.price;
