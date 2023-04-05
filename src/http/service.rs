@@ -196,10 +196,10 @@ fn get_price_history_query(
 
 fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
     match range {
-        "1H" => Ok(("-1y".to_string(), "5h".to_string())),
-        "1D" => Ok(("-1y".to_string(), "1d".to_string())),
+        "1H" => Ok(("-4d".to_string(), "1h".to_string())),
+        "1D" => Ok(("-90d".to_string(), "1d".to_string())),
         "1W" => Ok(("-1y".to_string(), "1w".to_string())),
-        "1M" => Ok(("-1y".to_string(), "1mo".to_string())),
+        "1M" => Ok(("-10y".to_string(), "1mo".to_string())),
         "1Y" => Ok(("-10y".to_string(), "1y".to_string())),
         _ => Err(CliError::InvalidRange.into()),
     }
