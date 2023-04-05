@@ -42,3 +42,4 @@ fastcrypto="0.1.0"
 influxdb2_client= {path="../influxdb2_client"}
 csv="1.1.6"
 move-core-types = { git = "https://github.com/move-language/move", rev = "60cec12b1ed9382836aa4c141e445656d39375e1", features = ["address32"] }
+cached="0.42.0"

@@ -646,12 +646,12 @@ async fn compute_pl_all_position<C>(
                     } else {
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
                             // close position force
-                            // if let Err(e) = call
-                            //     .burst_position(account.id.clone(), position.id.copy())
-                            //     .await
-                            // {
-                            //     error!("burst position error: {}", e);
-                            // }
+                            if let Err(e) = call
+                                .burst_position(account.id.clone(), position.id.copy())
+                                .await
+                            {
+                                error!("burst position error: {}", e);
+                            }
                         }
                     }
                     let position_dynamic_data = PositionDynamicData {
@@ -705,12 +705,12 @@ async fn compute_pl_all_position<C>(
         position_sort.sort_by(|a, b| b.profit.cmp(&a.profit).reverse());
         for p in position_sort {
             // close position
-            // if let Err(e) = call
-            //     .burst_position(account.id.clone(), p.position_address)
-            //     .await
-            // {
-            //     error!("burst position error: {}", e);
-            // }
+            if let Err(e) = call
+                .burst_position(account.id.clone(), p.position_address)
+                .await
+            {
+                error!("burst position error: {}", e);
+            }
             match p.direction {
                 Direction::Buy => {
                     if margin_full_buy_total < p.margin {

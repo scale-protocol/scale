@@ -183,7 +183,7 @@ pub async fn sub_price(
                     //     "write price to db success! {:?}",
                     //     resp.price_feed.get_data_points(symbol_str.to_string())?
                     // );
-                    // debug!("......write price resp.....: {:?}", _db_rs);
+                    debug!("......write price resp.....: {:?}", _db_rs);
                 }
                 Ok(())
             })

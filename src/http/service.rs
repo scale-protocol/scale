@@ -7,6 +7,7 @@ use crate::bot::{
 use crate::bot::{machine, storage};
 use crate::com::{self, CliError, Task};
 use axum::extract::ws::{Message, WebSocket};
+use cached::proc_macro::once;
 use csv::ReaderBuilder;
 use dashmap::{DashMap, DashSet};
 use influxdb2_client::models::Query;
@@ -152,20 +153,15 @@ pub async fn get_symbol_list(mp: machine::SharedStateMap) -> anyhow::Result<Vec<
     }
     Ok(rs)
 }
-pub struct PriceCache<T> {
-    start: i64,
-    end: i64,
-    value: T,
-}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Price {
     #[serde(rename(deserialize = "_value", serialize = "value"))]
     value: i64,
     #[serde(rename(deserialize = "_start", serialize = "time"))]
     time: String,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PriceColumn {
     #[serde(rename(deserialize = "_start", serialize = "start_time"))]
     start_time: String,
@@ -212,7 +208,7 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
         _ => Err(CliError::InvalidRange.into()),
     }
 }
-
+#[once(time = 120, result = true, sync_writes = true)]
 pub async fn get_price_history(
     symbol: Option<String>,
     range: Option<String>,
@@ -290,6 +286,7 @@ fn get_24h_price_status_query(bucket: &str, symbol: &str, feed: &str) -> String 
     )
 }
 
+#[once(time = 120, result = true, sync_writes = true)]
 pub async fn get_price_history_column(
     symbol: Option<String>,
     range: Option<String>,
