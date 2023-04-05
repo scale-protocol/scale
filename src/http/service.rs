@@ -110,6 +110,14 @@ pub async fn get_market_list(
     match prefix {
         storage::Prefix::Active => {
             for i in mp.market.iter() {
+                if i.value().id
+                    != Address::from_str(
+                        "0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee",
+                    )
+                    .unwrap()
+                {
+                    continue;
+                }
                 rs.push(i.value().clone());
             }
         }
@@ -122,9 +130,6 @@ pub async fn get_market_list(
                             .map_err(|e| CliError::JsonError(e.to_string()))?;
                         match values {
                             State::Market(m) => {
-                                if m.id != Address::from_str("0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee").unwrap(){
-                                    continue;
-                                }
                                 rs.push(m);
                             }
                             _ => {}
