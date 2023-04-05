@@ -122,6 +122,9 @@ pub async fn get_market_list(
                             .map_err(|e| CliError::JsonError(e.to_string()))?;
                         match values {
                             State::Market(m) => {
+                                if m.id != Address::from_str("0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee").unwrap(){
+                                    continue;
+                                }
                                 rs.push(m);
                             }
                             _ => {}
@@ -326,6 +329,7 @@ pub type DmPriceStatus = Arc<DashMap<String, PriceStatus>>;
 pub fn new_price_status() -> DmPriceStatus {
     Arc::new(DashMap::new())
 }
+
 async fn update_price_status(
     mp: machine::SharedStateMap,
     dps: &DmPriceStatus,
