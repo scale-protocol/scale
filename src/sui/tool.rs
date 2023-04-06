@@ -84,7 +84,7 @@ impl Tool {
                 _ => {}
             });
         }
-        println!("exec: {:?} , error: {:?}", tx.digest.to_string(),tx.errors);
+        println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
         Ok(())
     }
 
@@ -922,6 +922,7 @@ impl MoveCall for Tool {
         account_id: Address,
         position_id: Address,
     ) -> anyhow::Result<()> {
+        return Ok(());
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
