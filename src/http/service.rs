@@ -292,6 +292,7 @@ async fn get_price_history_from_db(
         .from_reader(db_query_rs.as_bytes())
         .deserialize()
         .collect::<Result<Vec<Price>, _>>()?;
+    debug!("price db query result: {:?}", rs);
     Ok(rs)
 }
 
@@ -403,6 +404,7 @@ async fn get_price_history_column_from_db(
         .from_reader(db_query_rs.as_bytes())
         .deserialize()
         .collect::<Result<Vec<PriceColumn>, _>>()?;
+    debug!("price db query result: {:?}", rs);
     Ok(rs)
 }
 pub async fn get_price_history_column(
