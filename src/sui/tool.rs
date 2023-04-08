@@ -343,7 +343,7 @@ impl Tool {
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![],
             )
             .await?;
         self.exec(transaction_data).await
@@ -374,7 +374,7 @@ impl Tool {
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
                     SuiJsonValue::new(json!(recipient.as_bytes()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![],
             )
             .await?;
         self.exec(transaction_data).await
@@ -409,7 +409,7 @@ impl Tool {
                     SuiJsonValue::new(json!(amount.to_string()))?,
                     SuiJsonValue::new(json!(recipient.as_bytes()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![],
             )
             .await?;
         self.exec(transaction_data).await
@@ -440,7 +440,7 @@ impl Tool {
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![],
             )
             .await?;
         self.exec(transaction_data).await
