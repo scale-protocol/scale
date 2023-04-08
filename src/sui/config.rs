@@ -8,9 +8,7 @@ use sui_keys::keystore::{FileBasedKeystore, Keystore};
 use sui_sdk::rpc_types::{
     ObjectChange, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
 };
-use sui_sdk::types::{
-    base_types::{ObjectID, SuiAddress, TransactionDigest},
-};
+use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
 // use sui_sdk::SuiClient;
 use sui_sdk::SuiClient;
 extern crate serde;
@@ -239,7 +237,7 @@ impl Config {
                         {
                             self.scale_market_list_id = object_id;
                         }
-                        if object_type.module.as_str() == "nft"
+                        if object_type.module.as_str() == "bond"
                             && object_type.name.as_str() == "ScaleNFTFactory"
                         {
                             self.scale_nft_factory_id = object_id;
