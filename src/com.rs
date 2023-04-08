@@ -9,7 +9,7 @@ use tokio::{
 
 pub const SUI_COIN_PUBLISH_TX: &str = "8tcvdnTUUMPVGdekMqi8Rxtyp2WrL9ZbXD6mLwQggTjU";
 pub const SUI_ORACLE_PUBLISH_TX: &str = "4ca8ifZCRY5UzkenDdd7efmn9kVjya8XMyygMdVrHchg";
-pub const SUI_SCALE_PUBLISH_TX: &str = "82A4q6sbzBCj2YVwjjkZMRJp8TtBoXsyyroX8VBtvZSt";
+pub const SUI_SCALE_PUBLISH_TX: &str = "FfE1ThGwGrN1L91mLRPmbSeVd9BQitSdDJGDErLj2Gdz";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;

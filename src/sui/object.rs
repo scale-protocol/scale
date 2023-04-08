@@ -496,6 +496,9 @@ impl From<SuiPosition> for Position {
             close_operator: Address::new(p.close_operator.to_vec()),
             market_id: Address::new(p.market_id.bytes.to_vec()),
             account_id: Address::new(p.account_id.bytes.to_vec()),
+            symbol: "".to_string(),
+            symbol_short: "".to_string(),
+            icon: "".to_string(),
         }
     }
 }

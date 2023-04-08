@@ -74,6 +74,11 @@ then {
     echo "deposit"
     scale sui trade deposit -t $account -c $scale_coin -a 100
 }
+elif [ "$1" = "withdrawal" ]
+then {
+    echo "withdrawal"
+    scale sui trade withdrawal -t $account -a 10000
+}
 elif [ "$1" = "investment" ]
 then {
     echo "investment"
@@ -86,6 +91,6 @@ then {
     scale sui trade trigger_update_opening_price -m $market
 }
 else {
-    echo "usage: sh init.sh [write|coin|scale|open_position|close_position|oracle|deposit|upprice|investment]"
+    echo "usage: sh init.sh [write|coin|scale|open_position|close_position|oracle|deposit|withdrawal|upprice|investment]"
 }
 fi

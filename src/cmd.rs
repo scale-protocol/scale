@@ -133,18 +133,18 @@ fn sui_trade() -> Command {
         )
         .subcommand(
             Command::new("deposit")
-                .about("Withdrawal of trading account balance.")
-                .arg_required_else_help(true)
-                .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
-                .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
-                .arg(
-                    arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
-                        .value_parser(clap::value_parser!(u64)),
-                ),
+            .about("Cash deposit.")
+            .arg_required_else_help(true)
+            .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
+            .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
+            .arg(
+                arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
+                .value_parser(clap::value_parser!(u64)),
+            ),
         )
         .subcommand(
             Command::new("withdrawal")
-                .about("Cash deposit.")
+            .about("Withdrawal of trading account balance.")
                 .arg_required_else_help(true)
                 .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
                 .arg(
@@ -345,6 +345,52 @@ fn sui_trade() -> Command {
                 .arg(arg!(-p --position <POSITION> "Position object id."))
                 ,
         )
+        .subcommand(
+            Command::new("mint")
+            .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                ,
+        )
+        .subcommand(
+            Command::new("mint_multiple")
+            .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
+                        .value_parser(clap::value_parser!(u64)),
+                )
+                ,
+        )
+        .subcommand(
+            Command::new("mint_recipient")
+            .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address."))
+                ,
+        )
+        .subcommand(
+            Command::new("mint_multiple_recipient")
+            .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
+                        .value_parser(clap::value_parser!(u64)),
+                )
+                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address."))
+                ,
+        )
 }
 fn sui() -> Command {
     Command::new("config")
@@ -431,6 +477,21 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("deposit", matches)) => {
                             tool.deposit(matches).await?;
+                        }
+                        Some(("withdrawal", matches)) => {
+                            tool.withdrawal(matches).await?;
+                        }
+                        Some(("mint", matches)) => {
+                            tool.mint(matches).await?;
+                        }
+                        Some(("mint_multiple", matches)) => {
+                            tool.mint_multiple(matches).await?;
+                        }
+                        Some(("mint_recipient", matches)) => {
+                            tool.mint_recipient(matches).await?;
+                        }
+                        Some(("mint_multiple_recipient", matches)) => {
+                            tool.mint_multiple_recipient(matches).await?;
                         }
                         Some(("add_admin_member", matches)) => {
                             tool.add_admin_member(matches).await?;

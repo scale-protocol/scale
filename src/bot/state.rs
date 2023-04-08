@@ -348,6 +348,9 @@ pub struct Position {
     /// Market account number of the position
     pub market_id: Address,
     pub account_id: Address,
+    pub symbol: String,
+    pub symbol_short: String,
+    pub icon: String,
 }
 
 impl Position {

@@ -25,6 +25,7 @@ use sui_types::messages::ExecuteTransactionRequestType;
 
 const COIN_PACKAGE_NAME: &str = "scale";
 const SCALE_PACKAGE_NAME: &str = "enter";
+const SCALE_NFT_PACKAGE_NAME: &str = "nft";
 const SCALE_ORACLE_NAME: &str = "oracle";
 pub struct Tool {
     ctx: Ctx,
@@ -312,6 +313,131 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::new(json!(amount.to_string()))?,
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn mint(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let name = args
+            .get_one::<String>("name")
+            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+        let description = args
+            .get_one::<String>("description")
+            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+        let img_url = args
+            .get_one::<String>("img_url")
+            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_NFT_PACKAGE_NAME,
+                "mint",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::new(json!(name.as_bytes()))?,
+                    SuiJsonValue::new(json!(description.as_bytes()))?,
+                    SuiJsonValue::new(json!(img_url.as_bytes()))?,
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn mint_recipient(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let name = args
+            .get_one::<String>("name")
+            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+        let description = args
+            .get_one::<String>("description")
+            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+        let img_url = args
+            .get_one::<String>("img_url")
+            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+        let recipient = args
+            .get_one::<String>("recipient")
+            .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_NFT_PACKAGE_NAME,
+                "mint_recipient",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::new(json!(name.as_bytes()))?,
+                    SuiJsonValue::new(json!(description.as_bytes()))?,
+                    SuiJsonValue::new(json!(img_url.as_bytes()))?,
+                    SuiJsonValue::new(json!(recipient.as_bytes()))?,
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn mint_multiple_recipient(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let name = args
+            .get_one::<String>("name")
+            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+        let description = args
+            .get_one::<String>("description")
+            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+        let img_url = args
+            .get_one::<String>("img_url")
+            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+        let amount = args
+            .get_one::<u64>("amount")
+            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+        let recipient = args
+            .get_one::<String>("recipient")
+            .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_NFT_PACKAGE_NAME,
+                "mint_multiple_recipient",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::new(json!(name.as_bytes()))?,
+                    SuiJsonValue::new(json!(description.as_bytes()))?,
+                    SuiJsonValue::new(json!(img_url.as_bytes()))?,
+                    SuiJsonValue::new(json!(amount.to_string()))?,
+                    SuiJsonValue::new(json!(recipient.as_bytes()))?,
+                ],
+                vec![self.get_p(), self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn mint_multiple(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let name = args
+            .get_one::<String>("name")
+            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+        let description = args
+            .get_one::<String>("description")
+            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+        let img_url = args
+            .get_one::<String>("img_url")
+            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+        let amount = args
+            .get_one::<u64>("amount")
+            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_NFT_PACKAGE_NAME,
+                "mint_multiple",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::new(json!(name.as_bytes()))?,
+                    SuiJsonValue::new(json!(description.as_bytes()))?,
+                    SuiJsonValue::new(json!(img_url.as_bytes()))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![self.get_p(), self.get_t()],

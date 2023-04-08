@@ -263,7 +263,7 @@ async fn keep_message(
                 );
             }
         }
-        State::Position(position) => {
+        State::Position(mut position) => {
             let mut keys = keys
                 .add(tag)
                 .add(position.account_id.to_string())
@@ -272,6 +272,13 @@ async fn keep_message(
             let mut position_close = false;
             let account_id = position.account_id.copy();
             let position_id = position.id.copy();
+
+            if let Some(m) = mp.market.get(&position.market_id) {
+                position.symbol = m.symbol.clone();
+                position.symbol_short = m.symbol_short.clone();
+                position.icon = m.icon.clone();
+            }
+
             if msg.status == Status::Deleted
                 || position.status == PositionStatus::NormalClosing
                 || position.status == PositionStatus::ForcedClosing
@@ -327,6 +334,11 @@ async fn keep_message(
                         error!("send position dynamic data to ws channel data error: {}", e);
                     }
                 }
+            } else {
+                debug!(
+                    "account id: {:?} not found in ws channel",
+                    account_id.to_string()
+                );
             }
         }
 
@@ -639,7 +651,7 @@ where
             compute_pl_all_position(mp.clone(), account, &positions, call).await;
         }
         None => {
-            debug!("no position for state map : {:?}", address);
+            debug!("no position for state map : {:?}", address.to_string());
         }
     }
 }
@@ -700,8 +712,10 @@ async fn compute_pl_all_position<C>(
                         }
                         debug!(
                             "send position dynamic data to ws channel data,position id: {:?}",
-                            position.id
+                            position.id.to_string()
                         );
+                    } else {
+                        debug!("no ws channel for account id: {:?}", account.id.to_string());
                     }
                     mp.position_dynamic_data
                         .insert(position.id.copy(), position_dynamic_data);
@@ -789,5 +803,7 @@ async fn compute_pl_all_position<C>(
             "send account dynamic data to ws channel data: {:?}",
             account_data
         );
+    } else {
+        debug!("no ws channel for account id: {:?}", account.id.to_string());
     }
 }
