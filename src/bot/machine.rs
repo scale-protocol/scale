@@ -5,7 +5,8 @@ use crate::bot::state::{
 };
 use crate::bot::storage::{self, Storage};
 use crate::bot::ws::{
-    AccountDynamicData, PositionDynamicData, SupportedSymbol, WsServerState, WsSrvMessage,
+    AccountDynamicData, PositionDynamicData, SpreadData, SpreadWatchRx, SupportedSymbol,
+    WsServerState, WsSrvMessage,
 };
 use crate::com::{self, Task};
 use chrono::Utc;
@@ -16,6 +17,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{
     sync::{
+        broadcast,
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
@@ -140,17 +142,28 @@ pub struct Message {
     pub status: Status,
 }
 impl Watch {
-    pub async fn new(mp: SharedStateMap) -> Self {
+    pub async fn new(mp: SharedStateMap, is_write_spread: bool) -> (Self, SpreadWatchRx) {
         let (watch_tx, watch_rx) = mpsc::unbounded_channel::<Message>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        Self {
-            watch_tx,
-            task: Task::new(
-                "watch",
-                shutdown_tx,
-                tokio::spawn(watch_message(mp, watch_rx, shutdown_rx)),
-            ),
-        }
+        let (spread_tx, spread_rx) =
+            broadcast::channel::<SpreadData>(mp.ws_state.supported_symbol.len() * 10);
+        (
+            Self {
+                watch_tx,
+                task: Task::new(
+                    "watch",
+                    shutdown_tx,
+                    tokio::spawn(watch_message(
+                        mp,
+                        watch_rx,
+                        spread_tx,
+                        shutdown_rx,
+                        is_write_spread,
+                    )),
+                ),
+            },
+            SpreadWatchRx(spread_rx),
+        )
     }
     pub async fn shutdown(self) {
         self.task.shutdown().await;
@@ -160,7 +173,9 @@ impl Watch {
 async fn watch_message(
     mp: SharedStateMap,
     mut watch_rx: UnboundedReceiver<Message>,
+    spread_tx: broadcast::Sender<SpreadData>,
     mut shutdown_rx: oneshot::Receiver<()>,
+    is_write_spread: bool,
 ) -> anyhow::Result<()> {
     info!("start scale data watch ...");
     loop {
@@ -173,7 +188,7 @@ async fn watch_message(
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg).await;
+                        keep_message(mp.clone(), msg,spread_tx.clone(),is_write_spread).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -185,7 +200,12 @@ async fn watch_message(
     Ok(())
 }
 
-async fn keep_message(mp: SharedStateMap, msg: Message) {
+async fn keep_message(
+    mp: SharedStateMap,
+    msg: Message,
+    spread_tx: broadcast::Sender<SpreadData>,
+    is_write_spread: bool,
+) {
     let tag = msg.state.to_string();
     let keys = storage::Keys::new(storage::Prefix::Active);
     match msg.state {
@@ -323,6 +343,16 @@ async fn keep_message(mp: SharedStateMap, msg: Message) {
                                 continue;
                             }
                             let price = m.get_price(org_price.price as u64);
+                            if is_write_spread {
+                                let spread_data = SpreadData {
+                                    symbol: org_price.symbol.clone(),
+                                    id: m.id.clone(),
+                                    spread: price.spread / com::DENOMINATOR,
+                                };
+                                if let Err(e) = spread_tx.send(spread_data) {
+                                    error!("send spread data to channel error: {}", e);
+                                }
+                            }
                             price_mp.insert(m.id.clone(), price);
                         }
                     }
@@ -656,7 +686,7 @@ async fn compute_pl_all_position<C>(
                     }
                     let position_dynamic_data = PositionDynamicData {
                         id: position.id.copy(),
-                        profit_rate: com::f64_round(pl as f64 / position.margin as f64),
+                        profit_rate: com::f64_round_4(pl as f64 / position.margin as f64),
                         profit: pl,
                     };
                     // send position dynamic data to ws
@@ -740,9 +770,9 @@ async fn compute_pl_all_position<C>(
     account_data.equity += account.balance as i64;
     if account.margin_total != 0 {
         account_data.margin_percentage =
-            com::f64_round(account_data.equity as f64 / account.margin_total as f64);
+            com::f64_round_4(account_data.equity as f64 / account.margin_total as f64);
         account_data.profit_rate =
-            com::f64_round(account_data.profit as f64 / account.margin_total as f64);
+            com::f64_round_4(account_data.profit as f64 / account.margin_total as f64);
     }
     mp.account_dynamic_data
         .insert(account.id.copy(), account_data.clone());

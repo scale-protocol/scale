@@ -53,6 +53,10 @@ pub fn f64_round(f: f64) -> f64 {
     (f * 100.0).round() / 100.0
 }
 
+pub fn f64_round_4(f: f64) -> f64 {
+    (f * 10000.0).round() / 10000.0
+}
+
 pub fn new_tokio_one_thread() -> tokio::runtime::Runtime {
     Builder::new_current_thread()
         .enable_all()

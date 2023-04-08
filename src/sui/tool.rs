@@ -922,8 +922,7 @@ impl MoveCall for Tool {
         account_id: Address,
         position_id: Address,
     ) -> anyhow::Result<()> {
-        return Ok(());
-        let transaction_data = self
+        let _transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_PACKAGE_NAME,
@@ -941,7 +940,9 @@ impl MoveCall for Tool {
                 vec![self.get_p(), self.get_t()],
             )
             .await?;
-        self.exec(transaction_data).await
+        return Ok(());
+
+        // self.exec(transaction_data).await
     }
 
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()> {

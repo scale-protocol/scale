@@ -220,7 +220,7 @@ async fn run_bot<C>(
 where
     C: MoveCall + Send + Sync + 'static,
 {
-    let watch = machine::Watch::new(mp.clone()).await;
+    let (watch, spread_ws_rx) = machine::Watch::new(mp.clone(), socket_addr.is_some()).await;
     let liquidation = machine::Liquidation::new(mp.clone(), tasks, call.clone()).await?;
     let db = influxdb::Influxdb::new(ic);
 
@@ -234,7 +234,16 @@ where
     )
     .await?;
     let http_srv = if let Some(addr) = socket_addr {
-        Some(HttpServer::new(&addr, mp.clone(), Arc::new(db), sds, price_ws_rx.clone()).await)
+        Some(
+            HttpServer::new(
+                &addr,
+                mp.clone(),
+                Arc::new(db),
+                spread_ws_rx,
+                price_ws_rx.clone(),
+            )
+            .await,
+        )
     } else {
         None
     };

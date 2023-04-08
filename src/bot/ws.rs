@@ -20,6 +20,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::protocol::{frame::coding::CloseCode, CloseFrame, Message},
 };
+
 // like Crypto.BTC/USD 0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolId {
@@ -87,19 +88,44 @@ impl WsServerState {
 // pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
 
 pub struct PriceWatchRx(pub broadcast::Receiver<OrgPrice>);
+pub struct SpreadWatchRx(pub broadcast::Receiver<SpreadData>);
+pub struct PriceStatusWatchRx(pub broadcast::Receiver<PriceStatus>);
 
 impl Clone for PriceWatchRx {
     fn clone(&self) -> Self {
         Self(self.0.resubscribe())
     }
 }
+
+impl Clone for SpreadWatchRx {
+    fn clone(&self) -> Self {
+        Self(self.0.resubscribe())
+    }
+}
+impl Clone for PriceStatusWatchRx {
+    fn clone(&self) -> Self {
+        Self(self.0.resubscribe())
+    }
+}
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PriceStatus {
+    pub symbol: String,
+    pub change_rate: f64,
+    pub opening_price: i64,
+    pub change: i64,
+    pub high_24h: i64,
+    pub low_24h: i64,
+    pub current_price: i64,
+}
+
 #[derive(Debug, Clone)]
 pub enum WsSrvMessage {
     AccountUpdate(AccountDynamicData),
     PositionUpdate(PositionDynamicData),
     PositionOpen(PositionDynamicData),
     PositionClose(PositionDynamicData),
-    PriceUpdate(String),
+    PriceUpdate(PriceStatus),
+    SpreadUpdate(SpreadData),
     Close,
 }
 
@@ -128,7 +154,16 @@ impl WsSrvMessage {
                     .unwrap_or_default()
                     .as_str(),
             ),
-            Self::PriceUpdate(price) => Self::json_warp("price_update", price.as_str()),
+            Self::SpreadUpdate(spread) => Self::json_warp(
+                "spread_update",
+                serde_json::to_string(&spread).unwrap_or_default().as_str(),
+            ),
+            Self::PriceUpdate(price_status) => Self::json_warp(
+                "price_update",
+                serde_json::to_string(&price_status)
+                    .unwrap_or_default()
+                    .as_str(),
+            ),
             Self::Close => Self::json_warp("close", ""),
         }
     }
@@ -150,7 +185,13 @@ pub struct PositionDynamicData {
     pub profit_rate: f64,
     pub profit: i64,
 }
-
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SpreadData {
+    pub id: Address,
+    pub spread: u64,
+    #[serde(skip_serializing)]
+    pub symbol: String,
+}
 #[derive(Debug, Clone)]
 pub enum SubType {
     Unsubscribe,

@@ -2,12 +2,14 @@ use crate::bot::{
     self,
     influxdb::Influxdb,
     state::{Account, Address, Market, OrgPrice, Position, State},
-    ws::{PriceWatchRx, SubType, WsSrvMessage},
+    ws::{PriceStatus, PriceStatusWatchRx, PriceWatchRx, SpreadWatchRx, SubType, WsSrvMessage},
 };
-use crate::bot::{machine, storage};
+
+use crate::bot::{machine::SharedStateMap, storage};
 use crate::com::{self, CliError, Task};
 use axum::extract::ws::{Message, WebSocket};
 use cached::proc_macro::cached;
+use chrono::Utc;
 use csv::ReaderBuilder;
 use dashmap::{DashMap, DashSet};
 use influxdb2_client::models::Query;
@@ -15,11 +17,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::{self, Duration},
-};
-
+use tokio::sync::{broadcast, mpsc, oneshot};
 pub fn get_account_info(
     mp: bot::machine::SharedStateMap,
     address: String,
@@ -51,7 +49,7 @@ pub fn get_position_info(
 }
 
 pub fn get_position_list(
-    mp: machine::SharedStateMap,
+    mp: SharedStateMap,
     prefix: String,
     address: String,
 ) -> anyhow::Result<Vec<Position>> {
@@ -102,10 +100,7 @@ pub fn get_position_list(
     Ok(rs)
 }
 
-pub async fn get_market_list(
-    mp: machine::SharedStateMap,
-    prefix: String,
-) -> anyhow::Result<Vec<Market>> {
+pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Result<Vec<Market>> {
     let prefix = storage::Prefix::from_str(prefix.as_str())?;
     let mut rs: Vec<Market> = Vec::new();
     match prefix {
@@ -146,14 +141,18 @@ pub async fn get_market_list(
     }
     Ok(rs)
 }
-pub async fn get_symbol_list(mp: machine::SharedStateMap) -> anyhow::Result<Vec<String>> {
+pub async fn get_symbol_list(mp: SharedStateMap) -> anyhow::Result<Vec<String>> {
     let mut rs: Vec<String> = Vec::new();
     for i in mp.ws_state.supported_symbol.iter() {
         rs.push(i.clone());
     }
     Ok(rs)
 }
-
+#[derive(Debug, Clone)]
+struct PricesCache<T> {
+    prices: T,
+    last_update: i64,
+}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Price {
     #[serde(rename(deserialize = "_value", serialize = "value"))]
@@ -208,23 +207,74 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
         _ => Err(CliError::InvalidRange.into()),
     }
 }
+
+pub async fn init_price_history_cache(mp: SharedStateMap, db: Arc<Influxdb>) {
+    let mut tasks = Vec::new();
+    for i in mp.ws_state.supported_symbol.iter() {
+        let symbol = i.clone();
+        let db = db.clone();
+        tasks.push(tokio::spawn(async move {
+            if let Err(e) = init_price_cache_with_symbol(symbol, db).await {
+                error!("init price history data error:{}", e);
+            };
+        }));
+    }
+    for task in tasks {
+        task.await.unwrap();
+    }
+}
+
+async fn init_price_cache_with_symbol(symbol: String, db: Arc<Influxdb>) -> anyhow::Result<()> {
+    let ranges = vec![
+        "1H".to_string(),
+        "1D".to_string(),
+        "1W".to_string(),
+        "1M".to_string(),
+        "1Y".to_string(),
+    ];
+    for range in ranges {
+        if let Err(e) =
+            get_price_history_with_cache(symbol.clone(), range.clone(), db.clone()).await
+        {
+            error!("init price history data error:{} , symbol: {}", e, symbol);
+        };
+        if let Err(e) =
+            get_price_history_column_with_cache(symbol.clone(), range.clone(), db.clone()).await
+        {
+            error!("init price history data error:{} , symbol: {}", e, symbol);
+        };
+    }
+    Ok(())
+}
+pub fn get_cache_key(symbol: &String, range: &String) -> String {
+    format!("{}-{}", symbol.as_str(), range.as_str())
+}
+// cache for 7 days
 #[cached(
-    time = 60,
+    time = 604800,
     key = "String",
     convert = r#"{ get_cache_key(&symbol, &range) }"#,
     result = true
 )]
-pub async fn get_price_history(
-    symbol: Option<String>,
-    range: Option<String>,
+async fn get_price_history_with_cache(
+    symbol: String,
+    range: String,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<PricesCache<Vec<Price>>> {
+    let (start, window) = get_start_and_window(range.as_str())?;
+    let rs = get_price_history_from_db(symbol, start, window, db).await?;
+    Ok(PricesCache {
+        prices: rs,
+        last_update: Utc::now().timestamp(),
+    })
+}
+
+async fn get_price_history_from_db(
+    symbol: String,
+    start: String,
+    window: String,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<Vec<Price>> {
-    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
-    if symbol.is_empty() {
-        return Err(CliError::UnknownSymbol.into());
-    }
-    let range = range.ok_or_else(|| CliError::InvalidRange)?;
-    let (start, window) = get_start_and_window(range.as_str())?;
     let query = get_price_history_query(
         db.bucket.as_str(),
         start.as_str(),
@@ -232,6 +282,7 @@ pub async fn get_price_history(
         "price",
         window.as_str(),
     );
+    debug!("price db query: {}", query);
     let db_query_rs = db
         .client
         .query_raw(db.org.as_str(), Some(Query::new(query)))
@@ -242,6 +293,26 @@ pub async fn get_price_history(
         .deserialize()
         .collect::<Result<Vec<Price>, _>>()?;
     Ok(rs)
+}
+
+pub async fn get_price_history(
+    symbol: Option<String>,
+    range: Option<String>,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<Vec<Price>> {
+    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    if symbol.is_empty() {
+        return Err(CliError::UnknownSymbol.into());
+    }
+    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let (_, window) = get_start_and_window(range.as_str())?;
+    let mut ch = get_price_history_with_cache(symbol.clone(), range, db.clone()).await?;
+    let rs =
+        get_price_history_from_db(symbol.clone(), ch.last_update.to_string(), window, db).await?;
+    for r in rs {
+        ch.prices.push(r);
+    }
+    Ok(ch.prices)
 }
 
 fn get_price_history_column_query(
@@ -290,28 +361,31 @@ fn get_24h_price_status_query(bucket: &str, symbol: &str, feed: &str) -> String 
         bucket, symbol, feed
     )
 }
-
-pub fn get_cache_key(symbol: &Option<String>, range: &Option<String>) -> String {
-    format!("{}-{}", symbol.as_ref().unwrap(), range.as_ref().unwrap())
-}
-
+// cache for 7 days
 #[cached(
-    time = 60,
+    time = 604800,
     key = "String",
     convert = r#"{ get_cache_key(&symbol, &range) }"#,
     result = true
 )]
-pub async fn get_price_history_column(
-    symbol: Option<String>,
-    range: Option<String>,
+async fn get_price_history_column_with_cache(
+    symbol: String,
+    range: String,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<PricesCache<Vec<PriceColumn>>> {
+    let (start, window) = get_start_and_window(range.as_str())?;
+    let rs = get_price_history_column_from_db(symbol, start, window, db).await?;
+    Ok(PricesCache {
+        prices: rs,
+        last_update: Utc::now().timestamp(),
+    })
+}
+async fn get_price_history_column_from_db(
+    symbol: String,
+    start: String,
+    window: String,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<Vec<PriceColumn>> {
-    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
-    if symbol.is_empty() {
-        return Err(CliError::UnknownSymbol.into());
-    }
-    let range = range.ok_or_else(|| CliError::InvalidRange)?;
-    let (start, window) = get_start_and_window(range.as_str())?;
     let query = get_price_history_column_query(
         db.bucket.as_str(),
         start.as_str(),
@@ -319,6 +393,7 @@ pub async fn get_price_history_column(
         "price",
         window.as_str(),
     );
+    debug!("price db query: {}", query);
     let db_query_rs = db
         .client
         .query_raw(db.org.as_str(), Some(Query::new(query)))
@@ -330,15 +405,27 @@ pub async fn get_price_history_column(
         .collect::<Result<Vec<PriceColumn>, _>>()?;
     Ok(rs)
 }
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct PriceStatus {
-    pub symbol: String,
-    pub change_rate: f64,
-    pub change: i64,
-    pub high_24h: i64,
-    pub low_24h: i64,
-    pub current_price: i64,
+pub async fn get_price_history_column(
+    symbol: Option<String>,
+    range: Option<String>,
+    db: Arc<Influxdb>,
+) -> anyhow::Result<Vec<PriceColumn>> {
+    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    if symbol.is_empty() {
+        return Err(CliError::UnknownSymbol.into());
+    }
+    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let (_, window) = get_start_and_window(range.as_str())?;
+    let mut ch = get_price_history_column_with_cache(symbol.clone(), range, db.clone()).await?;
+    let rs =
+        get_price_history_column_from_db(symbol.clone(), ch.last_update.to_string(), window, db)
+            .await?;
+    for r in rs {
+        ch.prices.push(r);
+    }
+    Ok(ch.prices)
 }
+
 // key: symbol , value: PriceStatus
 pub type DmPriceStatus = Arc<DashMap<String, PriceStatus>>;
 
@@ -346,11 +433,12 @@ pub fn new_price_status() -> DmPriceStatus {
     Arc::new(DashMap::new())
 }
 
-async fn update_price_status(
-    mp: machine::SharedStateMap,
-    dps: &DmPriceStatus,
+pub async fn init_price_status(
+    mp: SharedStateMap,
+    dps: DmPriceStatus,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<()> {
+    debug!("init price status");
     for symbol in mp.ws_state.supported_symbol.iter() {
         let query = get_24h_price_status_query(db.bucket.as_str(), symbol.as_str(), "price");
         let db_query_rs = db
@@ -363,12 +451,11 @@ async fn update_price_status(
             .deserialize()
             .collect::<Result<Vec<PriceColumn>, _>>()?;
         if let Some(p) = rs.get(0) {
-            let change = p.value_last - p.value_first;
-            let change_rate = com::f64_round(change as f64 / p.value_first as f64);
             let price_status = PriceStatus {
                 symbol: symbol.to_string(),
-                change_rate,
-                change,
+                change_rate: 0.0,
+                change: 0,
+                opening_price: p.value_first,
                 high_24h: p.value_max,
                 low_24h: p.value_min,
                 current_price: 0,
@@ -380,17 +467,22 @@ async fn update_price_status(
 }
 
 fn get_broadcast_price_status(
-    symbols_sub_set: &DashSet<String>,
     dps: &DmPriceStatus,
     org_price: &OrgPrice,
-) -> anyhow::Result<Option<WsSrvMessage>> {
-    if let Some(price_status) = dps.get(&org_price.symbol) {
+) -> anyhow::Result<Option<PriceStatus>> {
+    if let Some(mut price_status) = dps.get_mut(&org_price.symbol) {
+        if org_price.price > price_status.value().high_24h {
+            price_status.value_mut().high_24h = org_price.price;
+        }
+        if org_price.price < price_status.value().low_24h {
+            price_status.value_mut().low_24h = org_price.price;
+        }
         let mut price_status = price_status.value().clone();
         price_status.current_price = org_price.price;
-        let message = serde_json::to_string(&price_status)?;
-        if symbols_sub_set.contains(&org_price.symbol) {
-            return Ok(Some(WsSrvMessage::PriceUpdate(message.clone())));
-        }
+        price_status.change = org_price.price - price_status.opening_price;
+        price_status.change_rate =
+            com::f64_round_4(price_status.change as f64 / price_status.opening_price as f64);
+        return Ok(Some(price_status));
     }
     Ok(None)
 }
@@ -400,17 +492,30 @@ pub struct PriceBroadcast {
 
 impl PriceBroadcast {
     pub async fn new(
-        mp: machine::SharedStateMap,
-        price_status: DmPriceStatus,
+        mp: SharedStateMap,
+        dps: DmPriceStatus,
+        price_ws_rx: PriceWatchRx,
         db: Arc<Influxdb>,
-    ) -> Self {
+    ) -> (Self, PriceStatusWatchRx) {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let (price_status_ws_tx, price_status_ws_rx) =
+            broadcast::channel(mp.ws_state.supported_symbol.len());
         let task = Task::new(
             "price broadcast",
             shutdown_tx,
-            tokio::spawn(broadcast_price(mp, price_status, db.clone(), shutdown_rx)),
+            tokio::spawn(broadcast_price(
+                dps.clone(),
+                price_ws_rx,
+                price_status_ws_tx,
+                shutdown_rx,
+            )),
         );
-        Self { task }
+        tokio::spawn(async move {
+            if let Err(e) = init_price_status(mp, dps, db).await {
+                error!("init price status error: {}", e);
+            }
+        });
+        (Self { task }, PriceStatusWatchRx(price_status_ws_rx))
     }
     pub async fn shutdown(self) {
         self.task.shutdown().await;
@@ -418,21 +523,22 @@ impl PriceBroadcast {
 }
 
 async fn broadcast_price(
-    mp: machine::SharedStateMap,
-    price_status: DmPriceStatus,
-    db: Arc<Influxdb>,
+    dps: DmPriceStatus,
+    mut price_ws_rx: PriceWatchRx,
+    price_status_ws_tx: broadcast::Sender<PriceStatus>,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> anyhow::Result<()> {
-    let mut timer = time::interval(Duration::from_secs(5));
     loop {
         tokio::select! {
             _ = (&mut shutdown_rx) => {
                 info!("got shutdown signal , break price broadcast!");
                 break;
             },
-            _ = timer.tick() => {
-                if let Err(e) = update_price_status(mp.clone(), &price_status, db.clone()).await {
-                    error!("update price status error: {}", e);
+            Ok(price) = price_ws_rx.0.recv() => {
+                if let Ok(Some(price_status)) = get_broadcast_price_status(&dps, &price) {
+                    if let Err(e) = price_status_ws_tx.send(price_status) {
+                        error!("broadcast price status error: {}", e);
+                    }
                 }
             }
         }
@@ -447,11 +553,11 @@ pub struct SubRequest {
 }
 
 pub async fn handle_ws(
-    mp: machine::SharedStateMap,
+    mp: SharedStateMap,
     mut socket: WebSocket,
     address: Option<Address>,
-    price_status: DmPriceStatus,
-    mut price_ws_rx: PriceWatchRx,
+    mut price_status_rx: PriceStatusWatchRx,
+    mut spread_ws_rx: SpreadWatchRx,
 ) {
     let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
     if let Some(address) = address.clone() {
@@ -466,14 +572,21 @@ pub async fn handle_ws(
                     break;
                 }
             }
-            Ok(price) = price_ws_rx.0.recv() => {
+            Ok(price_status) = price_status_rx.0.recv() => {
                 // debug!("got price from ws broadcast channel: {:?}", price);
-                if let Ok(m) = get_broadcast_price_status(&symbols_set, &price_status, &price) {
-                    if let Some(m) = m {
-                        if let Err(e) = socket.send(Message::Text(m.into_txt())).await {
-                            error!("send ws message error: {}", e);
-                            break;
-                        }
+                if symbols_set.contains(&price_status.symbol) {
+                    if let Err(e) = socket.send(Message::Text(WsSrvMessage::PriceUpdate(price_status).into_txt())).await {
+                        error!("send ws message error: {}", e);
+                        break;
+                    }
+                }
+            }
+            Ok(spread) = spread_ws_rx.0.recv() => {
+                // debug!("got spread from ws broadcast channel: {:?}", spread);
+                if symbols_set.contains(&spread.symbol) {
+                    if let Err(e) = socket.send(Message::Text(WsSrvMessage::SpreadUpdate(spread).into_txt())).await {
+                        error!("send ws message error: {}", e);
+                        break;
                     }
                 }
             }
@@ -526,7 +639,7 @@ pub async fn handle_ws(
 }
 
 fn handle_ws_events(
-    mp: machine::SharedStateMap,
+    mp: SharedStateMap,
     msg: String,
     // address: &Address,
     symbols_set: &DashSet<String>,
