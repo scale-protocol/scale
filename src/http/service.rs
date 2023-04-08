@@ -106,14 +106,14 @@ pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Resu
     match prefix {
         storage::Prefix::Active => {
             for i in mp.market.iter() {
-                if i.value().id
-                    != Address::from_str(
-                        "0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee",
-                    )
-                    .unwrap()
-                {
-                    continue;
-                }
+                // if i.value().id
+                //     != Address::from_str(
+                //         "0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee",
+                //     )
+                //     .unwrap()
+                // {
+                //     continue;
+                // }
                 rs.push(i.value().clone());
             }
         }

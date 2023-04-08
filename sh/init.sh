@@ -13,6 +13,7 @@ account=$(cat $data/account)
 market=$(cat $data/market)
 btc_price_feed=$(cat $data/btc_price_feed)
 eth_price_feed=$(cat $data/eth_price_feed)
+doge_price_feed=$(cat $data/doge_price_feed)
 
 echo "suicoin: $sui_coin"
 echo "scalecoin: $scale_coin"
@@ -21,6 +22,7 @@ echo "account: $account"
 echo "market: $market"
 echo "btc_price_feed: $btc_price_feed"
 echo "eth_price_feed: $eth_price_feed"
+echo "doge_price_feed: $doge_price_feed"
 fi
 
 if [ "$1" = "write" ]
@@ -51,6 +53,7 @@ then {
     scale sui trade create_account -c $scale_coin
     scale sui trade create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $btc_price_feed -z 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market' -i 'https://bafybeibicbqm5zwxovveyxanp46njyniixuqn2ic3vv3q5n247qtfnvteu.ipfs.w3s.link/btc.svg'
     scale sui trade create_market -c $scale_coin -s 'Crypto.ETH/USD' -p $eth_price_feed -z 1 -o 2000000000 -d 'this is Crypto.ETH/USD trade market' -i 'https://bafybeigphp4mwadmmns34bnwuavplqlbmch22w6krxwdqaemmqmtmvmsna.ipfs.w3s.link/eth.svg'
+    scale sui trade create_market -c $scale_coin -s 'Crypto.DOGE/USD' -p $doge_price_feed -z 1 -o 2000000000 -d 'this is Crypto.DOGE/USD trade market' -i 'https://bafybeiawqnf5oomm5xouukehulgjdn77vurojopixx6zlxn2tcmepbdlbe.ipfs.w3s.link/doge.svg'
     scale sui trade add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'
 }
 elif [ "$1" = "open_position" ]
@@ -68,11 +71,12 @@ then {
     echo "oracle"
     scale sui oracle create_price_feed -s Crypto.BTC/USD
     scale sui oracle create_price_feed -s Crypto.ETH/USD
+    scale sui oracle create_price_feed -s Crypto.DOGE/USD
 }
 elif [ "$1" = "deposit" ]
 then {
     echo "deposit"
-    scale sui trade deposit -t $account -c $scale_coin -a 100
+    scale sui trade deposit -t $account -c $scale_coin -a 200000000000
 }
 elif [ "$1" = "withdrawal" ]
 then {
