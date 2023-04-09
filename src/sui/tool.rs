@@ -29,12 +29,13 @@ const SCALE_NFT_PACKAGE_NAME: &str = "nft";
 const SCALE_ORACLE_NAME: &str = "oracle";
 pub struct Tool {
     ctx: Ctx,
+    gas_budget: u64,
 }
 
 impl Tool {
-    pub async fn new(conf: Config) -> anyhow::Result<Self> {
+    pub async fn new(conf: Config, gas_budget: u64) -> anyhow::Result<Self> {
         let ctx = Context::new(conf).await?;
-        Ok(Self { ctx })
+        Ok(Self { ctx, gas_budget })
     }
 
     pub fn get_t(&self) -> SuiTypeTag {
@@ -111,7 +112,7 @@ impl Tool {
                 type_args,
                 call_args,
                 None,
-                10000,
+                self.gas_budget,
             )
             .await
     }

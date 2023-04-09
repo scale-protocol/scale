@@ -21,6 +21,7 @@ fn cli() -> Command {
         .author("scale development team.")
         .arg(arg!(-f --file <CONFIG_FILE> "The custom config file.").value_parser(clap::value_parser!(PathBuf)))
         .arg(arg!(-l --log <LOG> "write log to this file.").value_parser(clap::value_parser!(PathBuf)))
+        .arg(arg!(-g --gasbudget <GAS_BUDGET> "Gas budget for running module initializers.").value_parser(clap::value_parser!(u64)))
         .subcommand(
             Command::new("sui")
                 .about("sui blok chain")
@@ -422,6 +423,7 @@ pub fn run() -> anyhow::Result<()> {
     let matches = cli().get_matches();
     let config_file = matches.get_one::<PathBuf>("file");
     let log_file = matches.get_one::<PathBuf>("log");
+    let gas_budget = *matches.get_one::<u64>("gasbudget").unwrap_or(&1000);
     init_log(log_file);
     match matches.subcommand() {
         Some(("sui", matches)) => {
@@ -438,7 +440,7 @@ pub fn run() -> anyhow::Result<()> {
                     _ => unreachable!(),
                 },
                 Some(("coin", matches)) => com::new_tokio_one_thread().block_on(async {
-                    let tool = tool::Tool::new(conf).await?;
+                    let tool = tool::Tool::new(conf, gas_budget).await?;
                     match matches.subcommand() {
                         Some(("set", matches)) => {
                             tool.coin_set(matches).await?;
@@ -454,7 +456,7 @@ pub fn run() -> anyhow::Result<()> {
                     Ok::<(), anyhow::Error>(())
                 })?,
                 Some(("oracle", matches)) => com::new_tokio_one_thread().block_on(async {
-                    let tool = tool::Tool::new(conf).await?;
+                    let tool = tool::Tool::new(conf, gas_budget).await?;
                     match matches.subcommand() {
                         Some(("create_price_feed", matches)) => {
                             tool.create_price_feed(matches).await?;
@@ -470,7 +472,7 @@ pub fn run() -> anyhow::Result<()> {
                     Ok::<(), anyhow::Error>(())
                 })?,
                 Some(("trade", matches)) => com::new_tokio_one_thread().block_on(async {
-                    let tool = tool::Tool::new(conf).await?;
+                    let tool = tool::Tool::new(conf, gas_budget).await?;
                     match matches.subcommand() {
                         Some(("create_account", matches)) => {
                             tool.create_account(matches).await?;
@@ -583,7 +585,7 @@ pub fn run() -> anyhow::Result<()> {
                 .unwrap()
                 .as_str()
                 .into();
-            bot::app::run(app, config_file, matches)?;
+            bot::app::run(app, config_file, matches, gas_budget)?;
         }
         _ => unreachable!(),
     }
