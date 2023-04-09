@@ -63,7 +63,7 @@ impl Tool {
         let signature = self.ctx.config.get_sui_config()?.keystore.sign_secure(
             &address,
             &pm,
-            Intent::default(),
+            Intent::sui_transaction(),
         )?;
         let opt = SuiTransactionBlockResponseOptions::default();
         let tx = self
@@ -71,7 +71,8 @@ impl Tool {
             .client
             .quorum_driver()
             .execute_transaction_block(
-                Transaction::from_data(pm.clone(), Intent::default(), vec![signature]).verify()?,
+                Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature])
+                    .verify()?,
                 opt,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
