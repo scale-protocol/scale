@@ -1,5 +1,5 @@
 #！/bin/bash
-symbols=("ETHUSDT" "BTCUSDT")
+symbols=("ETHUSDT" "BTCUSDT" "DOGEUSDT")
 intervals=("1m")
 
 baseurl="https://fapi.binance.com/fapi/v1/klines"
