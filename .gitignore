@@ -5,3 +5,4 @@ sui.log*
 /.vscode
 /pricedata
 /sh/data
+/sh/data-dev
