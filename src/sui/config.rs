@@ -219,8 +219,8 @@ impl Config {
         // get oracle package info
         let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
         self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
-        let nft_package = self.get_publish_info(com::SUI_NFT_PUBLISH_TX)?;
-        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
+        // let nft_package = self.get_publish_info(com::SUI_NFT_PUBLISH_TX)?;
+        // self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
         self.save()?;
         Ok(())
     }
