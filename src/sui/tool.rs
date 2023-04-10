@@ -350,6 +350,24 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+    pub async fn burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let id = args
+            .get_one::<String>("id")
+            .ok_or_else(|| CliError::InvalidCliParams("id".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_NFT_PACKAGE_NAME,
+                "mint",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(id.as_str())?),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
 
     pub async fn mint_recipient(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args

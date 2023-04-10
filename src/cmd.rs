@@ -379,6 +379,13 @@ fn sui_trade() -> Command {
                 ,
         )
         .subcommand(
+            Command::new("burn")
+            .arg_required_else_help(true)
+                .about("burn a scale nft.")
+                .arg(arg!(-i --id <id> "The object nft id."))
+                ,
+        )
+        .subcommand(
             Command::new("mint_multiple_recipient")
             .arg_required_else_help(true)
                 .about("mint a scale nft.")
@@ -494,6 +501,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("mint_multiple_recipient", matches)) => {
                             tool.mint_multiple_recipient(matches).await?;
+                        }
+                        Some(("burn", matches)) => {
+                            tool.burn(matches).await?;
                         }
                         Some(("add_admin_member", matches)) => {
                             tool.add_admin_member(matches).await?;

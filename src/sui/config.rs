@@ -280,6 +280,7 @@ impl Config {
 
     fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionBlockResponse> {
         let sui_config = self.get_sui_config()?;
+        debug!("get publish info: {:?}", sui_config.get_active_env());
         com::new_tokio_one_thread().block_on(async {
             debug!("get move package info");
             if let Ok(active_envs) = sui_config.get_active_env() {
