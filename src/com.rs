@@ -9,6 +9,7 @@ use tokio::{
 
 pub const SUI_COIN_PUBLISH_TX: &str = "G5fBcXqXsg8tE5hBp32qWkRbiXVsf9AttwsxrYatpEni";
 pub const SUI_ORACLE_PUBLISH_TX: &str = "2x7MFGe2WXAqjJNuV3qYP7rXkjSzYoXNLEE7TiQ3G3v4";
+pub const SUI_NFT_PUBLISH_TX: &str = "83DhzAKzXNiRR1ZzatXRWM4J6FBkLRpRwsPzdnGocNpu";
 pub const SUI_SCALE_PUBLISH_TX: &str = "3YuivSqYknwoNZMDetWKsNAgVDLyDGdh7fNpezdxdAXq";
 
 pub const DECIMALS: u64 = 1000000;

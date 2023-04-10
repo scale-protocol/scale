@@ -31,6 +31,7 @@ fn cli() -> Command {
                 .subcommand(sui())
                 .subcommand(sui_trade())
                 .subcommand(sui_coin())
+                .subcommand(sui_nft())
                 .subcommand(sui_oracle()),
         )
         .subcommand(
@@ -116,6 +117,61 @@ fn sui_oracle() -> Command {
                     arg!(-p --price <PRICE> "The new price of the oracle.")
                         .value_parser(clap::value_parser!(u64)),
                 ),
+        )
+}
+fn sui_nft() -> Command {
+    Command::new("nft")
+        .about("scale sui nft tool, with devnet and testnet.")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("mint")
+                .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url.")),
+        )
+        .subcommand(
+            Command::new("mint_multiple")
+                .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+        .subcommand(
+            Command::new("mint_recipient")
+                .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address.")),
+        )
+        .subcommand(
+            Command::new("burn")
+                .arg_required_else_help(true)
+                .about("burn a scale nft.")
+                .arg(arg!(-i --id <id> "The object nft id.")),
+        )
+        .subcommand(
+            Command::new("mint_multiple_recipient")
+                .arg_required_else_help(true)
+                .about("mint a scale nft.")
+                .arg(arg!(-n --name <NAME> "The nft style name."))
+                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
+                        .value_parser(clap::value_parser!(u64)),
+                )
+                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address.")),
         )
 }
 fn sui_trade() -> Command {
@@ -346,59 +402,6 @@ fn sui_trade() -> Command {
                 .arg(arg!(-p --position <POSITION> "Position object id."))
                 ,
         )
-        .subcommand(
-            Command::new("mint")
-            .arg_required_else_help(true)
-                .about("mint a scale nft.")
-                .arg(arg!(-n --name <NAME> "The nft style name."))
-                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
-                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
-                ,
-        )
-        .subcommand(
-            Command::new("mint_multiple")
-            .arg_required_else_help(true)
-                .about("mint a scale nft.")
-                .arg(arg!(-n --name <NAME> "The nft style name."))
-                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
-                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
-                .arg(
-                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
-                        .value_parser(clap::value_parser!(u64)),
-                )
-                ,
-        )
-        .subcommand(
-            Command::new("mint_recipient")
-            .arg_required_else_help(true)
-                .about("mint a scale nft.")
-                .arg(arg!(-n --name <NAME> "The nft style name."))
-                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
-                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
-                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address."))
-                ,
-        )
-        .subcommand(
-            Command::new("burn")
-            .arg_required_else_help(true)
-                .about("burn a scale nft.")
-                .arg(arg!(-i --id <id> "The object nft id."))
-                ,
-        )
-        .subcommand(
-            Command::new("mint_multiple_recipient")
-            .arg_required_else_help(true)
-                .about("mint a scale nft.")
-                .arg(arg!(-n --name <NAME> "The nft style name."))
-                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
-                .arg(arg!(-i --img_url <IMG_URL> "The nft ipfs image url."))
-                .arg(
-                    arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
-                        .value_parser(clap::value_parser!(u64)),
-                )
-                .arg(arg!(-r --recipient <RECIPIENT> "The recipient address."))
-                ,
-        )
 }
 fn sui() -> Command {
     Command::new("config")
@@ -478,18 +481,9 @@ pub fn run() -> anyhow::Result<()> {
                     }
                     Ok::<(), anyhow::Error>(())
                 })?,
-                Some(("trade", matches)) => com::new_tokio_one_thread().block_on(async {
+                Some(("nft", matches)) => com::new_tokio_one_thread().block_on(async {
                     let tool = tool::Tool::new(conf, gas_budget).await?;
                     match matches.subcommand() {
-                        Some(("create_account", matches)) => {
-                            tool.create_account(matches).await?;
-                        }
-                        Some(("deposit", matches)) => {
-                            tool.deposit(matches).await?;
-                        }
-                        Some(("withdrawal", matches)) => {
-                            tool.withdrawal(matches).await?;
-                        }
                         Some(("mint", matches)) => {
                             tool.mint(matches).await?;
                         }
@@ -504,6 +498,22 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("burn", matches)) => {
                             tool.burn(matches).await?;
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?,
+                Some(("trade", matches)) => com::new_tokio_one_thread().block_on(async {
+                    let tool = tool::Tool::new(conf, gas_budget).await?;
+                    match matches.subcommand() {
+                        Some(("create_account", matches)) => {
+                            tool.create_account(matches).await?;
+                        }
+                        Some(("deposit", matches)) => {
+                            tool.deposit(matches).await?;
+                        }
+                        Some(("withdrawal", matches)) => {
+                            tool.withdrawal(matches).await?;
                         }
                         Some(("add_admin_member", matches)) => {
                             tool.add_admin_member(matches).await?;
