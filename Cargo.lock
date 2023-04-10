@@ -2795,9 +2795,15 @@ dependencies = [
 
 [[package]]
 name = "ecdsa"
+<<<<<<< HEAD
 version = "0.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a48e5d537b8a30c0b023116d981b16334be1485af7ca68db3a2b7024cbc957fd"
+=======
+version = "0.16.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "298d10b6d24e99de17b92bd41bfe33f4e8530ee7948233eb2a4158f4464d2046"
+>>>>>>> testnet
 dependencies = [
  "der 0.7.3",
  "digest 0.10.6",
@@ -3120,7 +3126,11 @@ dependencies = [
  "curve25519-dalek-ng",
  "derive_more",
  "digest 0.10.6",
+<<<<<<< HEAD
  "ecdsa 0.16.6",
+=======
+ "ecdsa 0.16.5",
+>>>>>>> testnet
  "ed25519-consensus",
  "elliptic-curve 0.13.4",
  "eyre",
@@ -5113,6 +5123,7 @@ dependencies = [
 [[package]]
 name = "move-core-types"
 version = "0.0.4"
+<<<<<<< HEAD
 dependencies = [
  "anyhow",
  "bcs",
@@ -5132,6 +5143,8 @@ dependencies = [
 name = "move-core-types"
 version = "0.0.4"
 source = "git+https://github.com/move-language/move?rev=60cec12b1ed9382836aa4c141e445656d39375e1#60cec12b1ed9382836aa4c141e445656d39375e1"
+=======
+>>>>>>> testnet
 dependencies = [
  "anyhow",
  "bcs",
@@ -5224,7 +5237,11 @@ dependencies = [
  "move-bytecode-source-map",
  "move-bytecode-verifier",
  "move-command-line-common",
+<<<<<<< HEAD
  "move-core-types 0.0.4",
+=======
+ "move-core-types",
+>>>>>>> testnet
  "move-ir-to-bytecode",
  "move-ir-types",
  "move-symbol-pool",
@@ -5524,7 +5541,11 @@ dependencies = [
  "move-cli",
  "move-command-line-common",
  "move-compiler",
+<<<<<<< HEAD
  "move-core-types 0.0.4",
+=======
+ "move-core-types",
+>>>>>>> testnet
  "move-disassembler",
  "move-ir-compiler",
  "move-ir-types",
@@ -6721,11 +6742,19 @@ checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
 name = "p256"
+<<<<<<< HEAD
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc7304b8213f8597952b2f4c3d7f09947d46bb677801df8f287ffd2c4e26f9da"
 dependencies = [
  "ecdsa 0.16.6",
+=======
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7270da3e5caa82afd3deb054cc237905853813aea3859544bc082c3fe55b8d47"
+dependencies = [
+ "ecdsa 0.16.5",
+>>>>>>> testnet
  "elliptic-curve 0.13.4",
  "primeorder",
  "sha2 0.10.6",
@@ -7249,9 +7278,15 @@ dependencies = [
 
 [[package]]
 name = "primeorder"
+<<<<<<< HEAD
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8d3875361e28f7753baefef104386e7aa47642c93023356d97fdef4003bfb5"
+=======
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7613fdcc0831c10060fa69833ea8fa2caa94b6456f51e25356a885b530a2e3d0"
+>>>>>>> testnet
 dependencies = [
  "elliptic-curve 0.13.4",
 ]
@@ -11693,7 +11728,11 @@ dependencies = [
  "duration-str",
  "dyn-clone",
  "ecdsa 0.14.8",
+<<<<<<< HEAD
  "ecdsa 0.16.6",
+=======
+ "ecdsa 0.16.5",
+>>>>>>> testnet
  "ed25519",
  "ed25519-consensus",
  "ed25519-dalek-fiat",

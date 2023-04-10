@@ -33,6 +33,8 @@ pub struct Config {
     pub scale_oracle_admin_id: ObjectID,
     pub scale_oracle_root_id: ObjectID,
     pub scale_admin_cap_id: ObjectID,
+    pub scale_nft_package_id: ObjectID,
+    pub scale_nft_admin_id: ObjectID,
     pub price_config: config::PriceConfig,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -95,6 +97,8 @@ impl Default for Config {
             scale_oracle_package_id: default_id,
             scale_oracle_admin_id: default_id,
             scale_oracle_root_id: default_id,
+            scale_nft_package_id: default_id,
+            scale_nft_admin_id: default_id,
             price_config: config::PriceConfig::default(),
         }
     }
@@ -124,6 +128,8 @@ impl cfg for Config {
                 self.scale_oracle_package_id = c.scale_oracle_package_id;
                 self.scale_oracle_admin_id = c.scale_oracle_admin_id;
                 self.scale_oracle_root_id = c.scale_oracle_root_id;
+                self.scale_nft_package_id = c.scale_nft_package_id;
+                self.scale_nft_admin_id = c.scale_nft_admin_id;
                 self.price_config = c.price_config;
 
                 self.load_sui_config()?;
@@ -160,6 +166,9 @@ scale coin reserve id: {}
 scale coin admin id: {}
 scale oracle package id: {}
 scale oracle admin id: {}
+scale oracle root id: {}
+scale nft package id: {}
+scale nft admin id: {}
 "#,
             self.sui_cli_config_file.display(),
             self.scale_config_file.display(),
@@ -173,6 +182,9 @@ scale oracle admin id: {}
             self.scale_coin_admin_id,
             self.scale_oracle_package_id,
             self.scale_oracle_admin_id,
+            self.scale_oracle_root_id,
+            self.scale_nft_package_id,
+            self.scale_nft_admin_id,
         );
     }
 }
@@ -207,6 +219,8 @@ impl Config {
         // get oracle package info
         let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
         self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
+        let nft_package = self.get_publish_info(com::SUI_NFT_PUBLISH_TX)?;
+        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
         self.save()?;
         Ok(())
     }
@@ -255,6 +269,11 @@ impl Config {
                                 self.scale_oracle_root_id = object_id;
                             }
                         }
+                        if object_type.module.as_str() == "nft" {
+                            if object_type.name.as_str() == "AdminCap" {
+                                self.scale_nft_admin_id = object_id;
+                            }
+                        }
                     }
                     ObjectChange::Published {
                         package_id,
@@ -271,6 +290,9 @@ impl Config {
                         if tx == com::SUI_ORACLE_PUBLISH_TX {
                             self.scale_oracle_package_id = package_id;
                         }
+                        if tx == com::SUI_NFT_PUBLISH_TX {
+                            self.scale_nft_package_id = package_id;
+                        }
                     }
                     _ => {}
                 }
@@ -280,6 +302,7 @@ impl Config {
 
     fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionBlockResponse> {
         let sui_config = self.get_sui_config()?;
+        debug!("get publish info: {:?}", sui_config.get_active_env());
         com::new_tokio_one_thread().block_on(async {
             debug!("get move package info");
             if let Ok(active_envs) = sui_config.get_active_env() {

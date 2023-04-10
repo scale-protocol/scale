@@ -7,7 +7,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::Utc;
-// use log::*;
+use log::*;
 use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
 use std::str::FromStr;
@@ -23,18 +23,19 @@ use sui_sdk::{
 };
 use sui_types::messages::ExecuteTransactionRequestType;
 
-const COIN_PACKAGE_NAME: &str = "scale";
-const SCALE_PACKAGE_NAME: &str = "enter";
-const SCALE_NFT_PACKAGE_NAME: &str = "nft";
-const SCALE_ORACLE_NAME: &str = "oracle";
+const COIN_MODULE_NAME: &str = "scale";
+const SCALE_MODULE_NAME: &str = "enter";
+const NFT_MODULE_NAME: &str = "nft";
+const ORACLE_MODULE_NAME: &str = "oracle";
 pub struct Tool {
     ctx: Ctx,
+    gas_budget: u64,
 }
 
 impl Tool {
-    pub async fn new(conf: Config) -> anyhow::Result<Self> {
+    pub async fn new(conf: Config, gas_budget: u64) -> anyhow::Result<Self> {
         let ctx = Context::new(conf).await?;
-        Ok(Self { ctx })
+        Ok(Self { ctx, gas_budget })
     }
 
     pub fn get_t(&self) -> SuiTypeTag {
@@ -63,7 +64,7 @@ impl Tool {
         let signature = self.ctx.config.get_sui_config()?.keystore.sign_secure(
             &address,
             &pm,
-            Intent::default(),
+            Intent::sui_transaction(),
         )?;
         let opt = SuiTransactionBlockResponseOptions::default();
         let tx = self
@@ -71,7 +72,8 @@ impl Tool {
             .client
             .quorum_driver()
             .execute_transaction_block(
-                Transaction::from_data(pm.clone(), Intent::default(), vec![signature]).verify()?,
+                Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature])
+                    .verify()?,
                 opt,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
@@ -110,7 +112,7 @@ impl Tool {
                 type_args,
                 call_args,
                 None,
-                10000,
+                self.gas_budget,
             )
             .await
     }
@@ -122,7 +124,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
-                COIN_PACKAGE_NAME,
+                COIN_MODULE_NAME,
                 "set_subscription_ratio",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_admin_id),
@@ -144,7 +146,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
-                COIN_PACKAGE_NAME,
+                COIN_MODULE_NAME,
                 "burn",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
@@ -168,7 +170,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
-                COIN_PACKAGE_NAME,
+                COIN_MODULE_NAME,
                 "airdrop",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
@@ -188,7 +190,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
-                SCALE_ORACLE_NAME,
+                ORACLE_MODULE_NAME,
                 "create_price_feed",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
@@ -211,7 +213,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
-                SCALE_ORACLE_NAME,
+                ORACLE_MODULE_NAME,
                 "update_owner",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
@@ -230,7 +232,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
-                SCALE_ORACLE_NAME,
+                ORACLE_MODULE_NAME,
                 "update_price",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
@@ -261,7 +263,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "create_account",
                 vec![SuiJsonValue::new(json!(coin))?],
                 vec![self.get_t()],
@@ -285,7 +287,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "deposit",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
@@ -308,7 +310,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "withdrawal",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -332,16 +334,39 @@ impl Tool {
         let img_url = args
             .get_one::<String>("img_url")
             .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+        debug!(
+            "package: {},module: {} ,name: {}, description: {}, img_url: {}",
+            self.ctx.config.scale_nft_package_id, NFT_MODULE_NAME, name, description, img_url
+        );
         let transaction_data = self
             .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_NFT_PACKAGE_NAME,
+                self.ctx.config.scale_nft_package_id,
+                NFT_MODULE_NAME,
                 "mint",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_admin_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let id = args
+            .get_one::<String>("id")
+            .ok_or_else(|| CliError::InvalidCliParams("id".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_nft_package_id,
+                NFT_MODULE_NAME,
+                "mint",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_admin_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(id.as_str())?),
                 ],
                 vec![],
             )
@@ -364,15 +389,15 @@ impl Tool {
             .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_NFT_PACKAGE_NAME,
+                self.ctx.config.scale_nft_package_id,
+                NFT_MODULE_NAME,
                 "mint_recipient",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_admin_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
-                    SuiJsonValue::new(json!(recipient.as_bytes()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(recipient.as_str())?),
                 ],
                 vec![],
             )
@@ -398,16 +423,16 @@ impl Tool {
             .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_NFT_PACKAGE_NAME,
+                self.ctx.config.scale_nft_package_id,
+                NFT_MODULE_NAME,
                 "mint_multiple_recipient",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_admin_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
-                    SuiJsonValue::new(json!(recipient.as_bytes()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(recipient.as_str())?),
                 ],
                 vec![],
             )
@@ -430,11 +455,11 @@ impl Tool {
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_NFT_PACKAGE_NAME,
+                self.ctx.config.scale_nft_package_id,
+                NFT_MODULE_NAME,
                 "mint_multiple",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_admin_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(img_url.as_bytes()))?,
@@ -456,7 +481,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "add_admin_member",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -478,7 +503,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "remove_admin_member",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -515,7 +540,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "create_market",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -547,7 +572,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_max_leverage",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -576,7 +601,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_insurance_fee",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -605,7 +630,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_margin_fee",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -637,7 +662,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_fund_fee",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -666,7 +691,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_status",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -694,7 +719,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_description",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -726,7 +751,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_spread_fee",
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
@@ -751,7 +776,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "update_officer",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
@@ -778,7 +803,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "add_factory_mould",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
@@ -800,7 +825,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "remove_factory_mould",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
@@ -831,7 +856,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "investment",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -857,7 +882,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "divestment",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -880,7 +905,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "trigger_update_opening_price",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -910,7 +935,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "generate_upgrade_move_token",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
@@ -938,7 +963,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "divestment_by_upgrade",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -975,7 +1000,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "open_position",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -1006,7 +1031,7 @@ impl Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "close_position",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -1028,7 +1053,7 @@ impl MoveCall for Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "trigger_update_opening_price",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -1051,7 +1076,7 @@ impl MoveCall for Tool {
         let _transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "burst_position",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
@@ -1075,7 +1100,7 @@ impl MoveCall for Tool {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
-                SCALE_PACKAGE_NAME,
+                SCALE_MODULE_NAME,
                 "process_fund_fee",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),

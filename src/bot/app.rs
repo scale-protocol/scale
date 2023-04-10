@@ -23,7 +23,12 @@ use std::{
 };
 use tokio::{runtime::Builder, runtime::Runtime, signal};
 
-pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> anyhow::Result<()> {
+pub fn run(
+    app: App,
+    config_file: Option<&PathBuf>,
+    args: &clap::ArgMatches,
+    gas_budget: u64,
+) -> anyhow::Result<()> {
     let tasks = match args.get_one::<usize>("tasks") {
         Some(t) => *t,
         None => 2,
@@ -78,6 +83,7 @@ pub fn run(app: App, config_file: Option<&PathBuf>, args: &clap::ArgMatches) -> 
             *enable_db,
             duration,
             tasks,
+            gas_budget,
         );
         return x;
     } else if app == App::Aptos {
@@ -122,6 +128,7 @@ fn run_sui_app(
     enable_db: bool,
     duration: i64,
     tasks: usize,
+    gas_budget: u64,
 ) -> anyhow::Result<()> {
     let mut conf = SuiConfig::default();
     config::config(&mut conf, config_file)?;
@@ -134,7 +141,7 @@ fn run_sui_app(
     let mp: machine::SharedStateMap = Arc::new(state_mp);
     runtime.block_on(async move {
         let tool: Tool;
-        match Tool::new(conf.clone()).await {
+        match Tool::new(conf.clone(), gas_budget).await {
             Ok(t) => {
                 tool = t;
             }

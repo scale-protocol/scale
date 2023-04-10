@@ -46,20 +46,20 @@ echo $account > $data/account
 elif [ "$1" = "coin" ]
 then
     echo "airdrop coin"
-    scale sui coin airdrop -c $sui_coin -a 3000000000000
+    scale -g 10000000 sui coin airdrop -c $sui_coin -a 3000000000000
 elif [ "$1" = "scale" ] 
 then {
     echo "create market and account"
-    scale sui trade create_account -c $scale_coin
-    scale sui trade create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $btc_price_feed -z 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market' -i 'https://bafybeibicbqm5zwxovveyxanp46njyniixuqn2ic3vv3q5n247qtfnvteu.ipfs.w3s.link/btc.svg'
-    scale sui trade create_market -c $scale_coin -s 'Crypto.ETH/USD' -p $eth_price_feed -z 1 -o 2000000000 -d 'this is Crypto.ETH/USD trade market' -i 'https://bafybeigphp4mwadmmns34bnwuavplqlbmch22w6krxwdqaemmqmtmvmsna.ipfs.w3s.link/eth.svg'
-    scale sui trade create_market -c $scale_coin -s 'Crypto.DOGE/USD' -p $doge_price_feed -z 1 -o 2000000000 -d 'this is Crypto.DOGE/USD trade market' -i 'https://bafybeiawqnf5oomm5xouukehulgjdn77vurojopixx6zlxn2tcmepbdlbe.ipfs.w3s.link/doge.svg'
-    scale sui trade add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'
+    scale -g 10000000 sui trade create_account -c $scale_coin
+    scale -g 10000000 sui trade create_market -c $scale_coin -s 'Crypto.BTC/USD' -p $btc_price_feed -z 1 -o 2000000000 -d 'this is Crypto.BTC/USD trade market' -i 'https://bafybeibicbqm5zwxovveyxanp46njyniixuqn2ic3vv3q5n247qtfnvteu.ipfs.w3s.link/btc.svg'
+    scale -g 10000000 sui trade create_market -c $scale_coin -s 'Crypto.ETH/USD' -p $eth_price_feed -z 1 -o 2000000000 -d 'this is Crypto.ETH/USD trade market' -i 'https://bafybeigphp4mwadmmns34bnwuavplqlbmch22w6krxwdqaemmqmtmvmsna.ipfs.w3s.link/eth.svg'
+    scale -g 10000000 sui trade create_market -c $scale_coin -s 'Crypto.DOGE/USD' -p $doge_price_feed -z 1 -o 2000000000 -d 'this is Crypto.DOGE/USD trade market' -i 'https://bafybeiawqnf5oomm5xouukehulgjdn77vurojopixx6zlxn2tcmepbdlbe.ipfs.w3s.link/doge.svg'
+    scale -g 10000000 sui trade add_factory_mould -n 'scale' -d 'default style' -u 'https://gateway.ipfs.io/ipfs/bafybeibckfurkark4hnob2baoayemi7fj24wyrmdct3o45s7qgwijycjyi/1797.png'
 }
 elif [ "$1" = "open_position" ]
 then {
     echo "open position"
-    scale sui trade open_position -m $market -t $account -l 1 -L 2 -p 2 -d 1
+    scale -g 10000000 sui trade open_position -m $market -t $account -l 1 -L 2 -p 2 -d 1
 }
 elif [ "$1" = "close_position" ]
 then {
@@ -69,24 +69,24 @@ then {
 elif [ "$1" = "oracle" ]
 then {
     echo "oracle"
-    scale sui oracle create_price_feed -s Crypto.BTC/USD
-    scale sui oracle create_price_feed -s Crypto.ETH/USD
-    scale sui oracle create_price_feed -s Crypto.DOGE/USD
+    scale -g 10000000 sui oracle create_price_feed -s Crypto.BTC/USD
+    scale -g 10000000 sui oracle create_price_feed -s Crypto.ETH/USD
+    scale -g 10000000 sui oracle create_price_feed -s Crypto.DOGE/USD
 }
 elif [ "$1" = "deposit" ]
 then {
     echo "deposit"
-    scale sui trade deposit -t $account -c $scale_coin -a 200000000000
+    scale -g 10000000 sui trade deposit -t $account -c $scale_coin -a 200000000000
 }
 elif [ "$1" = "withdrawal" ]
 then {
     echo "withdrawal"
-    scale sui trade withdrawal -t $account -a 10000
+    scale -g 10000000 sui trade withdrawal -t $account -a 10000
 }
 elif [ "$1" = "investment" ]
 then {
     echo "investment"
-    scale sui trade investment -m $market -c $scale_coin -n 'scale' -a 0
+    scale -g 10000000 sui trade investment -m $market -c $scale_coin -n 'scale' -a 0
 }
 elif [ "$1" = "upprice" ]
 then {
