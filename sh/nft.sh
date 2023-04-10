@@ -2,13 +2,13 @@
 
 if [ "$1" = "mint" ]
 then
-    scale -g 10000000 sui trade mint -n 'Scale Invitation' -d 'We hope you will participate in our Testnet' -i 'https://bafybeibkwhppkqtvzagolzcxurtkuu7cvrpcd55eiz4mard3lci2fmyq5y.ipfs.dweb.link/invite.png'
-elif [ "$1" == "mint_to"]
+    scale -g 10000000 sui nft mint -n 'Scale Invitation' -d 'We hope you will participate in our Testnet' -i 'https://bafybeibkwhppkqtvzagolzcxurtkuu7cvrpcd55eiz4mard3lci2fmyq5y.ipfs.dweb.link/invite.png'
+elif [ "$1" = "mint_to" ]
 then
-    scale -g 10000000 sui trade mint_recipient -n 'Scale Invitation' -d 'We hope you will participate in our Testnet' -i 'https://bafybeibkwhppkqtvzagolzcxurtkuu7cvrpcd55eiz4mard3lci2fmyq5y.ipfs.dweb.link/invite.png' -r $2
-elif [ "$1" == "burn"]
+    scale -g 10000000 sui nft mint_recipient -n 'Scale Invitation' -d 'We hope you will participate in our Testnet' -i 'https://bafybeibkwhppkqtvzagolzcxurtkuu7cvrpcd55eiz4mard3lci2fmyq5y.ipfs.dweb.link/invite.png' -r $2
+elif [ "$1" = "burn" ]
 then
-    scale -g 10000000 sui trade burn -i $2
+    scale -g 10000000 sui nft burn -i $2
 else
-    echo "usage: sh nft.sh [mint|mint_to|transfer|burn]"
+    echo "usage: sh nft.sh [mint|mint_to|burn]"
 fi

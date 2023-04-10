@@ -128,6 +128,8 @@ impl cfg for Config {
                 self.scale_oracle_package_id = c.scale_oracle_package_id;
                 self.scale_oracle_admin_id = c.scale_oracle_admin_id;
                 self.scale_oracle_root_id = c.scale_oracle_root_id;
+                self.scale_nft_package_id = c.scale_nft_package_id;
+                self.scale_nft_admin_id = c.scale_nft_admin_id;
                 self.price_config = c.price_config;
 
                 self.load_sui_config()?;
@@ -267,7 +269,7 @@ impl Config {
                                 self.scale_oracle_root_id = object_id;
                             }
                         }
-                        if object_type.module.as_str() == "scale_nft" {
+                        if object_type.module.as_str() == "nft" {
                             if object_type.name.as_str() == "AdminCap" {
                                 self.scale_nft_admin_id = object_id;
                             }
