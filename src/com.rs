@@ -7,10 +7,10 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_COIN_PUBLISH_TX: &str = "8TDZqWikkZa67quCPcTp5JY1cWWtribyLhMDZrttNzpb";
+pub const SUI_COIN_PUBLISH_TX: &str = "9QTWwT2zjLenoSpcFwtLyHUL2RK2Pdws4c1GnEjXDBh3";
 pub const SUI_ORACLE_PUBLISH_TX: &str = "GyYXXoBsPMhTApHXdsiDMVnZohgrmzhZuKR2L95rDNHV";
 pub const SUI_NFT_PUBLISH_TX: &str = "2yby3YtAvvkGkTiez31tNHEmSpsP2iA9Y5wfA3kom8xL";
-pub const SUI_SCALE_PUBLISH_TX: &str = "BMwXSz1Doyc1QYAdWBJYbeYibzLvDfmA31GudZhvgdff";
+pub const SUI_SCALE_PUBLISH_TX: &str = "54dffpfTUAYJftCqi27ph7adswTMnN4UztZLFsbdnV69";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;

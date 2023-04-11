@@ -82,7 +82,15 @@ fn sui_coin() -> Command {
             Command::new("airdrop")
                 .arg_required_else_help(true)
                 .about("Airdrop SCALE tokens. In order to prevent malicious operation of robots.")
-                .arg(arg!(-c --coins <COINS> "Sui tokens for payment").action(ArgAction::Append))
+                .arg(
+                    arg!(-a --amount <AMOUNT> "How much scale coin is expected to be redeemed.")
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+        .subcommand(
+            Command::new("mint")
+                .arg_required_else_help(true)
+                .about("Mint SCALE tokens. In order to prevent malicious operation of robots")
                 .arg(
                     arg!(-a --amount <AMOUNT> "How much scale coin is expected to be redeemed.")
                         .value_parser(clap::value_parser!(u64)),
@@ -460,6 +468,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("airdrop", matches)) => {
                             tool.coin_airdrop(matches).await?;
+                        }
+                        Some(("mint", matches)) => {
+                            tool.coin_mint(matches).await?;
                         }
                         _ => unreachable!(),
                     }
