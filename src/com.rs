@@ -9,8 +9,8 @@ use tokio::{
 
 pub const SUI_COIN_PUBLISH_TX: &str = "7hwbYCDax2rSupea63xpGaMV36gBbbW3kVTeJVFHT3V3";
 pub const SUI_ORACLE_PUBLISH_TX: &str = "GyYXXoBsPMhTApHXdsiDMVnZohgrmzhZuKR2L95rDNHV";
-pub const SUI_NFT_PUBLISH_TX: &str = "Fanbr6SZwKecJGbhBsehM4JgW9TRacv6bQDC764Hh63K";
-pub const SUI_SCALE_PUBLISH_TX: &str = "2yby3YtAvvkGkTiez31tNHEmSpsP2iA9Y5wfA3kom8xL";
+pub const SUI_NFT_PUBLISH_TX: &str = "GCHgBZhnkRidMGg8RjkSeX9BkmnL8QNJzkzhrdMCbhNE";
+pub const SUI_SCALE_PUBLISH_TX: &str = "Fanbr6SZwKecJGbhBsehM4JgW9TRacv6bQDC764Hh63K";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
