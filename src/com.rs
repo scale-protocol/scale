@@ -48,6 +48,8 @@ pub enum CliError {
     InvalidRange,
     #[error("invalid ws address signer")]
     InvalidWsAddressSigner,
+    #[error("Get object error: {0}")]
+    GetObjectError(String),
 }
 
 pub fn f64_round(f: f64) -> f64 {

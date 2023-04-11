@@ -2,7 +2,7 @@ use crate::bot::{
     self,
     influxdb::Influxdb,
     state::{Account, Address, Market, OrgPrice, Position, State},
-    ws::{PriceStatus, PriceStatusWatchRx, PriceWatchRx, SpreadWatchRx, SubType, WsSrvMessage},
+    ws::{PriceStatus, PriceStatusWatchRx, PriceWatchRx, SubType, WsSrvMessage, WsWatchRx},
 };
 
 use crate::bot::{machine::SharedStateMap, storage};
@@ -17,7 +17,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, oneshot};
 pub fn get_account_info(
     mp: bot::machine::SharedStateMap,
     address: String,
@@ -106,14 +106,6 @@ pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Resu
     match prefix {
         storage::Prefix::Active => {
             for i in mp.market.iter() {
-                // if i.value().id
-                //     != Address::from_str(
-                //         "0xfd8a967be00215082a4500701aff7628eda05409c3f8ad32db619ffd2f96ffee",
-                //     )
-                //     .unwrap()
-                // {
-                //     continue;
-                // }
                 rs.push(i.value().clone());
             }
         }
@@ -559,21 +551,17 @@ pub async fn handle_ws(
     mut socket: WebSocket,
     address: Option<Address>,
     mut price_status_rx: PriceStatusWatchRx,
-    mut spread_ws_rx: SpreadWatchRx,
+    mut event_ws_rx: WsWatchRx,
 ) {
-    let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
-    if let Some(address) = address.clone() {
-        mp.ws_state.add_conn(address.clone(), tx);
-    }
+    // let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
     let symbols_set: DashSet<String> = DashSet::new();
+    let is_login = address.is_some();
+    let mut user_account = Address::default();
+    if let Some(addr) = address {
+        user_account = addr;
+    }
     loop {
         tokio::select! {
-            Some(msg) = rx.recv() => {
-                if let Err(e) = socket.send(Message::Text(msg.into_txt())).await {
-                    error!("send ws message error: {}", e);
-                    break;
-                }
-            }
             Ok(price_status) = price_status_rx.0.recv() => {
                 // debug!("got price from ws broadcast channel: {:?}", price);
                 if symbols_set.contains(&price_status.symbol) {
@@ -583,12 +571,58 @@ pub async fn handle_ws(
                     }
                 }
             }
-            Ok(spread) = spread_ws_rx.0.recv() => {
-                // debug!("got spread from ws broadcast channel: {:?}", spread);
-                if symbols_set.contains(&spread.symbol) {
-                    if let Err(e) = socket.send(Message::Text(WsSrvMessage::SpreadUpdate(spread).into_txt())).await {
-                        error!("send ws message error: {}", e);
-                        break;
+            Ok(ws_event) = event_ws_rx.0.recv() => {
+                if is_login{
+                    match ws_event {
+                        WsSrvMessage::AccountUpdate(data) => {
+                            if data.id == user_account {
+                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::AccountUpdate(data).into_txt())).await {
+                                    error!("send ws message error: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        WsSrvMessage::PositionUpdate(data) => {
+                            if data.account_id == user_account {
+                                debug!("got position update: {:?}", data);
+                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionUpdate(data).into_txt())).await {
+                                    error!("send ws message error: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        WsSrvMessage::PositionOpen(data) => {
+                            if data.account_id == user_account {
+                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionOpen(data).into_txt())).await {
+                                    error!("send ws message error: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        WsSrvMessage::PositionClose(data) => {
+                            if data.account_id == user_account {
+                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionClose(data).into_txt())).await {
+                                    error!("send ws message error: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        WsSrvMessage::SpreadUpdate(data) => {
+                            if symbols_set.contains(&data.symbol) {
+                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::SpreadUpdate(data).into_txt())).await {
+                                    error!("send ws message error: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        WsSrvMessage::Close => {
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::Close.into_txt())).await {
+                                error!("send ws message error: {}", e);
+                            }
+                            debug!("close ws connection");
+                            break;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -634,10 +668,7 @@ pub async fn handle_ws(
             }
         }
     }
-    info!("client disconnected, clean connection :{:?}", address);
-    if let Some(address) = address {
-        mp.ws_state.remove_conn(&address);
-    }
+    // info!("client disconnected, clean connection :{:?}", user_account);
 }
 
 fn handle_ws_events(

@@ -3,7 +3,7 @@
 // see ids: https://pyth.network/developers/price-feed-ids
 use crate::bot::influxdb::Influxdb;
 use crate::bot::machine::Message;
-use crate::bot::state::{Address, OrgPrice, State, Status};
+use crate::bot::state::{Address, Event, OrgPrice, State};
 use crate::bot::ws::{PriceWatchRx, SharedDmSymbolId, SubType, WsClient, WsClientMessage};
 use crate::com::{CliError, DECIMALS};
 use futures::prelude::*;
@@ -157,7 +157,7 @@ pub async fn sub_price(
                     let watch_msg = Message {
                         address: Address::from_str(resp.price_feed.id.as_str())?,
                         state: State::Price(op.clone()),
-                        status: Status::Normal,
+                        event: Event::Created,
                     };
                     if let Err(e) = watch_tx.send(watch_msg) {
                         error!("send watch msg error: {:?}", e);

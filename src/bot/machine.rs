@@ -1,12 +1,12 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
-    Account, Address, Direction, Market, MoveCall, Position, PositionStatus, PositionType, Price,
-    State, Status, BURST_RATE,
+    Account, Address, Direction, Event, Market, MoveCall, Position, PositionStatus, PositionType,
+    Price, State, BURST_RATE,
 };
 use crate::bot::storage::{self, Storage};
 use crate::bot::ws::{
-    AccountDynamicData, PositionDynamicData, SpreadData, SpreadWatchRx, SupportedSymbol,
-    WsServerState, WsSrvMessage,
+    AccountDynamicData, PositionDynamicData, SpreadData, SupportedSymbol, WsServerState,
+    WsSrvMessage, WsWatchTx,
 };
 use crate::com::{self, Task};
 use chrono::Utc;
@@ -17,7 +17,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{
     sync::{
-        broadcast,
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
@@ -139,31 +138,26 @@ pub struct Watch {
 pub struct Message {
     pub address: Address,
     pub state: State,
-    pub status: Status,
+    pub event: Event,
 }
 impl Watch {
-    pub async fn new(mp: SharedStateMap, is_write_spread: bool) -> (Self, SpreadWatchRx) {
+    pub async fn new(mp: SharedStateMap, event_ws_tx: WsWatchTx, is_write_ws_event: bool) -> Self {
         let (watch_tx, watch_rx) = mpsc::unbounded_channel::<Message>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let (spread_tx, spread_rx) =
-            broadcast::channel::<SpreadData>(mp.ws_state.supported_symbol.len() * 10);
-        (
-            Self {
-                watch_tx,
-                task: Task::new(
-                    "watch",
-                    shutdown_tx,
-                    tokio::spawn(watch_message(
-                        mp,
-                        watch_rx,
-                        spread_tx,
-                        shutdown_rx,
-                        is_write_spread,
-                    )),
-                ),
-            },
-            SpreadWatchRx(spread_rx),
-        )
+        Self {
+            watch_tx,
+            task: Task::new(
+                "watch",
+                shutdown_tx,
+                tokio::spawn(watch_message(
+                    mp,
+                    watch_rx,
+                    shutdown_rx,
+                    event_ws_tx,
+                    is_write_ws_event,
+                )),
+            ),
+        }
     }
     pub async fn shutdown(self) {
         self.task.shutdown().await;
@@ -173,8 +167,8 @@ impl Watch {
 async fn watch_message(
     mp: SharedStateMap,
     mut watch_rx: UnboundedReceiver<Message>,
-    spread_tx: broadcast::Sender<SpreadData>,
     mut shutdown_rx: oneshot::Receiver<()>,
+    event_ws_tx: WsWatchTx,
     is_write_spread: bool,
 ) -> anyhow::Result<()> {
     info!("start scale data watch ...");
@@ -188,7 +182,7 @@ async fn watch_message(
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg,spread_tx.clone(),is_write_spread).await;
+                        keep_message(mp.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -203,15 +197,15 @@ async fn watch_message(
 async fn keep_message(
     mp: SharedStateMap,
     msg: Message,
-    spread_tx: broadcast::Sender<SpreadData>,
-    is_write_spread: bool,
+    event_ws_tx: WsWatchTx,
+    is_write_ws_event: bool,
 ) {
     let tag = msg.state.to_string();
     let keys = storage::Keys::new(storage::Prefix::Active);
     match msg.state {
         State::Market(market) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
-            if msg.status == Status::Deleted {
+            if msg.event == Event::Deleted {
                 mp.market.remove(&msg.address);
                 if let Some(p) = mp.price_market_idx.get(&market.symbol) {
                     p.value().remove(&msg.address);
@@ -235,32 +229,28 @@ async fn keep_message(
         State::Account(account) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
 
-            if msg.status == Status::Deleted {
+            if msg.event == Event::Deleted {
                 mp.account.remove(&msg.address);
                 save_as_history(mp.clone(), &mut keys, &State::Account(account.clone()))
             } else {
                 mp.account.insert(msg.address.clone(), account.clone());
                 save_to_active(mp.clone(), &mut keys, &State::Account(account.clone()))
             }
-            if let Some(tx) = mp.ws_state.conns.get(&msg.address) {
+            if is_write_ws_event {
                 let mut account_data = AccountDynamicData::default();
+                account_data.id = account.id;
                 if let Some(data) = mp.account_dynamic_data.get(&msg.address) {
                     account_data = data.clone();
                 } else {
                     account_data.equity = account.balance as i64;
                 }
                 account_data.balance = account.balance as i64;
-                let r = tx
-                    .value()
+                if let Err(e) = event_ws_tx
+                    .0
                     .send(WsSrvMessage::AccountUpdate(account_data.clone()))
-                    .await;
-                if let Err(e) = r {
-                    error!("send account dynamic data to ws channel data error: {}", e);
+                {
+                    error!("send spread data to channel error: {}", e);
                 }
-                debug!(
-                    "send account dynamic data to ws channel data: {:?}",
-                    account_data
-                );
             }
         }
         State::Position(mut position) => {
@@ -268,8 +258,6 @@ async fn keep_message(
                 .add(tag)
                 .add(position.account_id.to_string())
                 .add(msg.address.to_string());
-            let mut position_create = false;
-            let mut position_close = false;
             let account_id = position.account_id.copy();
             let position_id = position.id.copy();
 
@@ -279,7 +267,7 @@ async fn keep_message(
                 position.icon = m.icon.clone();
             }
 
-            if msg.status == Status::Deleted
+            if msg.event == Event::Deleted
                 || position.status == PositionStatus::NormalClosing
                 || position.status == PositionStatus::ForcedClosing
             {
@@ -291,54 +279,35 @@ async fn keep_message(
                         // nothing to do
                     }
                 };
-                // close position
-                position_close = true;
                 save_as_history(mp.clone(), &mut keys, &State::Position(position))
             } else {
                 match mp.position.get(&position.account_id) {
                     Some(p) => {
-                        if let None = p.insert(msg.address.clone(), position.clone()) {
-                            // create position
-                            position_create = true;
-                        }
+                        p.insert(msg.address.clone(), position.clone());
                     }
                     None => {
                         let p: DmPosition = dashmap::DashMap::new();
                         p.insert(msg.address.clone(), position.clone());
-                        if let None = mp.position.insert((&position.account_id).copy(), p) {
-                            // create position
-                            position_create = true;
-                        }
+                        mp.position.insert((&position.account_id).copy(), p);
                     }
                 };
                 save_to_active(mp.clone(), &mut keys, &State::Position(position))
             }
-            // let position_data = mp.position_dynamic_data.get(&msg.address.clone());
-            let mut position_data = PositionDynamicData::default();
-            position_data.id = position_id;
-            debug!(
-                "position id: {:?}===>CREAte?{:?},close?{:?}",
-                position_data.id.to_string(),
-                position_create,
-                position_close
-            );
-            if let Some(tx) = mp.ws_state.conns.get(&account_id) {
-                let mut message: Option<WsSrvMessage> = None;
-                if position_create {
-                    message = Some(WsSrvMessage::PositionOpen(position_data));
-                } else if position_close {
-                    message = Some(WsSrvMessage::PositionClose(position_data));
+            if is_write_ws_event {
+                let mut position_data = PositionDynamicData::default();
+                if let Some(data) = mp.position_dynamic_data.get(&msg.address) {
+                    position_data = data.clone();
                 }
-                if let Some(m) = message {
-                    if let Err(e) = tx.value().send(m).await {
-                        error!("send position dynamic data to ws channel data error: {}", e);
-                    }
+                position_data.id = position_id;
+                position_data.account_id = account_id;
+                let ws_message = match msg.event {
+                    Event::Deleted => WsSrvMessage::PositionClose(position_data),
+                    Event::Created => WsSrvMessage::PositionOpen(position_data),
+                    _ => WsSrvMessage::PositionUpdate(position_data),
+                };
+                if let Err(e) = event_ws_tx.0.send(ws_message) {
+                    error!("send spread data to channel error: {}", e);
                 }
-            } else {
-                debug!(
-                    "account id: {:?} not found in ws channel",
-                    account_id.to_string()
-                );
             }
         }
 
@@ -355,13 +324,15 @@ async fn keep_message(
                                 continue;
                             }
                             let price = m.get_price(org_price.price as u64);
-                            if is_write_spread {
+                            if is_write_ws_event {
                                 let spread_data = SpreadData {
                                     symbol: org_price.symbol.clone(),
                                     id: m.id.clone(),
                                     spread: price.spread / com::DENOMINATOR,
                                 };
-                                if let Err(e) = spread_tx.send(spread_data) {
+                                if let Err(e) =
+                                    event_ws_tx.0.send(WsSrvMessage::SpreadUpdate(spread_data))
+                                {
                                     error!("send spread data to channel error: {}", e);
                                 }
                             }
@@ -423,7 +394,13 @@ pub struct Liquidation {
 }
 
 impl Liquidation {
-    pub async fn new<C>(mp: SharedStateMap, tasks: usize, call: Arc<C>) -> anyhow::Result<Self>
+    pub async fn new<C>(
+        mp: SharedStateMap,
+        tasks: usize,
+        event_ws_tx: WsWatchTx,
+        is_write_ws_event: bool,
+        call: Arc<C>,
+    ) -> anyhow::Result<Self>
     where
         C: MoveCall + Send + Sync + 'static,
     {
@@ -454,7 +431,16 @@ impl Liquidation {
         );
         Ok(Self {
             account_tasks: account_task,
-            position_tasks: loop_position_task(mp, tasks, task_rx, fund_task_rx, call).await?,
+            position_tasks: loop_position_task(
+                mp,
+                tasks,
+                task_rx,
+                fund_task_rx,
+                event_ws_tx,
+                is_write_ws_event,
+                call,
+            )
+            .await?,
             cron,
         })
     }
@@ -545,6 +531,8 @@ async fn loop_position_task<C>(
     tasks: usize,
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
+    event_ws_tx: WsWatchTx,
+    is_write_ws_event: bool,
     call: Arc<C>,
 ) -> anyhow::Result<Vec<Task>>
 where
@@ -560,6 +548,8 @@ where
             task_rx.clone(),
             fund_task_rx.clone(),
             task_shutdown_rx,
+            event_ws_tx.clone(),
+            is_write_ws_event,
             call.clone(),
         ));
         workers.push(Task::new(
@@ -576,6 +566,8 @@ async fn loop_position_by_user<C>(
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
+    event_ws_tx: WsWatchTx,
+    is_write_ws_event: bool,
     call: Arc<C>,
 ) -> anyhow::Result<()>
 where
@@ -594,7 +586,7 @@ where
                         let account = mp.account.get(&address);
                         match account {
                             Some(account) => {
-                                compute_position(mp.clone(),&account,&address,call.clone()).await;
+                                compute_position(mp.clone(),&account,&address,event_ws_tx.clone(),is_write_ws_event,call.clone()).await;
                             },
                             None => {
                                 debug!("no account for state map : {:?}",address);
@@ -641,14 +633,28 @@ where
     }
 }
 
-async fn compute_position<C>(mp: SharedStateMap, account: &Account, address: &Address, call: Arc<C>)
-where
+async fn compute_position<C>(
+    mp: SharedStateMap,
+    account: &Account,
+    address: &Address,
+    event_ws_tx: WsWatchTx,
+    is_write_ws_event: bool,
+    call: Arc<C>,
+) where
     C: MoveCall,
 {
     match mp.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
-            compute_pl_all_position(mp.clone(), account, &positions, call).await;
+            compute_pl_all_position(
+                mp.clone(),
+                account,
+                &positions,
+                event_ws_tx,
+                is_write_ws_event,
+                call,
+            )
+            .await;
         }
         None => {
             debug!("no position for state map : {:?}", address.to_string());
@@ -660,14 +666,15 @@ async fn compute_pl_all_position<C>(
     mp: SharedStateMap,
     account: &Account,
     dm_position: &DmPosition,
-    // dm_price: &DmPrice,
-    // ws_state: &WsServerState,
+    event_ws_tx: WsWatchTx,
+    is_write_ws_event: bool,
     call: Arc<C>,
 ) where
     C: MoveCall,
 {
     let mut account_data = AccountDynamicData::default();
     account_data.balance = account.balance as i64;
+    account_data.id = account.id.copy();
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
     let mut pl_full = 0i64;
     for v in dm_position.iter() {
@@ -696,26 +703,23 @@ async fn compute_pl_all_position<C>(
                             }
                         }
                     }
+                    let mut profit_rate = 0f64;
+                    if position.margin > 0 {
+                        profit_rate = com::f64_round_4(pl as f64 / position.margin as f64);
+                    }
                     let position_dynamic_data = PositionDynamicData {
                         id: position.id.copy(),
-                        profit_rate: com::f64_round_4(pl as f64 / position.margin as f64),
+                        profit_rate: profit_rate,
                         profit: pl,
+                        account_id: account.id.copy(),
                     };
-                    // send position dynamic data to ws
-                    if let Some(tx) = mp.ws_state.conns.get(&account.id) {
-                        let r = tx
-                            .value()
+                    if is_write_ws_event {
+                        if let Err(e) = event_ws_tx
+                            .0
                             .send(WsSrvMessage::PositionUpdate(position_dynamic_data.clone()))
-                            .await;
-                        if let Err(e) = r {
+                        {
                             error!("send position dynamic data to ws channel data error: {}", e);
                         }
-                        debug!(
-                            "send position dynamic data to ws channel data,position id: {:?}",
-                            position.id.to_string()
-                        );
-                    } else {
-                        debug!("no ws channel for account id: {:?}", account.id.to_string());
                     }
                     mp.position_dynamic_data
                         .insert(position.id.copy(), position_dynamic_data);
@@ -790,20 +794,12 @@ async fn compute_pl_all_position<C>(
     }
     mp.account_dynamic_data
         .insert(account.id.copy(), account_data.clone());
-    // send to ws
-    if let Some(tx) = mp.ws_state.conns.get(&account.id) {
-        let r = tx
-            .value()
+    if is_write_ws_event {
+        if let Err(e) = event_ws_tx
+            .0
             .send(WsSrvMessage::AccountUpdate(account_data.clone()))
-            .await;
-        if let Err(e) = r {
+        {
             error!("send account dynamic data to ws channel data error: {}", e);
         }
-        debug!(
-            "send account dynamic data to ws channel data: {:?}",
-            account_data
-        );
-    } else {
-        debug!("no ws channel for account id: {:?}", account.id.to_string());
     }
 }

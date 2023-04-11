@@ -4,7 +4,7 @@ use crate::bot::influxdb::Influxdb;
 use crate::bot::state::Address;
 use crate::bot::{
     machine::SharedStateMap,
-    ws::{PriceStatusWatchRx, PriceWatchRx, SpreadWatchRx},
+    ws::{PriceStatusWatchRx, PriceWatchRx, WsWatchRx},
 };
 use crate::com::CliError;
 use crate::http::query::empty_string_as_none;
@@ -39,13 +39,13 @@ impl HttpServer {
         addr: &SocketAddr,
         mp: SharedStateMap,
         db: Arc<Influxdb>,
-        spread_ws_rx: SpreadWatchRx,
+        event_ws_rx: WsWatchRx,
         price_ws_rx: PriceWatchRx,
     ) -> Self {
         let dps = service::new_price_status();
         let (price_broadcast, price_status_rx) =
             service::PriceBroadcast::new(mp.clone(), dps.clone(), price_ws_rx, db.clone()).await;
-        let router = router(mp.clone(), db.clone(), price_status_rx, spread_ws_rx);
+        let router = router(mp.clone(), db.clone(), price_status_rx, event_ws_rx);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -78,7 +78,7 @@ pub fn router(
     mp: SharedStateMap,
     db: Arc<Influxdb>,
     price_status_rx: PriceStatusWatchRx,
-    spread_ws_rx: SpreadWatchRx,
+    event_ws_rx: WsWatchRx,
 ) -> Router {
     let app: Router = Router::new()
         .route("/account/info/:address", get(get_user_info))
@@ -108,7 +108,7 @@ pub fn router(
         )
         .layer(Extension(mp))
         .layer(Extension(price_status_rx))
-        .layer(Extension(spread_ws_rx))
+        .layer(Extension(event_ws_rx))
         .layer(Extension(db));
     app.fallback(handler_404)
 }
@@ -202,7 +202,7 @@ async fn ws_handler(
     Query(q): Query<WsParams>,
     Extension(state): Extension<SharedStateMap>,
     Extension(price_status_ws_rx): Extension<PriceStatusWatchRx>,
-    Extension(spread_ws_rx): Extension<SpreadWatchRx>,
+    Extension(event_ws_rx): Extension<WsWatchRx>,
 ) -> impl IntoResponse {
     let jr = JsonResponse::<()>::default();
     let mut address = None;
@@ -217,6 +217,6 @@ async fn ws_handler(
         }
     }
     return ws.on_upgrade(|socket| {
-        service::handle_ws(state, socket, address, price_status_ws_rx, spread_ws_rx)
+        service::handle_ws(state, socket, address, price_status_ws_rx, event_ws_rx)
     });
 }

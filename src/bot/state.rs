@@ -106,9 +106,35 @@ impl fmt::Display for State {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Status {
-    Normal,
+pub enum Event {
+    Created,
+    Updated,
     Deleted,
+    None,
+}
+impl<'a> From<&'a str> for Event {
+    fn from(value: &'a str) -> Self {
+        if value.contains("Created") {
+            Self::Created
+        } else if value.contains("Updated") {
+            Self::Updated
+        } else if value.contains("Deleted") {
+            Self::Deleted
+        } else {
+            Self::None
+        }
+    }
+}
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let t = match *self {
+            Self::Created => "Created",
+            Self::Updated => "Updated",
+            Self::Deleted => "Deleted",
+            Self::None => "None",
+        };
+        write!(f, "{}", t)
+    }
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pool {
