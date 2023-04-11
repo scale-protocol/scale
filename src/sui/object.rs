@@ -147,7 +147,7 @@ pub async fn prase_object_response(
         error!("get object error: {:?}", e);
         return Ok(());
     }
-    // debug!("get object: {:?}", rs);
+    debug!("get object: {:?}", rs);
     if let Some(data) = rs.data {
         if let Some(bcs) = data.bcs {
             match bcs {
