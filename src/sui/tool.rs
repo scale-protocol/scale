@@ -118,18 +118,18 @@ impl Tool {
     }
 
     pub async fn coin_set(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let ratio = args
-            .get_one::<u64>("ratio")
-            .ok_or_else(|| CliError::InvalidCliParams("ratio".to_string()))?;
+        let status = args
+            .get_one::<u8>("status")
+            .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
                 COIN_MODULE_NAME,
-                "set_subscription_ratio",
+                "set_staatus",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_admin_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
-                    SuiJsonValue::new(json!(ratio.to_string()))?,
+                    SuiJsonValue::new(json!(status))?,
                 ],
                 vec![],
             )

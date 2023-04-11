@@ -65,10 +65,10 @@ fn sui_coin() -> Command {
         .arg_required_else_help(true)
         .subcommand(
             Command::new("set")
-                .about("set subscription ratio.")
+                .about("set status.")
                 .arg_required_else_help(true)
                 .arg(
-                    arg!(-r --ratio <RATIO> "How many scales can be exchanged for a sui coin")
+                    arg!(-s --status <STATUS> "The status of the coin, 1: normal, 2: frozen.")
                         .value_parser(clap::value_parser!(u64)),
                 ),
         )
