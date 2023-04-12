@@ -187,6 +187,7 @@ pub struct AccountDynamicData {
     pub id: Address,
     pub balance: i64,
     pub profit: i64,
+    pub margin_total: i64,
     pub margin_percentage: f64,
     pub equity: i64,
     pub profit_rate: f64,

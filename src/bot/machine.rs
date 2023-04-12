@@ -245,6 +245,7 @@ async fn keep_message(
                     account_data.equity = account.balance as i64;
                 }
                 account_data.balance = account.balance as i64;
+                account_data.margin_total = account.margin_total as i64;
                 if let Err(e) = event_ws_tx
                     .0
                     .send(WsSrvMessage::AccountUpdate(account_data.clone()))
@@ -674,6 +675,7 @@ async fn compute_pl_all_position<C>(
 {
     let mut account_data = AccountDynamicData::default();
     account_data.balance = account.balance as i64;
+    account_data.margin_total = account.margin_total as i64;
     account_data.id = account.id.copy();
     let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
     let mut pl_full = 0i64;
