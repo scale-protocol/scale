@@ -7,10 +7,10 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_COIN_PUBLISH_TX: &str = "G5fBcXqXsg8tE5hBp32qWkRbiXVsf9AttwsxrYatpEni";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "2x7MFGe2WXAqjJNuV3qYP7rXkjSzYoXNLEE7TiQ3G3v4";
-pub const SUI_NFT_PUBLISH_TX: &str = "GCHgBZhnkRidMGg8RjkSeX9BkmnL8QNJzkzhrdMCbhNE";
-pub const SUI_SCALE_PUBLISH_TX: &str = "2m6raX3PcSVbkfF8SxhTAoj5jSmhwBA6qc6FvX4uwY1K";
+pub const SUI_COIN_PUBLISH_TX: &str = "9QTWwT2zjLenoSpcFwtLyHUL2RK2Pdws4c1GnEjXDBh3";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "GyYXXoBsPMhTApHXdsiDMVnZohgrmzhZuKR2L95rDNHV";
+pub const SUI_NFT_PUBLISH_TX: &str = "2yby3YtAvvkGkTiez31tNHEmSpsP2iA9Y5wfA3kom8xL";
+pub const SUI_SCALE_PUBLISH_TX: &str = "54dffpfTUAYJftCqi27ph7adswTMnN4UztZLFsbdnV69";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
@@ -48,6 +48,8 @@ pub enum CliError {
     InvalidRange,
     #[error("invalid ws address signer")]
     InvalidWsAddressSigner,
+    #[error("Get object error: {0}")]
+    GetObjectError(String),
 }
 
 pub fn f64_round(f: f64) -> f64 {

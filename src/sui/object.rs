@@ -1,8 +1,9 @@
 use crate::bot::machine::Message;
 use crate::bot::state::{
-    Account, Address, Direction, Market, MarketStatus, Officer, Pool, Position, PositionStatus,
-    PositionType, State, Status,
+    Account, Address, Direction, Event, Market, MarketStatus, Officer, Pool, Position,
+    PositionStatus, PositionType, State,
 };
+use crate::com::CliError;
 use crate::sui::config::Ctx;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -50,45 +51,26 @@ impl fmt::Display for ObjectType {
         write!(f, "{}", t)
     }
 }
-pub async fn pull_dynamic_fields(
-    ctx: Ctx,
-    id: ObjectID,
-    watch_tx: UnboundedSender<Message>,
-) -> anyhow::Result<()> {
-    let mut cursor: Option<ObjectID> = None;
-    let mut object_ids: Vec<ObjectID> = Vec::new();
-    while let Ok(page) = ctx
-        .client
-        .read_api()
-        .get_dynamic_fields(id, cursor, Some(50))
-        .await
-    {
-        cursor = page.next_cursor;
-        for obj in page.data {
-            object_ids.push(obj.object_id);
-        }
-    }
-    if object_ids.len() > 0 {
-        pull_objects(ctx, object_ids, watch_tx).await?;
-    }
-    Ok(())
-}
-pub async fn pull_objects(
+
+pub async fn pull_objects_and_send(
     ctx: Ctx,
     mut ids: Vec<ObjectID>,
+    event: Event,
     watch_tx: UnboundedSender<Message>,
 ) -> anyhow::Result<()> {
     while ids.len() > OBJECT_MAX_REQUEST_LIMIT {
         let ids_new = ids.split_off(OBJECT_MAX_REQUEST_LIMIT);
-        pull_objects_whith_limit(ctx.clone(), ids_new, watch_tx.clone()).await?;
+        pull_objects_whith_limit_and_send(ctx.clone(), ids_new, event.clone(), watch_tx.clone())
+            .await?;
     }
-    pull_objects_whith_limit(ctx, ids, watch_tx).await?;
+    pull_objects_whith_limit_and_send(ctx, ids, event.clone(), watch_tx).await?;
     Ok(())
 }
 
-pub async fn pull_objects_whith_limit(
+pub async fn pull_objects_whith_limit_and_send(
     ctx: Ctx,
     ids: Vec<ObjectID>,
+    event: Event,
     watch_tx: UnboundedSender<Message>,
 ) -> anyhow::Result<()> {
     if ids.len() > OBJECT_MAX_REQUEST_LIMIT || ids.len() == 0 {
@@ -111,16 +93,16 @@ pub async fn pull_objects_whith_limit(
         )
         .await?;
     for r in rs {
-        prase_object_response(r, watch_tx.clone()).await?;
+        let mut ev = prase_object_response(r).await?;
+        ev.event = event.clone();
+        if let Err(e) = watch_tx.send(ev) {
+            error!("send message error: {:?}", e);
+        }
     }
     Ok(())
 }
 
-pub async fn pull_object(
-    ctx: Ctx,
-    id: ObjectID,
-    watch_tx: UnboundedSender<Message>,
-) -> anyhow::Result<()> {
+pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
     let opt = SuiObjectDataOptions {
         show_type: false,
         show_owner: false,
@@ -135,19 +117,15 @@ pub async fn pull_object(
         .read_api()
         .get_object_with_options(id, opt)
         .await?;
-    prase_object_response(rs, watch_tx).await?;
-    Ok(())
+    prase_object_response(rs).await
 }
 
-pub async fn prase_object_response(
-    rs: SuiObjectResponse,
-    watch_tx: UnboundedSender<Message>,
-) -> anyhow::Result<()> {
+pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Message> {
     if let Some(e) = rs.error {
         error!("get object error: {:?}", e);
-        return Ok(());
+        return Err(CliError::GetObjectError(e.to_string()).into());
     }
-    // debug!("get object: {:?}", rs);
+    debug!("get object: {:?}", rs);
     if let Some(data) = rs.data {
         if let Some(bcs) = data.bcs {
             match bcs {
@@ -159,37 +137,31 @@ pub async fn prase_object_response(
                             let sui_market: SuiMarket = m.deserialize()?;
                             debug!("market: {:?}", sui_market);
                             let market = Market::from(sui_market);
-                            if let Err(e) = watch_tx.send(Message {
+                            return Ok(Message {
                                 address: market.id.clone(),
                                 state: State::Market(market),
-                                status: Status::Normal,
-                            }) {
-                                error!("send market message error: {:?}", e);
-                            };
+                                event: Event::None,
+                            });
                         }
                         ObjectType::Account => {
                             let sui_account: SuiAccount = m.deserialize()?;
                             debug!("account: {:?}", sui_account);
                             let account = Account::from(sui_account);
-                            if let Err(e) = watch_tx.send(Message {
+                            return Ok(Message {
                                 address: account.id.clone(),
                                 state: State::Account(account),
-                                status: Status::Normal,
-                            }) {
-                                error!("send account message error: {:?}", e);
-                            };
+                                event: Event::None,
+                            });
                         }
                         ObjectType::Position => {
                             let sui_position: SuiPosition = m.deserialize()?;
                             debug!("position: {:?}", sui_position);
                             let position = Position::from(sui_position);
-                            if let Err(e) = watch_tx.send(Message {
+                            return Ok(Message {
                                 address: position.id.clone(),
                                 state: State::Position(position),
-                                status: Status::Normal,
-                            }) {
-                                error!("send position message error: {:?}", e);
-                            };
+                                event: Event::None,
+                            });
                         }
                         ObjectType::None => {
                             error!("got none object type");
@@ -202,7 +174,7 @@ pub async fn prase_object_response(
             }
         }
     }
-    Ok(())
+    return Err(CliError::GetObjectError("Unresolved object information".to_string()).into());
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiMarket {

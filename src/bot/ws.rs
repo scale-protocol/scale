@@ -46,14 +46,14 @@ pub fn new_shared_dm_symbol_id(
 }
 #[derive(Clone)]
 pub struct WsServerState {
-    pub conns: DashMap<Address, Sender<WsSrvMessage>>,
+    // pub conns: DashMap<Address, Sender<WsSrvMessage>>,
     // pub sub_idx_map: DmPriceSubMap,
     pub supported_symbol: SupportedSymbol,
 }
 impl WsServerState {
     pub fn new(supported_symbol: SupportedSymbol) -> Self {
         Self {
-            conns: DashMap::new(),
+            // conns: DashMap::new(),
             // sub_idx_map: DashMap::new(),
             supported_symbol,
         }
@@ -63,13 +63,13 @@ impl WsServerState {
         self.supported_symbol.contains(symbol)
     }
 
-    pub fn add_conn(&self, address: Address, tx: Sender<WsSrvMessage>) {
-        self.conns.insert(address, tx);
-    }
+    // pub fn add_conn(&self, address: Address, tx: Sender<WsSrvMessage>) {
+    //     self.conns.insert(address, tx);
+    // }
 
-    pub fn remove_conn(&self, address: &Address) {
-        self.conns.remove(address);
-    }
+    // pub fn remove_conn(&self, address: &Address) {
+    //     self.conns.remove(address);
+    // }
 
     // pub fn add_symbol_sub(&self, symbol: String, address: Address) {
     //     self.sub_idx_map
@@ -88,7 +88,8 @@ impl WsServerState {
 // pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
 
 pub struct PriceWatchRx(pub broadcast::Receiver<OrgPrice>);
-pub struct SpreadWatchRx(pub broadcast::Receiver<SpreadData>);
+pub struct WsWatchTx(pub broadcast::Sender<WsSrvMessage>);
+pub struct WsWatchRx(pub broadcast::Receiver<WsSrvMessage>);
 pub struct PriceStatusWatchRx(pub broadcast::Receiver<PriceStatus>);
 
 impl Clone for PriceWatchRx {
@@ -97,7 +98,7 @@ impl Clone for PriceWatchRx {
     }
 }
 
-impl Clone for SpreadWatchRx {
+impl Clone for WsWatchRx {
     fn clone(&self) -> Self {
         Self(self.0.resubscribe())
     }
@@ -106,6 +107,15 @@ impl Clone for PriceStatusWatchRx {
     fn clone(&self) -> Self {
         Self(self.0.resubscribe())
     }
+}
+impl Clone for WsWatchTx {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+pub fn new_event_channel(size: usize) -> (WsWatchTx, WsWatchRx) {
+    let (ws_tx, ws_rx) = broadcast::channel(size);
+    (WsWatchTx(ws_tx), WsWatchRx(ws_rx))
 }
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PriceStatus {
@@ -173,8 +183,11 @@ impl WsSrvMessage {
 }
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AccountDynamicData {
+    #[serde(skip_serializing)]
+    pub id: Address,
     pub balance: i64,
     pub profit: i64,
+    pub margin_total: i64,
     pub margin_percentage: f64,
     pub equity: i64,
     pub profit_rate: f64,
@@ -182,6 +195,8 @@ pub struct AccountDynamicData {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PositionDynamicData {
     pub id: Address,
+    #[serde(skip_serializing)]
+    pub account_id: Address,
     pub profit_rate: f64,
     pub profit: i64,
 }

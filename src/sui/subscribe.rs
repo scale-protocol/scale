@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::bot::machine::Message;
+use crate::bot::{machine::Message, state::Event};
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
@@ -65,8 +65,16 @@ impl EventSubscriber {
                                 if let Some(event_rs) = get_change_object(event) {
                                     // debug!("event sub got event_rs: {:?}", event_rs);
                                     if event_rs.object_type != ObjectType::None {
-                                        if let Err(e) = object::pull_object(ctx.clone(), event_rs.object_id,watch_tx.clone()).await {
-                                            error!("pull object error: {:?}", e);
+                                        match object::pull_object(ctx.clone(), event_rs.object_id).await{
+                                            Ok(mut msg) => {
+                                                msg.event = event_rs.event;
+                                                if let Err(e) = watch_tx.send(msg) {
+                                                    error!("watch_tx send error: {:?}", e);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("pull object error: {:?}", e);
+                                            }
                                         }
                                     }
                                 }
@@ -109,7 +117,7 @@ impl EventSubscriber {
 pub struct EventResult {
     pub object_type: ObjectType,
     pub object_id: ObjectID,
-    pub is_created: bool,
+    pub event: Event,
 }
 
 fn get_change_object(event: SuiEvent) -> Option<EventResult> {
@@ -121,7 +129,7 @@ fn get_change_object(event: SuiEvent) -> Option<EventResult> {
                     object_type: ot,
                     object_id: ObjectID::from_str(obj.get("id").unwrap().as_str().unwrap())
                         .unwrap(),
-                    is_created: event.type_.name.as_str() == "Created",
+                    event: event.type_.name.as_str().into(),
                 });
             }
         }
@@ -152,7 +160,8 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
             cursor = page.next_cursor;
             for event in page.data {
                 if let Some(event_rs) = get_change_object(event) {
-                    if event_rs.object_type != ObjectType::None && event_rs.is_created {
+                    if event_rs.object_type != ObjectType::None && event_rs.event == Event::Created
+                    {
                         debug!("sync object: {:?}", event_rs);
                         object_ids.push(event_rs.object_id);
                     }
@@ -162,7 +171,9 @@ pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> a
                 break;
             }
         }
-        if let Err(e) = object::pull_objects(ctx.clone(), object_ids, watch_tx).await {
+        if let Err(e) =
+            object::pull_objects_and_send(ctx.clone(), object_ids, Event::Created, watch_tx).await
+        {
             error!("pull objects error: {:?}", e);
         }
     });

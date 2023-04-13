@@ -118,18 +118,18 @@ impl Tool {
     }
 
     pub async fn coin_set(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let ratio = args
-            .get_one::<u64>("ratio")
-            .ok_or_else(|| CliError::InvalidCliParams("ratio".to_string()))?;
+        let status = args
+            .get_one::<u8>("status")
+            .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
                 COIN_MODULE_NAME,
-                "set_subscription_ratio",
+                "set_staatus",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_admin_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
-                    SuiJsonValue::new(json!(ratio.to_string()))?,
+                    SuiJsonValue::new(json!(status))?,
                 ],
                 vec![],
             )
@@ -159,11 +159,6 @@ impl Tool {
     }
 
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coins = args
-            .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
-            .map(|c| json!(c))
-            .collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
             .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
@@ -174,7 +169,26 @@ impl Tool {
                 "airdrop",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
-                    SuiJsonValue::new(json!(coins))?,
+                    SuiJsonValue::new(json!(amount.to_string()))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn coin_mint(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let amount = args
+            .get_one::<u64>("amount")
+            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_coin_package_id,
+                COIN_MODULE_NAME,
+                "mint",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_coin_admin_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_coin_reserve_id),
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![],

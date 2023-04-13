@@ -227,8 +227,16 @@ async fn run_bot<C>(
 where
     C: MoveCall + Send + Sync + 'static,
 {
-    let (watch, spread_ws_rx) = machine::Watch::new(mp.clone(), socket_addr.is_some()).await;
-    let liquidation = machine::Liquidation::new(mp.clone(), tasks, call.clone()).await?;
+    let (event_ws_tx, event_ws_rx) = ws::new_event_channel(100);
+    let watch = machine::Watch::new(mp.clone(), event_ws_tx.clone(), socket_addr.is_some()).await;
+    let liquidation = machine::Liquidation::new(
+        mp.clone(),
+        tasks,
+        event_ws_tx,
+        socket_addr.is_some(),
+        call.clone(),
+    )
+    .await?;
     let db = influxdb::Influxdb::new(ic);
 
     let (price_ws_client, price_ws_rx) = price::sub_price(
@@ -246,7 +254,7 @@ where
                 &addr,
                 mp.clone(),
                 Arc::new(db),
-                spread_ws_rx,
+                event_ws_rx,
                 price_ws_rx.clone(),
             )
             .await,
