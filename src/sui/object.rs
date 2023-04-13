@@ -219,7 +219,7 @@ pub struct SuiMarket {
     pub pool: SuiPool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
-    pub size: u64,
+    pub unit_size: u64,
     /// The price at 0 o'clock in the utc of the current day, which is used to calculate the spread_fee
     pub opening_price: u64,
     pub pyth_id: ID,
@@ -245,7 +245,7 @@ impl From<SuiMarket> for Market {
             description: m.description,
             officer: Officer::try_from(m.officer).unwrap(),
             pool: m.pool.into(),
-            size: m.size,
+            unit_size: m.unit_size,
             opening_price: m.opening_price,
             pyth_id: Address::new(m.pyth_id.bytes.to_vec()),
         }
@@ -401,7 +401,7 @@ pub struct SuiPosition {
     /// 1 buy long, 2 sell short.
     direction: u8,
     /// the position size
-    size: u64,
+    unit_size: u64,
     /// lot size
     lot: u64,
     /// Opening quotation (expected opening price under the listing mode)
@@ -449,7 +449,7 @@ impl From<SuiPosition> for Position {
             position_type: PositionType::try_from(p.position_type).unwrap(),
             status: PositionStatus::try_from(p.status).unwrap(),
             direction: Direction::try_from(p.direction).unwrap(),
-            size: p.size,
+            unit_size: p.unit_size,
             lot: p.lot,
             open_price: p.open_price,
             open_spread: p.open_spread,

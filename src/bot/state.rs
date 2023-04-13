@@ -193,7 +193,7 @@ pub struct Market {
     pub pool: Pool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
-    pub size: u64,
+    pub unit_size: u64,
     /// The price at 0 o'clock in the utc of the current day, which is used to calculate the spread_fee
     pub opening_price: u64,
     pub pyth_id: Address,
@@ -338,7 +338,7 @@ pub struct Position {
     /// 1 buy long, 2 sell short.
     pub direction: Direction,
     /// the position size
-    pub size: u64,
+    pub unit_size: u64,
     /// lot size
     pub lot: u64,
     /// Opening quotation (expected opening price under the listing mode)
@@ -381,7 +381,7 @@ pub struct Position {
 
 impl Position {
     pub fn get_fund_size(&self) -> u64 {
-        Self::fund_size(self.size, self.lot, self.open_real_price)
+        Self::fund_size(self.unit_size, self.lot, self.open_real_price)
     }
 
     fn fund_size(size: u64, lot: u64, price: u64) -> u64 {
@@ -389,7 +389,7 @@ impl Position {
     }
 
     pub fn get_size(&self) -> u64 {
-        Self::size(self.lot, self.size)
+        Self::size(self.lot, self.unit_size)
     }
 
     fn size(lot: u64, size: u64) -> u64 {
@@ -411,11 +411,11 @@ impl Position {
     /// get Floating P/L
     pub fn get_pl(&self, price: &Price) -> i64 {
         if self.direction == Direction::Buy {
-            Self::fund_size(self.size, self.lot, price.sell_price) as i64
+            Self::fund_size(self.unit_size, self.lot, price.sell_price) as i64
                 - self.get_fund_size() as i64
         } else {
             self.get_fund_size() as i64
-                - Self::fund_size(self.size, self.lot, price.buy_price) as i64
+                - Self::fund_size(self.unit_size, self.lot, price.buy_price) as i64
         }
     }
 
