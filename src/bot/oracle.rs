@@ -187,6 +187,7 @@ where
             feed.value().price as u64,
         )
         .await?;
+        time::sleep(Duration::from_secs(1)).await;
     }
     Ok(())
 }
