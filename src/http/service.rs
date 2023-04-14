@@ -572,58 +572,56 @@ pub async fn handle_ws(
                 }
             }
             Ok(ws_event) = event_ws_rx.0.recv() => {
-                if is_login{
-                    match ws_event {
-                        WsSrvMessage::AccountUpdate(data) => {
-                            if data.id == user_account {
-                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::AccountUpdate(data).into_txt())).await {
-                                    error!("send ws message error: {}", e);
-                                    break;
-                                }
-                            }
-                        },
-                        WsSrvMessage::PositionUpdate(data) => {
-                            if data.account_id == user_account {
-                                debug!("got position update: {:?}", data);
-                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionUpdate(data).into_txt())).await {
-                                    error!("send ws message error: {}", e);
-                                    break;
-                                }
-                            }
-                        },
-                        WsSrvMessage::PositionOpen(data) => {
-                            if data.account_id == user_account {
-                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionOpen(data).into_txt())).await {
-                                    error!("send ws message error: {}", e);
-                                    break;
-                                }
-                            }
-                        },
-                        WsSrvMessage::PositionClose(data) => {
-                            if data.account_id == user_account {
-                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionClose(data).into_txt())).await {
-                                    error!("send ws message error: {}", e);
-                                    break;
-                                }
-                            }
-                        },
-                        WsSrvMessage::SpreadUpdate(data) => {
-                            if symbols_set.contains(&data.symbol) {
-                                if let Err(e) = socket.send(Message::Text(WsSrvMessage::SpreadUpdate(data).into_txt())).await {
-                                    error!("send ws message error: {}", e);
-                                    break;
-                                }
-                            }
-                        },
-                        WsSrvMessage::Close => {
-                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::Close.into_txt())).await {
+                match ws_event {
+                    WsSrvMessage::AccountUpdate(data) => {
+                        if data.id == user_account {
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::AccountUpdate(data).into_txt())).await {
                                 error!("send ws message error: {}", e);
+                                break;
                             }
-                            debug!("close ws connection");
-                            break;
                         }
-                        _ => {}
+                    },
+                    WsSrvMessage::PositionUpdate(data) => {
+                        if data.account_id == user_account {
+                            debug!("got position update: {:?}", data);
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionUpdate(data).into_txt())).await {
+                                error!("send ws message error: {}", e);
+                                break;
+                            }
+                        }
+                    },
+                    WsSrvMessage::PositionOpen(data) => {
+                        if data.account_id == user_account {
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionOpen(data).into_txt())).await {
+                                error!("send ws message error: {}", e);
+                                break;
+                            }
+                        }
+                    },
+                    WsSrvMessage::PositionClose(data) => {
+                        if data.account_id == user_account {
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionClose(data).into_txt())).await {
+                                error!("send ws message error: {}", e);
+                                break;
+                            }
+                        }
+                    },
+                    WsSrvMessage::SpreadUpdate(data) => {
+                        if symbols_set.contains(&data.symbol) {
+                            if let Err(e) = socket.send(Message::Text(WsSrvMessage::SpreadUpdate(data).into_txt())).await {
+                                error!("send ws message error: {}", e);
+                                break;
+                            }
+                        }
+                    },
+                    WsSrvMessage::Close => {
+                        if let Err(e) = socket.send(Message::Text(WsSrvMessage::Close.into_txt())).await {
+                            error!("send ws message error: {}", e);
+                        }
+                        debug!("close ws connection");
+                        break;
                     }
+                    _ => {}
                 }
             }
             ws_msg = socket.recv() => {
