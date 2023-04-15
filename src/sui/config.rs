@@ -63,7 +63,7 @@ impl Context {
             client: config
                 .get_sui_config()?
                 .get_active_env()?
-                .create_rpc_client(Some(Duration::from_secs(10)))
+                .create_rpc_client(Some(Duration::from_secs(5)))
                 .await?,
         }))
     }
