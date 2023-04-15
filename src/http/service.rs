@@ -555,7 +555,7 @@ pub async fn handle_ws(
 ) {
     // let (tx, mut rx) = mpsc::channel::<WsSrvMessage>(10);
     let symbols_set: DashSet<String> = DashSet::new();
-    let is_login = address.is_some();
+    // let is_login = address.is_some();
     let mut user_account = Address::default();
     if let Some(addr) = address {
         user_account = addr;
