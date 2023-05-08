@@ -3,11 +3,11 @@ use crate::config::{self, Config as cfg};
 use log::debug;
 use std::sync::Arc;
 use std::{fs, path::PathBuf, str::FromStr, time::Duration};
-use sui::config::{SuiClientConfig, SuiEnv};
 use sui_keys::keystore::{FileBasedKeystore, Keystore};
 use sui_sdk::rpc_types::{
     ObjectChange, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
 };
+use sui_sdk::sui_client_config::{SuiClientConfig, SuiEnv};
 use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
 // use sui_sdk::SuiClient;
 use sui_sdk::SuiClient;

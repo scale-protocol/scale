@@ -46,8 +46,8 @@ echo $account > $data/account
 elif [ "$1" = "coin" ]
 then
     echo "airdrop coin"
-    # scale -g 10000000 sui coin mint -a 3000000000000
-    scale -g 10000000 sui coin airdrop -a 10000000000
+    scale -g 10000000 sui coin mint -a 9000000000000
+    # scale -g 10000000 sui coin airdrop -a 10000000000
 elif [ "$1" = "scale" ] 
 then {
     echo "create market and account"
@@ -87,7 +87,9 @@ then {
 elif [ "$1" = "investment" ]
 then {
     echo "investment"
-    scale -g 10000000 sui trade investment -m $market -c $scale_coin -n 'scale' -a 0
+    scale -g 10000000 sui trade investment -m 0x473ed2872a6b8e26650e4feb76572b1cca80c55e2381e084dd7f08170b1fb25d -c $scale_coin -n 'scale' -a 3000000000000
+    scale -g 10000000 sui trade investment -m 0x65e3aad55942796208983e003d78b1f8f1867ff0388dc814be80c9dc634265f9 -c $scale_coin -n 'scale' -a 3000000000000
+    scale -g 10000000 sui trade investment -m 0x1ec44c3382bece314f07f49b12c53949a02da132db9e65767656a0d4d33be941 -c $scale_coin -n 'scale' -a 0
 }
 elif [ "$1" = "upprice" ]
 then {

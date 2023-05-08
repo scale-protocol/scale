@@ -70,7 +70,7 @@ impl Tool {
         let tx = self
             .ctx
             .client
-            .quorum_driver()
+            .quorum_driver_api()
             .execute_transaction_block(
                 Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature])
                     .verify()?,
