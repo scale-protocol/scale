@@ -128,7 +128,7 @@ pub async fn sub_price(
     for id in sds.iter() {
         sub_req.ids.push(id.key().to_string());
     }
-    let (ws_price_tx, ws_price_rx) = broadcast::channel::<OrgPrice>(sds.len());
+    let (ws_price_tx, ws_price_rx) = broadcast::channel::<OrgPrice>(sds.len() * 5);
 
     let req = serde_json::to_string(&sub_req)?;
 
