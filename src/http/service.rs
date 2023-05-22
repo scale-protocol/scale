@@ -563,7 +563,7 @@ pub async fn handle_ws(
     loop {
         tokio::select! {
             Ok(price_status) = price_status_rx.0.recv() => {
-                // debug!("got price from ws broadcast channel: {:?}", price);
+                debug!("got price from ws broadcast channel: {:?}", price_status);
                 if symbols_set.contains(&price_status.symbol) {
                     if let Err(e) = socket.send(Message::Text(WsSrvMessage::PriceUpdate(price_status).into_txt())).await {
                         error!("send ws message error: {}", e);

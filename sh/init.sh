@@ -87,9 +87,9 @@ then {
 elif [ "$1" = "investment" ]
 then {
     echo "investment"
-    scale -g 10000000 sui trade investment -m 0x473ed2872a6b8e26650e4feb76572b1cca80c55e2381e084dd7f08170b1fb25d -c $scale_coin -n 'scale' -a 3000000000000
-    scale -g 10000000 sui trade investment -m 0x65e3aad55942796208983e003d78b1f8f1867ff0388dc814be80c9dc634265f9 -c $scale_coin -n 'scale' -a 3000000000000
-    scale -g 10000000 sui trade investment -m 0x1ec44c3382bece314f07f49b12c53949a02da132db9e65767656a0d4d33be941 -c $scale_coin -n 'scale' -a 0
+    scale -g 10000000 sui trade investment -m 0xe9a92e50b65d85ea8fb1c92b4d18620fff317734a5b3ac016481b3ad74671db8 -c $scale_coin -n 'scale' -a 3000000000000
+    scale -g 10000000 sui trade investment -m 0x3081123117e299354ba11debb5abb6c2e2ff6a33a05fa45fbd607e75d9a3a4a7 -c $scale_coin -n 'scale' -a 3000000000000
+    scale -g 10000000 sui trade investment -m 0xe0805219a9c708c9f4077feb4d18997ccd989c3ab3c7922e5df3e45eb6a4d2c1 -c $scale_coin -n 'scale' -a 0
 }
 elif [ "$1" = "upprice" ]
 then {

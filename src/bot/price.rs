@@ -163,6 +163,7 @@ pub async fn sub_price(
                         error!("send watch msg error: {:?}", e);
                     }
                     if is_broadcast_price {
+                        debug!("broadcast ws price: {:?}", op);
                         if let Err(e) = ws_price_tx.send(op) {
                             error!("send ws price msg error: {:?}", e);
                         }
