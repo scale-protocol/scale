@@ -1,7 +1,6 @@
 use crate::bot::state::OrgPrice;
 use crate::bot::{state::MoveCall, ws::PriceWatchRx};
 use crate::com::Task;
-use chrono::Utc;
 use dashmap::DashMap;
 use log::*;
 use std::sync::Arc;
@@ -127,24 +126,24 @@ async fn update_time_now<C>(
 where
     C: MoveCall + Send + Sync + 'static,
 {
-    let record = dpf.get(&org_price.symbol);
-    debug!("oracle update price now: {:?}", org_price);
-    if let Some(record) = record {
-        let mut price_feed = record.value().clone();
-        price_feed.price = org_price.price;
-        price_feed.timestamp = org_price.update_time;
-        if price_feed.price == 0 {
-            warn!("price is 0, skip it: {:?}", org_price.symbol);
-            return Ok(());
-        }
-        call.update_price(price_feed.feed_address.as_str(), price_feed.price as u64)
-            .await?;
-    } else {
-        debug!(
-            "symbol {} ,cannot found price feed record",
-            org_price.symbol
-        );
-    }
+    // let record = dpf.get(&org_price.symbol);
+    // debug!("oracle update price now: {:?}", org_price);
+    // if let Some(record) = record {
+    //     let mut price_feed = record.value().clone();
+    //     price_feed.price = org_price.price;
+    //     price_feed.timestamp = org_price.update_time;
+    //     if price_feed.price == 0 {
+    //         warn!("price is 0, skip it: {:?}", org_price.symbol);
+    //         return Ok(());
+    //     }
+    //     call.update_price(price_feed.feed_address.as_str(), price_feed.price as u64)
+    //         .await?;
+    // } else {
+    //     debug!(
+    //         "symbol {} ,cannot found price feed record",
+    //         org_price.symbol
+    //     );
+    // }
     Ok(())
 }
 
@@ -168,25 +167,25 @@ async fn update_price_to_oracle<C>(dpf: Arc<DmPriceFeed>, call: Arc<C>) -> anyho
 where
     C: MoveCall + Send + Sync + 'static,
 {
-    for feed in dpf.iter() {
-        debug!(
-            "update price to oracle {:?} to {:?}",
-            feed.key(),
-            feed.value().price
-        );
-        if feed.value().price == 0 {
-            warn!("price is 0, skip it: {:?}", feed.key());
-            continue;
-        }
-        if Utc::now().timestamp() - feed.value().timestamp > 300 {
-            warn!("price is too old, skip it: {:?}", feed.key());
-            continue;
-        }
-        call.update_price(
-            feed.value().feed_address.as_str(),
-            feed.value().price as u64,
-        )
-        .await?;
-    }
+    // for feed in dpf.iter() {
+    //     debug!(
+    //         "update price to oracle {:?} to {:?}",
+    //         feed.key(),
+    //         feed.value().price
+    //     );
+    //     if feed.value().price == 0 {
+    //         warn!("price is 0, skip it: {:?}", feed.key());
+    //         continue;
+    //     }
+    //     if Utc::now().timestamp() - feed.value().timestamp > 300 {
+    //         warn!("price is too old, skip it: {:?}", feed.key());
+    //         continue;
+    //     }
+    //     call.update_price(
+    //         feed.value().feed_address.as_str(),
+    //         feed.value().price as u64,
+    //     )
+    //     .await?;
+    // }
     Ok(())
 }

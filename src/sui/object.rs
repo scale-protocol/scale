@@ -6,16 +6,20 @@ use crate::bot::state::{
 use crate::com::CliError;
 use crate::sui::config::Ctx;
 use log::*;
+use move_core_types::language_storage::StructTag;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
+use std::str::FromStr;
+use sui_json_rpc_types::{SuiObjectDataFilter, SuiObjectResponseQuery};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, SuiAddress},
     id::{ID, UID},
 };
+// use sui_types::gas_coin::GasCoin;
 use tokio::sync::mpsc::UnboundedSender;
 extern crate serde;
 
@@ -50,6 +54,37 @@ impl fmt::Display for ObjectType {
         };
         write!(f, "{}", t)
     }
+}
+
+pub async fn get_own_objects_whith_type(
+    ctx: Ctx,
+    address: SuiAddress,
+    t: &str,
+) -> anyhow::Result<Vec<SuiObjectResponse>> {
+    let mut objects: Vec<SuiObjectResponse> = Vec::new();
+    let mut cursor = None;
+    loop {
+        let response = ctx
+            .client
+            .read_api()
+            .get_owned_objects(
+                address,
+                Some(SuiObjectResponseQuery::new(
+                    Some(SuiObjectDataFilter::StructType(StructTag::from_str(t)?)),
+                    Some(SuiObjectDataOptions::full_content()),
+                )),
+                cursor,
+                None,
+            )
+            .await?;
+        objects.extend(response.data);
+        if response.has_next_page {
+            cursor = response.next_cursor;
+        } else {
+            break;
+        }
+    }
+    Ok(objects)
 }
 
 pub async fn pull_objects_and_send(
@@ -177,6 +212,18 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
     return Err(CliError::GetObjectError("Unresolved object information".to_string()).into());
 }
 #[derive(Debug, Deserialize, Serialize)]
+pub struct SuiList {
+    pub id: UID,
+    /// Market operator,
+    /// 1 project team
+    /// 2 Certified Third Party
+    /// 3 Community
+    officer: u8,
+    /// coin pool of the market
+    pub pool: SuiPool,
+    pub total: u64,
+}
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SuiMarket {
     pub id: UID,
     /// Maximum allowable leverage ratio
@@ -215,8 +262,6 @@ pub struct SuiMarket {
     /// 2 Certified Third Party
     /// 3 Community
     pub officer: u8,
-    /// coin pool of the market
-    pub pool: SuiPool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
     pub unit_size: u64,
@@ -244,7 +289,7 @@ impl From<SuiMarket> for Market {
             icon: m.icon,
             description: m.description,
             officer: Officer::try_from(m.officer).unwrap(),
-            pool: m.pool.into(),
+            // pool: m.pool.into(),
             unit_size: m.unit_size,
             opening_price: m.opening_price,
             pyth_id: Address::new(m.pyth_id.bytes.to_vec()),
@@ -386,17 +431,22 @@ impl From<I64> for i64 {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiPosition {
     id: UID,
+    /// Current actual margin balance of isolated
+    margin_balance: Balance,
+    info: Info,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Info {
     offset: u64,
     /// Initial position margin
     margin: u64,
     /// Current actual margin balance of isolated
-    margin_balance: Balance,
     /// leverage size
     leverage: u8,
-    /// 1 full position mode, 2 isolated position modes.
+    /// 1 cross position mode, 2 isolated position modes.
     #[serde(alias = "type")]
     position_type: u8,
-    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending.
+    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending , 5 partial closeing , 6 auto closing
     status: u8,
     /// 1 buy long, 2 sell short.
     direction: u8,
@@ -406,18 +456,19 @@ pub struct SuiPosition {
     lot: u64,
     /// Opening quotation (expected opening price under the listing mode)
     open_price: u64,
-    /// Point difference data on which the quotation is based
+    /// Point difference data on which the quotation is based, scale 10000
     open_spread: u64,
     // Actual quotation currently obtained
     open_real_price: u64,
     /// Closing quotation
     close_price: u64,
-    /// Point difference data on which the quotation is based
+    /// Point difference data on which the quotation is based , scale 10000
     close_spread: u64,
     // Actual quotation currently obtained
     close_real_price: u64,
     // PL
     profit: I64,
+    auto_open_price: u64,
     /// Automatic profit stop price
     stop_surplus_price: u64,
     /// Automatic stop loss price
@@ -427,13 +478,14 @@ pub struct SuiPosition {
     open_time: u64,
     close_time: u64,
     /// The effective time of the order.
-    /// If the position is not opened successfully after this time in the order listing mode,
+    /// If the position is not opened successcrossy after this time in the order listing mode,
     /// the order will be closed directly
     validity_time: u64,
     /// Opening operator (the user manually, or the clearing robot in the listing mode)
     open_operator: SuiAddress,
-    /// Account number of warehouse closing operator (user manual, or clearing robot)
+    /// Account number of warehouse closing operator (user manual, or clearing robot Qiangping)
     close_operator: SuiAddress,
+    symbol: Vec<u8>,
     /// Market account number of the position
     market_id: ID,
     account_id: ID,
@@ -442,32 +494,32 @@ impl From<SuiPosition> for Position {
     fn from(p: SuiPosition) -> Self {
         Self {
             id: Address::new(p.id.id.bytes.to_vec()),
-            offset: p.offset,
-            margin: p.margin,
+            offset: p.info.offset,
+            margin: p.info.margin,
             margin_balance: p.margin_balance.value(),
-            leverage: p.leverage,
-            position_type: PositionType::try_from(p.position_type).unwrap(),
-            status: PositionStatus::try_from(p.status).unwrap(),
-            direction: Direction::try_from(p.direction).unwrap(),
-            unit_size: p.unit_size,
-            lot: p.lot,
-            open_price: p.open_price,
-            open_spread: p.open_spread,
-            open_real_price: p.open_real_price,
-            close_price: p.close_price,
-            close_spread: p.close_spread,
-            close_real_price: p.close_real_price,
-            profit: p.profit.into(),
-            stop_surplus_price: p.stop_surplus_price,
-            stop_loss_price: p.stop_loss_price,
-            create_time: p.create_time,
-            open_time: p.open_time,
-            close_time: p.close_time,
-            validity_time: p.validity_time,
-            open_operator: Address::new(p.open_operator.to_vec()),
-            close_operator: Address::new(p.close_operator.to_vec()),
-            market_id: Address::new(p.market_id.bytes.to_vec()),
-            account_id: Address::new(p.account_id.bytes.to_vec()),
+            leverage: p.info.leverage,
+            position_type: PositionType::try_from(p.info.position_type).unwrap(),
+            status: PositionStatus::try_from(p.info.status).unwrap(),
+            direction: Direction::try_from(p.info.direction).unwrap(),
+            unit_size: p.info.unit_size,
+            lot: p.info.lot,
+            open_price: p.info.open_price,
+            open_spread: p.info.open_spread,
+            open_real_price: p.info.open_real_price,
+            close_price: p.info.close_price,
+            close_spread: p.info.close_spread,
+            close_real_price: p.info.close_real_price,
+            profit: p.info.profit.into(),
+            stop_surplus_price: p.info.stop_surplus_price,
+            stop_loss_price: p.info.stop_loss_price,
+            create_time: p.info.create_time,
+            open_time: p.info.open_time,
+            close_time: p.info.close_time,
+            validity_time: p.info.validity_time,
+            open_operator: Address::new(p.info.open_operator.to_vec()),
+            close_operator: Address::new(p.info.close_operator.to_vec()),
+            market_id: Address::new(p.info.market_id.bytes.to_vec()),
+            account_id: Address::new(p.info.account_id.bytes.to_vec()),
             symbol: "".to_string(),
             symbol_short: "".to_string(),
             icon: "".to_string(),

@@ -7,10 +7,10 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_COIN_PUBLISH_TX: &str = "9QTWwT2zjLenoSpcFwtLyHUL2RK2Pdws4c1GnEjXDBh3";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "GyYXXoBsPMhTApHXdsiDMVnZohgrmzhZuKR2L95rDNHV";
-pub const SUI_NFT_PUBLISH_TX: &str = "2yby3YtAvvkGkTiez31tNHEmSpsP2iA9Y5wfA3kom8xL";
-pub const SUI_SCALE_PUBLISH_TX: &str = "54dffpfTUAYJftCqi27ph7adswTMnN4UztZLFsbdnV69";
+pub const SUI_COIN_PUBLISH_TX: &str = "8VMqXszSCfB3Ug6zKEWSj5R197ZJVfngYp9xt8hF19uE";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "6kJTT5hURLFx5k6bkYNUCNH6BDSydgPuSnZPEXyxoxKC";
+pub const SUI_NFT_PUBLISH_TX: &str = "CT1SoqQbCJmL3obt8kyWf1AV74Dm9WdVLRjDkaWQ7wA9";
+pub const SUI_SCALE_PUBLISH_TX: &str = "6RNBBzjwHS7hua3XXVJCEEALBcNXjDL6chTbwHYZ3br2";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
@@ -50,6 +50,10 @@ pub enum CliError {
     InvalidWsAddressSigner,
     #[error("Get object error: {0}")]
     GetObjectError(String),
+    #[error("Not Active Account: {0}")]
+    NoActiveAccount(String),
+    #[error("Insufficient gas balance")]
+    InsufficientGasBalance,
 }
 
 pub fn f64_round(f: f64) -> f64 {

@@ -99,7 +99,7 @@ fn new_symbol_id_vec(cfg: &SuiConfig) -> Vec<ws::SymbolId> {
         .iter()
         .map(|s| ws::SymbolId {
             symbol: s.symbol.clone(),
-            id: s.id.clone(),
+            id: s.pyth_feed.clone(),
         })
         .collect::<Vec<ws::SymbolId>>()
 }
@@ -107,16 +107,14 @@ fn new_symbol_id_vec(cfg: &SuiConfig) -> Vec<ws::SymbolId> {
 fn new_price_feed_map(cfg: &SuiConfig) -> Arc<DmPriceFeed> {
     let price_feed = DmPriceFeed::new();
     for s in cfg.price_config.pyth_symbol.iter() {
-        if let Some(p) = s.oracle_feed_address.clone() {
-            price_feed.insert(
-                s.symbol.clone(),
-                PriceFeed {
-                    feed_address: p,
-                    price: 0,
-                    timestamp: 0,
-                },
-            );
-        }
+        price_feed.insert(
+            s.symbol.clone(),
+            PriceFeed {
+                feed_address: s.pyth_feed.clone(),
+                price: 0,
+                timestamp: 0,
+            },
+        );
     }
     Arc::new(price_feed)
 }

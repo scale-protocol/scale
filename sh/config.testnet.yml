@@ -1,0 +1,35 @@
+sui_cli_config_file: /Users/lihua/.sui/sui_config/client.yaml
+scale_store_path: /Users/lihua/.scale/.sui/store
+scale_package_id: 0x95b5875312b6d1d37a5a4d0755de3e96c49c6c2fbeb95fb36c0520502a402456
+scale_market_list_id: '0x0000000000000000000000000000000000000000000000000000000000000001'
+scale_bond_factory_id: 0x7805fe932c54b0fd862ca6adba923aeffed4b43b904c582bfc300c8ec7948ec6
+scale_coin_package_id: 0x2101c92efa3e3a8720b77229a1f706d7011d8c5be1a97cf3d7fa732116f4a1ee
+scale_coin_reserve_id: 0x55996e0206910a75f94c0d5bd332b1bd16404b149c4066cbd3567892ddd147cd
+scale_coin_admin_id: 0x300ac456d0e36cd7f83910ccca3c77d96dc7593cd4bb0890cecaf284d0f38aee
+scale_oracle_package_id: 0xdfa03e0bbb9a0ab6b4e93ae1d11adf3d26eeee740939e137516d9aeeed11b591
+scale_oracle_admin_id: 0xa536342eaef5657033d6ad166af8c9297d663eb95844f333a2bc691d596a06a4
+scale_oracle_state_id: 0x25819d7d0f925f197ff2dba9741c1a2ab0771261a54c3162c6b141f895634250
+scale_oracle_pyth_state_id: 0xd9c3c4769714d27f3e941b2091849adca2b9b01d79383743221db5de1a28588a
+scale_admin_cap_id: 0xd63f55a0fcb3d3fcffdcc20003e67ab4423b2a9945ada61c9e33a220bfea1cd4
+scale_nft_package_id: 0x1cc322dc90d62bc19defd5681eae2d34019288c64068db8db1f8dd38519a7069
+scale_nft_admin_id: 0x965a724d1113bb3f53168080664a895e70a66e56c43da3d2e5ef16cb02059677
+price_config:
+  ws_url: wss://xc-testnet.pyth.network/ws
+  price_server_url: https://xc-testnet.pyth.network
+  db:
+    url: http://127.0.0.1:8086
+    org: scale
+    bucket: pyth.network
+    token: some token
+  worm_state: '0xebba4cc4d614f7a7cdbe883acc76d1cc767922bc96778e7b68be0d15fce27c02'
+  pyth_state: '0xd8afde3a48b4ff7212bd6829a150f43f59043221200d63504d981f62bff2e27a'
+  pyth_symbol:
+  - symbol: Crypto.BTC/USD
+    pyth_feed: '0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b'
+    price_info_object_id: '0x878b118488aeb5763b5f191675c3739a844ce132cb98150a465d9407d7971e7c'
+  - symbol: Crypto.ETH/USD
+    pyth_feed: '0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6'
+    price_info_object_id: '0x8deeebad0a8fb86d97e6ad396cc84639da5a52ae4bbc91c78eb7abbf3e641ed6'
+  - symbol: Crypto.DOGE/USD
+    pyth_feed: '0x31775e1d6897129e8a84eeba975778fb50015b88039e9bc140bbd839694ac0ae'
+    price_info_object_id: '0xa40c73e07a7ec37d4875608d8e45f1f0e8442d43870e5e56bbc46cff780646f7'

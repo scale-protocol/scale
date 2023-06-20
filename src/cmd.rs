@@ -110,21 +110,23 @@ fn sui_oracle() -> Command {
                 .arg(arg!(-s --symbol <SYMBOL> "The symbol of the oracle.")),
         )
         .subcommand(
-            Command::new("update_owner")
-                .about("update oracle price feed.")
-                .arg_required_else_help(true)
-                .arg(arg!(-f --feed <FEED> "The price feed address of the oracle."))
-                .arg(arg!(-o --owner <OWNER> "The new owner of the oracle.")),
+            Command::new("update_pyth_price_bat")
+                .about("update pyth price bat.")
+                .arg(arg!(-b --budget <BUDGET> "The budget of the transaction fee.").value_parser(clap::value_parser!(u64)))
+                .arg(
+                    arg!(-d --data <SYMBOL> "vaa data , get it from pyth network,If empty, try to automatically obtain")
+                        .action(ArgAction::Append),
+                ),
         )
         .subcommand(
-            Command::new("update_price")
-                .about("update price of oracle.")
+            Command::new("get_latest_vaas")
+                .about("get latest vaas."),
+        )
+        .subcommand(
+            Command::new("get_price")
+                .about("get price from china.")
                 .arg_required_else_help(true)
-                .arg(arg!(-f --feed <FEED> "The price feed address of the oracle."))
-                .arg(
-                    arg!(-p --price <PRICE> "The new price of the oracle.")
-                        .value_parser(clap::value_parser!(u64)),
-                ),
+                .arg(arg!(-s --symbol <SYMBOL> "The symbol of the oracle.")),
         )
 }
 fn sui_nft() -> Command {
@@ -201,7 +203,7 @@ fn sui_trade() -> Command {
             .about("Cash deposit.")
             .arg_required_else_help(true)
             .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
-            .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
+            .arg(arg!(-c --coins <COINS> "Coins for deduction , If empty, try to automatically obtain").action(ArgAction::Append))
             .arg(
                 arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
                 .value_parser(clap::value_parser!(u64)),
@@ -211,7 +213,7 @@ fn sui_trade() -> Command {
             Command::new("withdrawal")
             .about("Withdrawal of trading account balance.")
                 .arg_required_else_help(true)
-                .arg(arg!(-t --account <ACCOUNT> "Coins for deduction"))
+                .arg(arg!(-t --account <ACCOUNT> "Trading account id."))
                 .arg(
                     arg!(-a --amount <AMOUNT> "The balance to be drawn will fail if the equity is insufficient.")
                         .value_parser(clap::value_parser!(u64)),
@@ -239,7 +241,6 @@ fn sui_trade() -> Command {
             Command::new("create_market")
                 .about("Create a market object.")
                 .arg_required_else_help(true)
-                .arg(arg!(-c --coin <COIN> "Used to specify transaction currency."))
                 .arg(arg!(-s --symbol <SYMBOL> "The transaction pair symbol needs pyth.network to support quotation."))
                 .arg(arg!(-i --icon <ICON> "The icon of the market."))
                 .arg(arg!(-p --pyth_id <PYTH_ID> "Pyth.network oracle quote object ID."))
@@ -356,7 +357,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Funding the market liquidity pool.")
                 .arg(arg!(-m --market <MARKET> "The nft style name."))
-                .arg(arg!(-c --coins <COINS> "Coins for deduction").action(ArgAction::Append))
+                .arg(arg!(-c --coins <COINS> "Coins for deduction,If empty, try to automatically obtain").action(ArgAction::Append))
                 .arg(arg!(-n --name <NAME> "The nft style name. NFT credentials of the specified style will be obtained."))
                 .arg(
                     arg!(-a --amount <AMOUNT> "The amount of NFT to be obtained.")
@@ -482,11 +483,14 @@ pub fn run() -> anyhow::Result<()> {
                         Some(("create_price_feed", matches)) => {
                             tool.create_price_feed(matches).await?;
                         }
-                        Some(("update_owner", matches)) => {
-                            tool.update_owner(matches).await?;
+                        Some(("update_pyth_price_bat", matches)) => {
+                            tool.update_pyth_price_bat(matches).await?;
                         }
-                        Some(("update_price", matches)) => {
-                            tool.update_price(matches).await?;
+                        Some(("get_latest_vaas", matches)) => {
+                            tool.get_latest_vaas(matches).await?;
+                        }
+                        Some(("get_price", matches)) => {
+                            tool.get_price(matches).await?;
                         }
                         _ => unreachable!(),
                     }

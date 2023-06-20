@@ -3,69 +3,73 @@ use crate::config::{self, Config as cfg};
 use log::debug;
 use std::sync::Arc;
 use std::{fs, path::PathBuf, str::FromStr, time::Duration};
-use sui::config::{SuiClientConfig, SuiEnv};
-use sui_keys::keystore::{FileBasedKeystore, Keystore};
 use sui_sdk::rpc_types::{
     ObjectChange, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
 };
-use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
-// use sui_sdk::SuiClient;
-use sui_sdk::SuiClient;
+use sui_sdk::types::base_types::{ObjectID, TransactionDigest};
+use sui_sdk::{wallet_context::WalletContext, SuiClient};
+use sui_types::base_types::SuiAddress;
 extern crate serde;
+use reqwest::Client as HttpClient;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
 const DEFAULT_OBJECT_ID: &str = "0x01";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub sui_cli_config_file: PathBuf,
     #[serde(skip_serializing, skip_deserializing)]
-    pub sui_config: SuiConfig,
-    #[serde(skip_serializing, skip_deserializing)]
     pub scale_config_file: PathBuf,
     pub scale_store_path: PathBuf,
     pub scale_package_id: ObjectID,
     pub scale_market_list_id: ObjectID,
-    pub scale_nft_factory_id: ObjectID,
+    pub scale_bond_factory_id: ObjectID,
     pub scale_coin_package_id: ObjectID,
     pub scale_coin_reserve_id: ObjectID,
     pub scale_coin_admin_id: ObjectID,
     pub scale_oracle_package_id: ObjectID,
     pub scale_oracle_admin_id: ObjectID,
-    pub scale_oracle_root_id: ObjectID,
+    pub scale_oracle_state_id: ObjectID,
+    pub scale_oracle_pyth_state_id: ObjectID,
     pub scale_admin_cap_id: ObjectID,
     pub scale_nft_package_id: ObjectID,
     pub scale_nft_admin_id: ObjectID,
     pub price_config: config::PriceConfig,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SuiConfig {
-    pub keystore: KeystoreFile,
-    pub envs: Vec<SuiEnv>,
-    pub active_env: Option<String>,
-    pub active_address: Option<SuiAddress>,
-}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KeystoreFile {
     #[serde(alias = "File")]
     pub file: PathBuf,
 }
 pub type Ctx = Arc<Context>;
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct Context {
     pub config: Config,
     pub client: SuiClient,
+    pub wallet: WalletContext,
+    pub http_client: HttpClient,
 }
 
 impl Context {
     pub async fn new(config: Config) -> anyhow::Result<Ctx> {
+        let wallet = WalletContext::new(
+            &config.sui_cli_config_file,
+            Some(Duration::from_secs(10)),
+            None,
+        )
+        .await?;
         Ok(Arc::new(Context {
             config: config.clone(),
-            client: config
-                .get_sui_config()?
-                .get_active_env()?
-                .create_rpc_client(Some(Duration::from_secs(10)))
-                .await?,
+            client: wallet.get_client().await?,
+            wallet,
+            http_client: HttpClient::new(),
         }))
+    }
+    pub fn get_active_address(&self) -> anyhow::Result<SuiAddress> {
+        Ok(self
+            .wallet
+            .config
+            .active_address
+            .ok_or_else(|| CliError::NoActiveAccount("no active account".to_string()))?)
     }
 }
 impl Default for Config {
@@ -73,30 +77,23 @@ impl Default for Config {
         let home_dir = config::get_home_dir();
         let scale_home_dir = config::get_or_create_config_dir(vec![".scale", ".sui"]);
         let sui_dir = home_dir.join(".sui").join("sui_config");
-        let keystore_file = sui_dir.join("sui.keystore");
+        // let keystore_file = sui_dir.join("sui.keystore");
         let default_id = ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap();
         Config {
             sui_cli_config_file: sui_dir.join("client.yaml"),
-            sui_config: SuiConfig {
-                keystore: KeystoreFile {
-                    file: keystore_file,
-                },
-                envs: vec![],
-                active_address: None,
-                active_env: None,
-            },
             scale_config_file: scale_home_dir.join("sui_config.yaml"),
             scale_store_path: scale_home_dir.join("store"),
             scale_package_id: default_id,
             scale_market_list_id: default_id,
-            scale_nft_factory_id: default_id,
+            scale_bond_factory_id: default_id,
             scale_coin_package_id: default_id,
             scale_coin_reserve_id: default_id,
             scale_coin_admin_id: default_id,
             scale_admin_cap_id: default_id,
             scale_oracle_package_id: default_id,
             scale_oracle_admin_id: default_id,
-            scale_oracle_root_id: default_id,
+            scale_oracle_state_id: default_id,
+            scale_oracle_pyth_state_id: default_id,
             scale_nft_package_id: default_id,
             scale_nft_admin_id: default_id,
             price_config: config::PriceConfig::default(),
@@ -110,36 +107,34 @@ impl cfg for Config {
         Self: DeserializeOwned,
     {
         if !self.scale_config_file.exists() {
-            self.load_sui_config()?;
             return self.init();
         }
         let config_str = fs::read_to_string(&self.scale_config_file)?;
+        debug!("read config from local config file: {}", config_str);
         match serde_yaml::from_str::<Config>(&config_str) {
             Ok(c) => {
                 self.sui_cli_config_file = c.sui_cli_config_file;
                 self.scale_store_path = c.scale_store_path;
                 self.scale_package_id = c.scale_package_id;
                 self.scale_market_list_id = c.scale_market_list_id;
-                self.scale_nft_factory_id = c.scale_nft_factory_id;
+                self.scale_bond_factory_id = c.scale_bond_factory_id;
                 self.scale_admin_cap_id = c.scale_admin_cap_id;
                 self.scale_coin_package_id = c.scale_coin_package_id;
                 self.scale_coin_reserve_id = c.scale_coin_reserve_id;
                 self.scale_coin_admin_id = c.scale_coin_admin_id;
                 self.scale_oracle_package_id = c.scale_oracle_package_id;
                 self.scale_oracle_admin_id = c.scale_oracle_admin_id;
-                self.scale_oracle_root_id = c.scale_oracle_root_id;
+                self.scale_oracle_state_id = c.scale_oracle_state_id;
+                self.scale_oracle_pyth_state_id = c.scale_oracle_pyth_state_id;
                 self.scale_nft_package_id = c.scale_nft_package_id;
                 self.scale_nft_admin_id = c.scale_nft_admin_id;
                 self.price_config = c.price_config;
 
-                self.load_sui_config()?;
                 if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
                     return self.init();
                 }
-                // debug!("load scale config success: {:?}", self);
             }
             Err(e) => {
-                self.load_sui_config()?;
                 debug!("load scale config error: {}", e);
                 return self.init();
             }
@@ -159,7 +154,7 @@ scale config file: {}
 scale store path: {}
 scale package id: {}
 scale market list id: {}
-scale nft factory id: {}
+scale bond factory id: {}
 scale admin id: {}
 scale coin package id: {}
 scale coin reserve id: {}
@@ -175,14 +170,14 @@ scale nft admin id: {}
             self.scale_store_path.display(),
             self.scale_package_id,
             self.scale_market_list_id,
-            self.scale_nft_factory_id,
+            self.scale_bond_factory_id,
             self.scale_admin_cap_id,
             self.scale_coin_package_id,
             self.scale_coin_reserve_id,
             self.scale_coin_admin_id,
             self.scale_oracle_package_id,
             self.scale_oracle_admin_id,
-            self.scale_oracle_root_id,
+            self.scale_oracle_state_id,
             self.scale_nft_package_id,
             self.scale_nft_admin_id,
         );
@@ -190,37 +185,63 @@ scale nft admin id: {}
 }
 
 impl Config {
-    fn load_sui_config(&mut self) -> anyhow::Result<()> {
-        let sui_config_str = fs::read_to_string(&self.sui_cli_config_file)?;
-        let sui_config: SuiConfig = serde_yaml::from_str(&sui_config_str)?;
-        // debug!("load sui config success: {:?}", sui_config);
-        self.sui_config = sui_config;
-        Ok(())
-    }
-
-    pub fn get_sui_config(&self) -> anyhow::Result<SuiClientConfig> {
-        let mut sui_config = SuiClientConfig::new(Keystore::from(
-            FileBasedKeystore::new(&self.sui_config.keystore.file)
-                .map_err(|e| CliError::CliError(e.to_string()))?,
-        ));
-        sui_config.envs = self.sui_config.envs.clone();
-        sui_config.active_address = self.sui_config.active_address.clone();
-        sui_config.active_env = self.sui_config.active_env.clone();
-        Ok(sui_config)
-    }
-
     fn init(&mut self) -> anyhow::Result<()> {
-        // get scale move package info
-        let scale_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
-        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
-        // get coin package info
-        let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
-        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.object_changes);
-        // get oracle package info
-        let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
-        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
-        let nft_package = self.get_publish_info(com::SUI_NFT_PUBLISH_TX)?;
-        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
+        com::new_tokio_one_thread().block_on(async {
+            let wallet = WalletContext::new(
+                &self.sui_cli_config_file,
+                Some(Duration::from_secs(10)),
+                None,
+            )
+            .await;
+            if let Ok(wallet) = wallet {
+                if let Ok(client) = wallet.get_client().await {
+                    // get scale move package info
+                    if let Ok(scale_package) = self
+                        .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
+                    } else {
+                        println!("please init scale package");
+                        return;
+                    }
+                    // get coin package info
+                    if let Ok(coin_package) = self
+                        .get_publish_info(&client, com::SUI_COIN_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.object_changes);
+                    } else {
+                        println!("please init coin package");
+                        return;
+                    }
+                    // get oracle package info
+                    if let Ok(oracle_package) = self
+                        .get_publish_info(&client, com::SUI_ORACLE_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
+                    } else {
+                        println!("please init oracle package");
+                        return;
+                    }
+                    // get nft package info
+                    if let Ok(nft_package) = self
+                        .get_publish_info(&client, com::SUI_NFT_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
+                    } else {
+                        println!("please init nft package");
+                        return;
+                    }
+                } else {
+                }
+            } else {
+                println!("please init wallet first");
+                return;
+            }
+        });
         self.save()?;
         Ok(())
     }
@@ -247,14 +268,14 @@ impl Config {
                             }
                         }
                         if object_type.module.as_str() == "market"
-                            && object_type.name.as_str() == "MarketList"
+                            && object_type.name.as_str() == "List"
                         {
                             self.scale_market_list_id = object_id;
                         }
                         if object_type.module.as_str() == "bond"
-                            && object_type.name.as_str() == "ScaleNFTFactory"
+                            && object_type.name.as_str() == "BondFactory"
                         {
-                            self.scale_nft_factory_id = object_id;
+                            self.scale_bond_factory_id = object_id;
                         }
                         if object_type.module.as_str() == "admin"
                             && object_type.name.as_str() == "AdminCap"
@@ -265,8 +286,13 @@ impl Config {
                             if object_type.name.as_str() == "AdminCap" {
                                 self.scale_oracle_admin_id = object_id;
                             }
-                            if object_type.name.as_str() == "Root" {
-                                self.scale_oracle_root_id = object_id;
+                            if object_type.name.as_str() == "State" {
+                                self.scale_oracle_state_id = object_id;
+                            }
+                        }
+                        if object_type.module.as_str() == "pyth_network" {
+                            if object_type.name.as_str() == "State" {
+                                self.scale_oracle_pyth_state_id = object_id;
                             }
                         }
                         if object_type.module.as_str() == "nft" {
@@ -300,50 +326,28 @@ impl Config {
         }
     }
 
-    fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionBlockResponse> {
-        let sui_config = self.get_sui_config()?;
-        debug!("get publish info: {:?}", sui_config.get_active_env());
-        com::new_tokio_one_thread().block_on(async {
-            debug!("get move package info");
-            if let Ok(active_envs) = sui_config.get_active_env() {
-                let client = active_envs
-                    .create_rpc_client(Some(Duration::from_secs(1000)))
-                    .await;
-                // let len = tx.len();
-                // if len > 32 {
-                //     return Err(CliError::CliError("tx is too long".to_string()).into());
-                // }
-                // let mut dg: [u8; 32] = Default::default();
-                // dg[..len].clone_from_slice(tx.as_bytes());
-                match client {
-                    Ok(client) => {
-                        let td = TransactionDigest::from_str(tx)?;
-                        let opt = SuiTransactionBlockResponseOptions {
-                            show_input: false,
-                            show_raw_input: false,
-                            show_effects: false,
-                            show_events: false,
-                            show_object_changes: true,
-                            show_balance_changes: false,
-                        };
-                        let rs = client
-                            .read_api()
-                            .get_transaction_with_options(td, opt)
-                            .await
-                            .map_err(|e| CliError::RpcError(e.to_string()))?;
-                        Ok(rs)
-                    }
-                    Err(e) => {
-                        debug!("get move package info failed: {:?}", e);
-                        Err(CliError::ActiveEnvNotFound.into())
-                    }
-                }
-            } else {
-                debug!("get move package info failed, active env not found");
-                Err(CliError::ActiveEnvNotFound.into())
-            }
-        })
+    async fn get_publish_info(
+        &self,
+        client: &SuiClient,
+        tx: &str,
+    ) -> anyhow::Result<SuiTransactionBlockResponse> {
+        let td = TransactionDigest::from_str(tx)?;
+        let opt = SuiTransactionBlockResponseOptions {
+            show_input: false,
+            show_raw_input: false,
+            show_effects: false,
+            show_events: false,
+            show_object_changes: true,
+            show_balance_changes: false,
+        };
+        let rs = client
+            .read_api()
+            .get_transaction_with_options(td, opt)
+            .await
+            .map_err(|e| CliError::RpcError(e.to_string()))?;
+        Ok(rs)
     }
+
     pub fn set_config(&mut self, args: &clap::ArgMatches) {
         let storage_path = args.get_one::<PathBuf>("storage");
         let sui_config_file = args.get_one::<PathBuf>("sui-client-config");

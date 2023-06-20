@@ -1,32 +1,43 @@
 use crate::bot::state::{Address, MoveCall};
 use crate::com;
+use crate::utils;
 use crate::{
     bot::state::DENOMINATOR,
     com::CliError,
     sui::config::{Config, Context, Ctx},
 };
 use async_trait::async_trait;
-use chrono::Utc;
+use base64::{
+    engine::{self, general_purpose},
+    Engine as _,
+};
 use log::*;
+use move_core_types::language_storage::StructTag;
 use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
 use std::str::FromStr;
-use sui_json_rpc_types::SuiTypeTag;
+use sui_json_rpc_types::{
+    SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery,
+    SuiTypeTag,
+};
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
     json::SuiJsonValue,
     rpc_types::SuiTransactionBlockResponseOptions,
-    types::{
-        base_types::ObjectID,
-        messages::{Command, Transaction, TransactionData, TransactionKind},
-    },
+    types::{base_types::ObjectID, transaction::Transaction},
 };
-use sui_types::messages::ExecuteTransactionRequestType;
+use sui_types::{
+    coin::Coin, quorum_driver_types::ExecuteTransactionRequestType, transaction::TransactionData,
+};
 
 const COIN_MODULE_NAME: &str = "scale";
 const SCALE_MODULE_NAME: &str = "enter";
 const NFT_MODULE_NAME: &str = "nft";
 const ORACLE_MODULE_NAME: &str = "oracle";
+const ORACLE_PYTH_MODULE_NAME: &str = "pyth_network";
+
+const USDT_TYPE_TAG: &str = "xxx::USDT::USDT";
+const SUI_CLOCK_OBJECT_ID: &str = "0x6";
 pub struct Tool {
     ctx: Ctx,
     gas_budget: u64,
@@ -37,13 +48,22 @@ impl Tool {
         let ctx = Context::new(conf).await?;
         Ok(Self { ctx, gas_budget })
     }
+    pub fn get_clock_object_id(&self) -> ObjectID {
+        ObjectID::from_str(SUI_CLOCK_OBJECT_ID).expect("cannot parse clock ObjectID")
+    }
+    pub fn get_t_str(&self) -> String {
+        if let Ok(env) = self.ctx.wallet.config.get_active_env() {
+            if env.alias == "mainnet" {
+                return USDT_TYPE_TAG.to_string();
+            }
+        }
+        format!("{}::scale::SCALE", self.ctx.config.scale_coin_package_id)
+    }
 
     pub fn get_t(&self) -> SuiTypeTag {
         SuiTypeTag::from(
-            sui_types::parse_sui_type_tag(
-                format!("{}::scale::SCALE", self.ctx.config.scale_coin_package_id).as_str(),
-            )
-            .expect("cannot patransaction_datae SuiTypeTag"),
+            sui_types::parse_sui_type_tag(self.get_t_str().as_str())
+                .expect("cannot patransaction_datae SuiTypeTag"),
         )
     }
 
@@ -56,12 +76,77 @@ impl Tool {
         )
     }
 
+    pub async fn get_gas(&self, budget: u64) -> anyhow::Result<Vec<ObjectID>> {
+        let active_address = self.ctx.get_active_address()?;
+        let gas_objects = self.ctx.wallet.gas_objects(active_address).await?;
+        let mut sui_objects = Vec::new();
+        let mut amout = 0u64;
+        for gas_object in gas_objects {
+            amout += gas_object.0;
+            sui_objects.push(gas_object.1.object_id);
+            if amout >= budget {
+                break;
+            }
+        }
+        if amout < budget {
+            return Err(CliError::InsufficientGasBalance.into());
+        }
+        Ok(sui_objects)
+    }
+
+    pub async fn get_coin_object_whith_t(&self, budget: u64) -> anyhow::Result<Vec<ObjectID>> {
+        let active_address = self.ctx.get_active_address()?;
+        let mut coin_objects: Vec<SuiObjectResponse> = Vec::new();
+        let mut cursor = None;
+        loop {
+            let response = self
+                .ctx
+                .client
+                .read_api()
+                .get_owned_objects(
+                    active_address,
+                    Some(SuiObjectResponseQuery::new(
+                        Some(SuiObjectDataFilter::StructType(StructTag::from_str(
+                            self.get_t_str().as_str(),
+                        )?)),
+                        Some(SuiObjectDataOptions::bcs_lossless()),
+                    )),
+                    cursor,
+                    None,
+                )
+                .await?;
+            coin_objects.extend(response.data);
+            if response.has_next_page {
+                cursor = response.next_cursor;
+            } else {
+                break;
+            }
+        }
+        let mut token_objects = Vec::new();
+        let mut amout = 0u64;
+        for gas_object in coin_objects {
+            if let Some(bcs) = gas_object.move_object_bcs() {
+                let c = Coin::from_bcs_bytes(bcs)?;
+                amout += c.value();
+                token_objects.push(*c.id());
+                if amout >= budget {
+                    break;
+                }
+            }
+        }
+        if amout < budget {
+            return Err(CliError::InsufficientGasBalance.into());
+        }
+        Ok(token_objects)
+    }
+
     async fn exec(&self, pm: TransactionData) -> anyhow::Result<()> {
-        let address =
-            self.ctx.config.sui_config.active_address.ok_or_else(|| {
-                CliError::InvalidCliParams("active address not found".to_string())
-            })?;
-        let signature = self.ctx.config.get_sui_config()?.keystore.sign_secure(
+        let address = self.ctx.wallet.config.active_address.ok_or_else(|| {
+            CliError::NoActiveAccount(
+                "no active account, please use sui client command create it .".to_string(),
+            )
+        })?;
+        let signature = self.ctx.wallet.config.keystore.sign_secure(
             &address,
             &pm,
             Intent::sui_transaction(),
@@ -70,7 +155,7 @@ impl Tool {
         let tx = self
             .ctx
             .client
-            .quorum_driver()
+            .quorum_driver_api()
             .execute_transaction_block(
                 Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature])
                     .verify()?,
@@ -78,16 +163,12 @@ impl Tool {
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
             .await?;
-        let TransactionData::V1(v) = pm;
-        if let TransactionKind::ProgrammableTransaction(s) = v.kind {
-            s.commands.into_iter().for_each(|c| match c {
-                Command::MoveCall(m) => {
-                    println!("call: {}::{}::{}", m.package, m.module, m.function);
-                }
-                _ => {}
-            });
+
+        if tx.errors.is_empty() {
+            println!("exec: {:?} , success", tx.digest.to_string());
+        } else {
+            println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
         }
-        println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
         Ok(())
     }
 
@@ -103,8 +184,10 @@ impl Tool {
             .client
             .transaction_builder()
             .move_call(
-                self.ctx.config.sui_config.active_address.ok_or_else(|| {
-                    CliError::InvalidCliParams("active address not found".to_string())
+                self.ctx.wallet.config.active_address.ok_or_else(|| {
+                    CliError::NoActiveAccount(
+                        "no active account, please use sui client command create it .".to_string(),
+                    )
                 })?,
                 package,
                 module,
@@ -208,7 +291,7 @@ impl Tool {
                 "create_price_feed",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::new(json!(symbol))?,
                 ],
                 vec![],
@@ -217,23 +300,68 @@ impl Tool {
         self.exec(transaction_data).await
     }
 
-    pub async fn update_owner(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let feed = args
-            .get_one::<String>("feed")
-            .ok_or_else(|| CliError::InvalidCliParams("feed".to_string()))?;
-        let owner = args
-            .get_one::<String>("owner")
-            .ok_or_else(|| CliError::InvalidCliParams("owner".to_string()))?;
+    async fn get_vaa_data_inner(&self) -> anyhow::Result<Vec<String>> {
+        utils::get_vaa_data(&self.ctx.http_client, &self.ctx.config.price_config).await
+    }
+
+    pub async fn get_latest_vaas(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
+        println!("vaa data: {:?}", self.get_vaa_data_inner().await?);
+        Ok(())
+    }
+
+    async fn update_pyth_price_bat_inner(
+        &self,
+        budget: u64,
+        vaa_data: Vec<String>,
+    ) -> anyhow::Result<()> {
+        if budget == 0 {
+            return Err(CliError::InvalidCliParams("budget is zero".to_string()).into());
+        }
+        if vaa_data.len() == 0 {
+            return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
+        }
+        let mut vaa_data_bytes = Vec::new();
+        for d in vaa_data.iter() {
+            if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
+                vaa_data_bytes.push(json!(b.as_slice()));
+            }
+        }
+        let coins = self
+            .get_gas(budget)
+            .await?
+            .into_iter()
+            .map(|c| json!(c.to_string()))
+            .collect::<Vec<JsonValue>>();
+        let price_infos = self
+            .ctx
+            .config
+            .price_config
+            .get_price_info_object_ids()
+            .into_iter()
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
+        println!(
+            "coins: {:?}, vaa_data: {:?}, price_infos: {:?}",
+            coins, vaa_data_bytes, price_infos
+        );
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
-                ORACLE_MODULE_NAME,
-                "update_owner",
+                ORACLE_PYTH_MODULE_NAME,
+                "update_pyth_price_bat",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(&feed)?),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(&owner)?),
+                    SuiJsonValue::new(json!(coins))?,
+                    SuiJsonValue::new(json!(vaa_data_bytes))?,
+                    SuiJsonValue::new(json!(price_infos))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(
+                        self.ctx.config.price_config.worm_state.as_str(),
+                    )?),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(
+                        self.ctx.config.price_config.pyth_state.as_str(),
+                    )?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_pyth_state_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(self.get_clock_object_id()),
                 ],
                 vec![],
             )
@@ -241,18 +369,31 @@ impl Tool {
         self.exec(transaction_data).await
     }
 
-    async fn update_price_inner(&self, feed: &str, price: u64) -> anyhow::Result<()> {
-        let timestamp = Utc::now().timestamp();
+    pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let vaa_data = args.get_many::<String>("data").unwrap_or_default();
+        let mut vaa_data: Vec<String> = vaa_data.map(|d| d.to_string()).collect();
+        if vaa_data.len() == 0 {
+            vaa_data =
+                utils::get_vaa_data(&self.ctx.http_client, &self.ctx.config.price_config).await?;
+        }
+        debug!("vaa data: {:?}", vaa_data);
+        let budget = args
+            .get_one::<u64>("budget")
+            .ok_or_else(|| CliError::InvalidCliParams("budget".to_string()))?;
+        self.update_pyth_price_bat_inner(*budget, vaa_data).await
+    }
+
+    async fn get_price_inner(&self, symbol: &str) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
                 ORACLE_MODULE_NAME,
-                "update_price",
+                "get_price",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(feed)?),
-                    SuiJsonValue::new(json!(price.to_string()))?,
-                    SuiJsonValue::new(json!(timestamp.to_string()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(
+                        self.ctx.config.price_config.pyth_state.as_str(),
+                    )?),
+                    SuiJsonValue::new(json!(symbol.as_bytes()))?,
                 ],
                 vec![],
             )
@@ -260,14 +401,11 @@ impl Tool {
         self.exec(transaction_data).await
     }
 
-    pub async fn update_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let feed = args
-            .get_one::<String>("feed")
-            .ok_or_else(|| CliError::InvalidCliParams("feed".to_string()))?;
-        let price = args
-            .get_one::<u64>("price")
-            .ok_or_else(|| CliError::InvalidCliParams("price".to_string()))?;
-        self.update_price_inner(feed.as_str(), *price).await
+    pub async fn get_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        self.get_price_inner(symbol.as_str()).await
     }
 
     pub async fn create_account(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -329,7 +467,7 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
                 vec![self.get_p(), self.get_t()],
@@ -821,7 +959,7 @@ impl Tool {
                 "add_factory_mould",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_factory_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(url.as_bytes()))?,
@@ -843,7 +981,7 @@ impl Tool {
                 "remove_factory_mould",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_factory_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                 ],
                 vec![],
@@ -876,7 +1014,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(coins))?,
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_nft_factory_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
@@ -924,7 +1062,7 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                 ],
                 vec![self.get_p(), self.get_t()],
             )
@@ -1020,7 +1158,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::new(json!(lot.to_string()))?,
                     SuiJsonValue::new(json!(leverage))?,
                     SuiJsonValue::new(json!(position_type))?,
@@ -1051,7 +1189,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                 ],
                 vec![self.get_p(), self.get_t()],
@@ -1074,7 +1212,7 @@ impl MoveCall for Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         market_id.to_vec().as_slice(),
                     )?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                 ],
                 vec![self.get_p(), self.get_t()],
             )
@@ -1097,7 +1235,7 @@ impl MoveCall for Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         account_id.to_vec().as_slice(),
                     )?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_root_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(ObjectID::from_bytes(
                         position_id.to_vec().as_slice(),
                     )?),
@@ -1128,7 +1266,7 @@ impl MoveCall for Tool {
         self.exec(transaction_data).await
     }
 
-    async fn update_price(&self, feed: &str, price: u64) -> anyhow::Result<()> {
-        self.update_price_inner(feed, price).await
+    async fn get_price(&self, symbol: &str) -> anyhow::Result<()> {
+        self.get_price_inner(symbol).await
     }
 }

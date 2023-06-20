@@ -52,16 +52,45 @@ where
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceConfig {
+    pub price_server_url: String,
     pub ws_url: String,
     pub db: Influxdb,
+    pub worm_state: String,
+    pub pyth_state: String,
     pub pyth_symbol: Vec<PythSymbol>,
 }
-
+impl PriceConfig {
+    pub fn get_feed_ids(&self) -> Vec<String> {
+        let mut ids = vec![];
+        for symbol in &self.pyth_symbol {
+            ids.push(symbol.pyth_feed.clone());
+        }
+        ids
+    }
+    pub fn get_price_info_object_ids(&self) -> Vec<String> {
+        let mut ids = vec![];
+        for symbol in &self.pyth_symbol {
+            ids.push(symbol.price_info_object_id.clone());
+        }
+        ids
+    }
+    pub fn get_symbols(&self) -> Vec<String> {
+        let mut symbols = vec![];
+        for symbol in &self.pyth_symbol {
+            symbols.push(symbol.symbol.clone());
+        }
+        symbols
+    }
+}
 impl Default for PriceConfig {
     fn default() -> Self {
+        let price_server_url = "https://xc-testnet.pyth.network".to_string();
         Self {
+            price_server_url,
             ws_url: "wss://xc-testnet.pyth.network/ws".to_string(),
             db: Influxdb::default(),
+            worm_state: "0x0".to_string(),
+            pyth_state: "0x0".to_string(),
             pyth_symbol: vec![PythSymbol::default()],
         }
     }
@@ -86,16 +115,16 @@ impl Default for Influxdb {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PythSymbol {
     pub symbol: String,
-    pub id: String,
-    pub oracle_feed_address: Option<String>,
+    pub pyth_feed: String,
+    pub price_info_object_id: String,
 }
 
 impl Default for PythSymbol {
     fn default() -> Self {
         Self {
             symbol: "Crypto.BTC/USD".to_string(),
-            id: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b".to_string(),
-            oracle_feed_address: None,
+            pyth_feed: "0x0".to_string(),
+            price_info_object_id: "0x0".to_string(),
         }
     }
 }

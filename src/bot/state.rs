@@ -190,7 +190,7 @@ pub struct Market {
     /// 3 Community
     pub officer: Officer,
     /// coin pool of the market
-    pub pool: Pool,
+    // pub pool: Pool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
     pub unit_size: u64,
@@ -248,7 +248,8 @@ impl Market {
         }
     }
     pub fn get_total_liquidity(&self) -> u64 {
-        self.pool.vault_balance + self.pool.profit_balance
+        // self.pool.vault_balance + self.pool.profit_balance
+        0
     }
     pub fn get_fund_fee(&self) -> u64 {
         if self.fund_fee_manual {
@@ -482,7 +483,7 @@ pub trait MoveCall {
     async fn burst_position(&self, account_id: Address, position_id: Address)
         -> anyhow::Result<()>;
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()>;
-    async fn update_price(&self, feed: &str, price: u64) -> anyhow::Result<()>;
+    async fn get_price(&self, symbol: &str) -> anyhow::Result<()>;
 }
 #[cfg(test)]
 mod tests {
