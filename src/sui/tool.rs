@@ -7,18 +7,15 @@ use crate::{
     sui::config::{Config, Context, Ctx},
 };
 use async_trait::async_trait;
-use base64::{
-    engine::{self, general_purpose},
-    Engine as _,
-};
+use base64::{engine::general_purpose, Engine as _};
 use log::*;
 use move_core_types::language_storage::StructTag;
 use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
 use std::str::FromStr;
 use sui_json_rpc_types::{
-    SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery,
-    SuiTypeTag,
+    MoveCallParams, RPCTransactionRequestParams, SuiObjectData, SuiObjectDataFilter,
+    SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery, SuiTypeTag,
 };
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
@@ -27,7 +24,12 @@ use sui_sdk::{
     types::{base_types::ObjectID, transaction::Transaction},
 };
 use sui_types::{
-    coin::Coin, quorum_driver_types::ExecuteTransactionRequestType, transaction::TransactionData,
+    coin::Coin,
+    crypto::Signature,
+    programmable_transaction_builder::ProgrammableTransactionBuilder as PTB,
+    quorum_driver_types::ExecuteTransactionRequestType,
+    transaction::{ObjectArg, TransactionData, TransactionKind},
+    Identifier, SUI_CLOCK_OBJECT_ID,
 };
 
 const COIN_MODULE_NAME: &str = "scale";
@@ -37,7 +39,7 @@ const ORACLE_MODULE_NAME: &str = "oracle";
 const ORACLE_PYTH_MODULE_NAME: &str = "pyth_network";
 
 const USDT_TYPE_TAG: &str = "xxx::USDT::USDT";
-const SUI_CLOCK_OBJECT_ID: &str = "0x6";
+// const SUI_CLOCK_OBJECT_ID: &str = "0x6";
 pub struct Tool {
     ctx: Ctx,
     gas_budget: u64,
@@ -48,9 +50,7 @@ impl Tool {
         let ctx = Context::new(conf).await?;
         Ok(Self { ctx, gas_budget })
     }
-    pub fn get_clock_object_id(&self) -> ObjectID {
-        ObjectID::from_str(SUI_CLOCK_OBJECT_ID).expect("cannot parse clock ObjectID")
-    }
+
     pub fn get_t_str(&self) -> String {
         if let Ok(env) = self.ctx.wallet.config.get_active_env() {
             if env.alias == "mainnet" {
@@ -76,14 +76,14 @@ impl Tool {
         )
     }
 
-    pub async fn get_gas(&self, budget: u64) -> anyhow::Result<Vec<ObjectID>> {
+    pub async fn get_gas(&self, budget: u64) -> anyhow::Result<Vec<SuiObjectData>> {
         let active_address = self.ctx.get_active_address()?;
         let gas_objects = self.ctx.wallet.gas_objects(active_address).await?;
         let mut sui_objects = Vec::new();
         let mut amout = 0u64;
         for gas_object in gas_objects {
             amout += gas_object.0;
-            sui_objects.push(gas_object.1.object_id);
+            sui_objects.push(gas_object.1);
             if amout >= budget {
                 break;
             }
@@ -140,17 +140,23 @@ impl Tool {
         Ok(token_objects)
     }
 
-    async fn exec(&self, pm: TransactionData) -> anyhow::Result<()> {
+    fn get_transaction_signature(&self, pm: &TransactionData) -> anyhow::Result<Signature> {
         let address = self.ctx.wallet.config.active_address.ok_or_else(|| {
             CliError::NoActiveAccount(
                 "no active account, please use sui client command create it .".to_string(),
             )
         })?;
-        let signature = self.ctx.wallet.config.keystore.sign_secure(
-            &address,
-            &pm,
-            Intent::sui_transaction(),
-        )?;
+        let signature =
+            self.ctx
+                .wallet
+                .config
+                .keystore
+                .sign_secure(&address, pm, Intent::sui_transaction())?;
+        Ok(signature)
+    }
+
+    async fn exec(&self, pm: TransactionData) -> anyhow::Result<()> {
+        let signature = self.get_transaction_signature(&pm)?;
         let opt = SuiTransactionBlockResponseOptions::default();
         let tx = self
             .ctx
@@ -309,6 +315,34 @@ impl Tool {
         Ok(())
     }
 
+    pub async fn update_symbol(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let mut p = Vec::new();
+        for s in &self.ctx.config.price_config.pyth_symbol {
+            let ts = RPCTransactionRequestParams::MoveCallRequestParams(MoveCallParams {
+                package_object_id: self.ctx.config.scale_oracle_package_id,
+                module: ORACLE_PYTH_MODULE_NAME.to_string(),
+                function: "update_symbol".to_string(),
+                type_arguments: vec![],
+                arguments: vec![
+                    SuiJsonValue::new(json!(s.symbol.as_bytes()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(
+                        s.price_info_object_id.as_str(),
+                    )?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_pyth_state_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                ],
+            });
+            p.push(ts);
+        }
+        let ts_data = self
+            .ctx
+            .client
+            .transaction_builder()
+            .batch_transaction(self.ctx.get_active_address()?, p, None, self.gas_budget)
+            .await?;
+        self.exec(ts_data).await
+    }
+
     async fn update_pyth_price_bat_inner(
         &self,
         budget: u64,
@@ -323,50 +357,58 @@ impl Tool {
         let mut vaa_data_bytes = Vec::new();
         for d in vaa_data.iter() {
             if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
-                vaa_data_bytes.push(json!(b.as_slice()));
+                vaa_data_bytes.push(json!(b.as_slice()[..]));
             }
         }
-        let coins = self
-            .get_gas(budget)
-            .await?
+        let mut coins = self.get_gas(budget).await?;
+        let gas = coins.pop().unwrap();
+        let coins = coins
             .into_iter()
-            .map(|c| json!(c.to_string()))
-            .collect::<Vec<JsonValue>>();
-        let price_infos = self
-            .ctx
-            .config
-            .price_config
-            .get_price_info_object_ids()
-            .into_iter()
-            .map(|c| json!(c))
-            .collect::<Vec<JsonValue>>();
-        println!(
-            "coins: {:?}, vaa_data: {:?}, price_infos: {:?}",
-            coins, vaa_data_bytes, price_infos
+            .map(|c| ObjectArg::ImmOrOwnedObject(c.object_ref()))
+            .collect::<Vec<ObjectArg>>();
+        let price_infos = self.ctx.config.price_config.get_price_info_object_ids();
+        let mut tx = PTB::new();
+        let input_coins = tx.make_obj_vec(coins)?;
+        let input_vaa_data = tx.pure(vaa_data_bytes)?;
+        let input_price_infos = tx.pure(price_infos)?;
+        let input_worm_state = tx.pure(self.ctx.config.price_config.worm_state.as_str())?;
+        let input_pyth_state = tx.pure(self.ctx.config.price_config.pyth_state.as_str())?;
+        let input_scale_oracle_pyth_state_id =
+            tx.pure(self.ctx.config.scale_oracle_pyth_state_id)?;
+        let input_scale_oracle_state_id = tx.pure(self.ctx.config.scale_oracle_state_id)?;
+        let sui_clock_object_id = tx.pure(SUI_CLOCK_OBJECT_ID)?;
+        tx.programmable_move_call(
+            self.ctx.config.scale_oracle_package_id,
+            Identifier::from_str(ORACLE_PYTH_MODULE_NAME)?,
+            Identifier::from_str("update_pyth_price_bat")?,
+            vec![],
+            vec![
+                input_coins,
+                input_vaa_data,
+                input_price_infos,
+                input_worm_state,
+                input_pyth_state,
+                input_scale_oracle_pyth_state_id,
+                input_scale_oracle_state_id,
+                sui_clock_object_id,
+            ],
         );
-        let transaction_data = self
-            .get_transaction_data(
-                self.ctx.config.scale_oracle_package_id,
-                ORACLE_PYTH_MODULE_NAME,
-                "update_pyth_price_bat",
-                vec![
-                    SuiJsonValue::new(json!(coins))?,
-                    SuiJsonValue::new(json!(vaa_data_bytes))?,
-                    SuiJsonValue::new(json!(price_infos))?,
-                    SuiJsonValue::from_object_id(ObjectID::from_str(
-                        self.ctx.config.price_config.worm_state.as_str(),
-                    )?),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(
-                        self.ctx.config.price_config.pyth_state.as_str(),
-                    )?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_pyth_state_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
-                    SuiJsonValue::from_object_id(self.get_clock_object_id()),
-                ],
-                vec![],
-            )
-            .await?;
-        self.exec(transaction_data).await
+        let pt = tx.finish();
+        let tx_data = TransactionData::new(
+            TransactionKind::ProgrammableTransaction(pt),
+            self.ctx.get_active_address()?,
+            gas.object_ref(),
+            1,
+            1,
+        );
+        self.exec(tx_data).await
+        // let rs = self
+        //     .ctx
+        //     .client
+        //     .read_api()
+        //     .dry_run_transaction_block(tx_data);
+        // todo
+        // Ok(())
     }
 
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {

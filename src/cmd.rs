@@ -123,6 +123,10 @@ fn sui_oracle() -> Command {
                 .about("get latest vaas."),
         )
         .subcommand(
+            Command::new("update_symbol")
+                .about("update symbol map."),
+        )
+        .subcommand(
             Command::new("get_price")
                 .about("get price from china.")
                 .arg_required_else_help(true)
@@ -488,6 +492,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("get_latest_vaas", matches)) => {
                             tool.get_latest_vaas(matches).await?;
+                        }
+                        Some(("update_symbol", matches)) => {
+                            tool.update_symbol(matches).await?;
                         }
                         Some(("get_price", matches)) => {
                             tool.get_price(matches).await?;

@@ -8,7 +8,7 @@ use tokio::{
 };
 
 pub const SUI_COIN_PUBLISH_TX: &str = "8VMqXszSCfB3Ug6zKEWSj5R197ZJVfngYp9xt8hF19uE";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "6kJTT5hURLFx5k6bkYNUCNH6BDSydgPuSnZPEXyxoxKC";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "26WV3dDbHKhwe6kCgCS4h9F2B7Cc7QLXfU7LLo8a5QbQ";
 pub const SUI_NFT_PUBLISH_TX: &str = "CT1SoqQbCJmL3obt8kyWf1AV74Dm9WdVLRjDkaWQ7wA9";
 pub const SUI_SCALE_PUBLISH_TX: &str = "6RNBBzjwHS7hua3XXVJCEEALBcNXjDL6chTbwHYZ3br2";
 
