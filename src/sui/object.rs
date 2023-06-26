@@ -16,7 +16,7 @@ use sui_json_rpc_types::{SuiObjectDataFilter, SuiObjectResponseQuery};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
-    base_types::{ObjectID, SuiAddress},
+    base_types::{ObjectID, ObjectRef, SuiAddress},
     id::{ID, UID},
 };
 // use sui_types::gas_coin::GasCoin;
@@ -153,6 +153,25 @@ pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
         .get_object_with_options(id, opt)
         .await?;
     prase_object_response(rs).await
+}
+
+pub async fn get_objects_ref(
+    ctx: Ctx,
+    ids: Vec<ObjectID>,
+) -> anyhow::Result<HashMap<ObjectID, ObjectRef>> {
+    let rs = ctx
+        .client
+        .read_api()
+        .multi_get_object_with_options(ids, SuiObjectDataOptions::default())
+        .await?;
+    let mut refs = HashMap::new();
+
+    for r in rs {
+        let o = r.into_object()?;
+        debug!("get object: {:?}", o);
+        refs.insert(o.object_id, o.object_ref());
+    }
+    Ok(refs)
 }
 
 pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Message> {

@@ -55,7 +55,9 @@ pub struct PriceConfig {
     pub price_server_url: String,
     pub ws_url: String,
     pub db: Influxdb,
+    pub worm_package: String,
     pub worm_state: String,
+    pub pyth_package: String,
     pub pyth_state: String,
     pub pyth_symbol: Vec<PythSymbol>,
 }
@@ -89,7 +91,9 @@ impl Default for PriceConfig {
             price_server_url,
             ws_url: "wss://xc-testnet.pyth.network/ws".to_string(),
             db: Influxdb::default(),
+            worm_package: "0x0".to_string(),
             worm_state: "0x0".to_string(),
+            pyth_package: "0x0".to_string(),
             pyth_state: "0x0".to_string(),
             pyth_symbol: vec![PythSymbol::default()],
         }

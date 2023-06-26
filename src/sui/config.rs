@@ -71,6 +71,40 @@ impl Context {
             .active_address
             .ok_or_else(|| CliError::NoActiveAccount("no active account".to_string()))?)
     }
+    pub fn get_feed_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
+        let mut ids = Vec::new();
+        for i in self.config.price_config.get_feed_ids() {
+            ids.push(ObjectID::from_str(i.as_str())?);
+        }
+        Ok(ids)
+    }
+    pub fn get_price_info_object_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
+        let mut ids = Vec::new();
+        for i in self.config.price_config.get_price_info_object_ids() {
+            ids.push(ObjectID::from_str(i.as_str())?);
+        }
+        Ok(ids)
+    }
+    pub fn get_worm_package_id(&self) -> anyhow::Result<ObjectID> {
+        Ok(ObjectID::from_str(
+            self.config.price_config.worm_package.as_str(),
+        )?)
+    }
+    pub fn get_worm_state_id(&self) -> anyhow::Result<ObjectID> {
+        Ok(ObjectID::from_str(
+            self.config.price_config.worm_state.as_str(),
+        )?)
+    }
+    pub fn get_pyth_package_id(&self) -> anyhow::Result<ObjectID> {
+        Ok(ObjectID::from_str(
+            self.config.price_config.pyth_package.as_str(),
+        )?)
+    }
+    pub fn get_pyth_state_id(&self) -> anyhow::Result<ObjectID> {
+        Ok(ObjectID::from_str(
+            self.config.price_config.pyth_state.as_str(),
+        )?)
+    }
 }
 impl Default for Config {
     fn default() -> Self {

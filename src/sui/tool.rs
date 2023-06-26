@@ -4,7 +4,10 @@ use crate::utils;
 use crate::{
     bot::state::DENOMINATOR,
     com::CliError,
-    sui::config::{Config, Context, Ctx},
+    sui::{
+        config::{Config, Context, Ctx},
+        object,
+    },
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -28,7 +31,7 @@ use sui_types::{
     crypto::Signature,
     programmable_transaction_builder::ProgrammableTransactionBuilder as PTB,
     quorum_driver_types::ExecuteTransactionRequestType,
-    transaction::{ObjectArg, TransactionData, TransactionKind},
+    transaction::{CallArg, ObjectArg, TransactionData, TransactionKind},
     Identifier, SUI_CLOCK_OBJECT_ID,
 };
 
@@ -354,52 +357,68 @@ impl Tool {
         if vaa_data.len() == 0 {
             return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
         }
-        let mut vaa_data_bytes = Vec::new();
+        let worm_package_id = self.ctx.get_worm_package_id()?;
+        let worm_state_id = self.ctx.get_worm_state_id()?;
+        let pyth_package_id = self.ctx.get_pyth_package_id()?;
+        let pyth_state_id = self.ctx.get_pyth_state_id()?;
+        println!("worm_package_id: {:?}", worm_package_id);
+        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
+        let mut object_ids = vec![
+            worm_package_id,
+            worm_state_id,
+            pyth_package_id,
+            pyth_state_id,
+            self.ctx.config.scale_oracle_package_id,
+            self.ctx.config.scale_oracle_state_id,
+            self.ctx.config.scale_oracle_pyth_state_id,
+        ];
+        object_ids.extend(price_info_object_ids);
+        let object_refs = object::get_objects_ref(self.ctx.clone(), object_ids).await?;
+        let mut tx = PTB::new();
+        let mut vaa_verified_datas = Vec::new();
+        // parse_and_verify
+        let worm_package_id_input = tx.input(CallArg::Object(ObjectArg::ImmOrOwnedObject(
+            *object_refs
+                .get(&worm_package_id)
+                .ok_or(CliError::InvalidCliParams(
+                    "worm_package_id not found".to_string(),
+                ))?,
+        )))?;
         for d in vaa_data.iter() {
-            if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
-                vaa_data_bytes.push(json!(b.as_slice()[..]));
+            if let Ok(b) = general_purpose::STANDARD_NO_PAD.decode(d.as_str()) {
+                let call_args = vec![
+                    worm_package_id_input,
+                    tx.input(CallArg::Pure(b))?,
+                    tx.input(CallArg::SUI_SYSTEM_MUT)?,
+                ];
+                // println!("call_args: {:?}", call_args);
+                // call_args[1] = tx.input(CallArg::Pure(b))?;
+                let verified_vaa = tx.programmable_move_call(
+                    ObjectID::from_str(self.ctx.config.price_config.worm_package.as_str())?,
+                    Identifier::from_str("vaa")?,
+                    Identifier::from_str("parse_and_verify")?,
+                    vec![],
+                    call_args,
+                );
+                vaa_verified_datas.push(verified_vaa);
             }
         }
-        let mut coins = self.get_gas(budget).await?;
-        let gas = coins.pop().unwrap();
-        let coins = coins
-            .into_iter()
-            .map(|c| ObjectArg::ImmOrOwnedObject(c.object_ref()))
-            .collect::<Vec<ObjectArg>>();
-        let price_infos = self.ctx.config.price_config.get_price_info_object_ids();
-        let mut tx = PTB::new();
-        let input_coins = tx.make_obj_vec(coins)?;
-        let input_vaa_data = tx.pure(vaa_data_bytes)?;
-        let input_price_infos = tx.pure(price_infos)?;
-        let input_worm_state = tx.pure(self.ctx.config.price_config.worm_state.as_str())?;
-        let input_pyth_state = tx.pure(self.ctx.config.price_config.pyth_state.as_str())?;
-        let input_scale_oracle_pyth_state_id =
-            tx.pure(self.ctx.config.scale_oracle_pyth_state_id)?;
-        let input_scale_oracle_state_id = tx.pure(self.ctx.config.scale_oracle_state_id)?;
-        let sui_clock_object_id = tx.pure(SUI_CLOCK_OBJECT_ID)?;
-        tx.programmable_move_call(
-            self.ctx.config.scale_oracle_package_id,
-            Identifier::from_str(ORACLE_PYTH_MODULE_NAME)?,
-            Identifier::from_str("update_pyth_price_bat")?,
-            vec![],
-            vec![
-                input_coins,
-                input_vaa_data,
-                input_price_infos,
-                input_worm_state,
-                input_pyth_state,
-                input_scale_oracle_pyth_state_id,
-                input_scale_oracle_state_id,
-                sui_clock_object_id,
-            ],
-        );
+        let mut coins = self.get_gas(budget + self.gas_budget).await?;
+        let gas = coins
+            .pop()
+            .ok_or(CliError::InvalidCliParams("gas coin not found".to_string()))?;
+
+        if coins.len() == 0 {
+            coins.push(gas.clone());
+        }
         let pt = tx.finish();
+        let gas_price = self.ctx.client.read_api().get_reference_gas_price().await?;
         let tx_data = TransactionData::new(
             TransactionKind::ProgrammableTransaction(pt),
             self.ctx.get_active_address()?,
             gas.object_ref(),
-            1,
-            1,
+            self.gas_budget,
+            gas_price.to_owned(),
         );
         self.exec(tx_data).await
         // let rs = self
