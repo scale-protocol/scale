@@ -8,10 +8,12 @@ use sui_sdk::rpc_types::{
 };
 use sui_sdk::types::base_types::{ObjectID, TransactionDigest};
 use sui_sdk::{wallet_context::WalletContext, SuiClient};
-use sui_types::base_types::SuiAddress;
+use sui_types::{base_types::SuiAddress, SUI_FRAMEWORK_PACKAGE_ID};
 extern crate serde;
+use move_core_types::{identifier::Identifier, language_storage::TypeTag};
 use reqwest::Client as HttpClient;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
 const DEFAULT_OBJECT_ID: &str = "0x01";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -89,6 +91,27 @@ impl Context {
         Ok(ObjectID::from_str(
             self.config.price_config.worm_package.as_str(),
         )?)
+    }
+    pub fn get_worm_vaa_type(&self) -> anyhow::Result<TypeTag> {
+        let t = format!(
+            "{}::vaa::VAA",
+            self.config.price_config.worm_package.as_str()
+        );
+        Ok(TypeTag::from_str(t.as_str())?)
+    }
+    pub fn get_price_info_type(&self) -> anyhow::Result<TypeTag> {
+        let t = format!(
+            "{}::price_info::PriceInfo",
+            self.config.price_config.pyth_package.as_str()
+        );
+        Ok(TypeTag::from_str(t.as_str())?)
+    }
+    pub fn get_sui_coin_type(&self) -> anyhow::Result<TypeTag> {
+        let t = format!(
+            "{}::sui::SUI",
+            SUI_FRAMEWORK_PACKAGE_ID.to_string().as_str()
+        );
+        Ok(TypeTag::from_str(t.as_str())?)
     }
     pub fn get_worm_state_id(&self) -> anyhow::Result<ObjectID> {
         Ok(ObjectID::from_str(

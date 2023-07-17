@@ -54,6 +54,8 @@ pub enum CliError {
     NoActiveAccount(String),
     #[error("Insufficient gas balance")]
     InsufficientGasBalance,
+    #[error("object not found: {0}")]
+    ObjectNotFound(String),
 }
 
 pub fn f64_round(f: f64) -> f64 {

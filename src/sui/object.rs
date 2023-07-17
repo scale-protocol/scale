@@ -8,16 +8,19 @@ use crate::sui::config::Ctx;
 use log::*;
 use move_core_types::language_storage::StructTag;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
-use sui_json_rpc_types::{SuiObjectDataFilter, SuiObjectResponseQuery};
+use sui_json_rpc_types::{SuiObjectData, SuiObjectDataFilter, SuiObjectResponseQuery};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, SuiRawData};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, ObjectRef, SuiAddress},
     id::{ID, UID},
+    object::{Object, Owner},
+    transaction::{Argument, CallArg, ObjectArg, TransactionData, TransactionKind},
 };
 // use sui_types::gas_coin::GasCoin;
 use tokio::sync::mpsc::UnboundedSender;
@@ -154,24 +157,47 @@ pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
         .await?;
     prase_object_response(rs).await
 }
-
-pub async fn get_objects_ref(
-    ctx: Ctx,
-    ids: Vec<ObjectID>,
-) -> anyhow::Result<HashMap<ObjectID, ObjectRef>> {
+pub struct ObjectParams(pub BTreeMap<ObjectID, Object>);
+impl ObjectParams {
+    pub fn get_obj(&self, id: ObjectID) -> anyhow::Result<&Object> {
+        self.0
+            .get(&id)
+            .ok_or(CliError::ObjectNotFound(id.to_string()).into())
+    }
+    pub fn get_ref(&self, id: ObjectID) -> anyhow::Result<ObjectRef> {
+        let obj = self.get_obj(id)?;
+        Ok(obj.compute_object_reference())
+    }
+    pub fn get_obj_arg(&self, id: ObjectID, is_mutable_ref: bool) -> anyhow::Result<ObjectArg> {
+        let obj = self.get_obj(id)?;
+        let owner = obj.owner;
+        Ok(match owner {
+            Owner::Shared {
+                initial_shared_version,
+            } => ObjectArg::SharedObject {
+                id,
+                initial_shared_version,
+                mutable: is_mutable_ref,
+            },
+            Owner::AddressOwner(_) | Owner::ObjectOwner(_) | Owner::Immutable => {
+                ObjectArg::ImmOrOwnedObject(obj.compute_object_reference())
+            }
+        })
+    }
+}
+pub async fn get_object_args(ctx: Ctx, ids: Vec<ObjectID>) -> anyhow::Result<ObjectParams> {
     let rs = ctx
         .client
         .read_api()
-        .multi_get_object_with_options(ids, SuiObjectDataOptions::default())
+        .multi_get_object_with_options(ids, SuiObjectDataOptions::bcs_lossless())
         .await?;
-    let mut refs = HashMap::new();
-
+    let mut pm = ObjectParams(BTreeMap::new());
     for r in rs {
-        let o = r.into_object()?;
-        debug!("get object: {:?}", o);
-        refs.insert(o.object_id, o.object_ref());
+        let obj: Object = r.into_object()?.try_into()?;
+        let id = obj.id();
+        pm.0.insert(id, obj);
     }
-    Ok(refs)
+    Ok(pm)
 }
 
 pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Message> {
