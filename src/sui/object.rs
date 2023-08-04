@@ -163,6 +163,9 @@ pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
 }
 pub struct ObjectParams(pub BTreeMap<ObjectID, Object>);
 impl ObjectParams {
+    pub fn new() -> Self {
+        Self(BTreeMap::new())
+    }
     pub fn get_obj(&self, id: ObjectID) -> anyhow::Result<&Object> {
         self.0
             .get(&id)

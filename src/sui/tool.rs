@@ -33,7 +33,7 @@ use sui_types::{
     programmable_transaction_builder::ProgrammableTransactionBuilder as PTB,
     quorum_driver_types::ExecuteTransactionRequestType,
     transaction::{Argument, CallArg, Command, ObjectArg, TransactionData, TransactionKind},
-    Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID,
+    Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID,
 };
 
 const COIN_MODULE_NAME: &str = "scale";
@@ -73,34 +73,32 @@ impl PTBCtx {
             gas_budget,
         }
     }
-    pub fn add_object_id(&mut self, object_id: ObjectID) {
-        self.object_ids.push(object_id);
-    }
+    // pub fn add_object_id(&mut self, object_id: ObjectID) {
+    //     self.object_ids.push(object_id);
+    // }
     pub fn add_object_ids(&mut self, object_ids: Vec<ObjectID>) {
         self.object_ids.extend(object_ids);
     }
-    pub fn add_object(&mut self, object: ObjectParams) {
-        self.objects.merge(object);
-    }
-    pub fn add_objects(&mut self, objects: Vec<ObjectParams>) {
-        self.objects.extend(objects);
-    }
-    pub async fn init(&mut self, gas: Vec<SuiObjectData>) -> anyhow::Result<()> {
+    pub async fn init(&mut self, gas: Vec<(u64, SuiObjectData)>) -> anyhow::Result<()> {
         if self.is_init {
             return Ok(());
         }
-        self.objects = object::get_object_args(self.ctx.clone(), self.object_ids).await?;
+        self.objects = object::get_object_args(self.ctx.clone(), self.object_ids.clone()).await?;
         self.gas_coins = gas;
         self.is_init = true;
         Ok(())
     }
-    pub fn get_object_input(&self, id: ObjectID, is_mutable_ref: bool) -> anyhow::Result<Argument> {
+    pub fn get_object_input(
+        &mut self,
+        id: ObjectID,
+        is_mutable_ref: bool,
+    ) -> anyhow::Result<Argument> {
         if !self.is_init {
             return Err(CliError::PTBCtxNotInit.into());
         }
         self.tx.input(CallArg::Object(
             self.objects.get_obj_arg(id, is_mutable_ref)?,
-        ))?;
+        ))
     }
     pub fn split_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
         if !self.is_init {
@@ -110,7 +108,7 @@ impl PTBCtx {
             return self.select_one_gas(budget);
         }
         // TODO if account has only one gas coin, split it
-        let (_balance, gas_coin_data) = self.gas_coins.pop().ok_or(CliError::NoGasCoin.into())?;
+        let (_balance, gas_coin_data) = self.gas_coins.pop().ok_or(CliError::NoGasCoin)?;
         Ok(gas_coin_data)
     }
     pub fn select_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
@@ -118,24 +116,32 @@ impl PTBCtx {
             return Err(CliError::PTBCtxNotInit.into());
         }
         for (balance, gas_coin_data) in self.gas_coins.iter() {
-            if balance >= budget {
+            if *balance >= budget {
                 return Ok(gas_coin_data.clone());
             }
         }
         Err(CliError::NoGasCoin.into())
     }
-    pub fn get_transaction_data(&self) -> anyhow::Result<TransactionData> {
-        if !self.is_init {
+    pub async fn get_transaction_data(mut px: PTBCtx) -> anyhow::Result<TransactionData> {
+        if !px.is_init {
             return Err(CliError::PTBCtxNotInit.into());
         }
+        let gas = px.select_one_gas(px.gas_budget)?;
+        let PTBCtx {
+            tx,
+            gas_budget,
+            ctx,
+            ..
+        } = px;
         let pt = tx.finish();
-        let gas = self.select_one_gas(self.gas_budget)?;
-        let sender = self.ctx.get_active_address()?;
+
+        let sender = ctx.get_active_address()?;
+        let gas_price = ctx.client.read_api().get_reference_gas_price().await?;
         let tx_data = TransactionData::new(
             TransactionKind::ProgrammableTransaction(pt.to_owned()),
             sender,
             gas.object_ref(),
-            self.gas_budget,
+            gas_budget,
             gas_price.to_owned(),
         );
         Ok(tx_data)
@@ -159,21 +165,22 @@ impl Tool {
         if vaa_data.len() == 0 {
             return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
         }
-        let mut px = PTBCtx::new(self.ctx.clone());
+        let mut px = PTBCtx::new(self.ctx.clone(), self.gas_budget);
+        let worm_package_id = self.ctx.get_worm_package_id()?;
+        let pyth_package_id = self.ctx.get_pyth_package_id()?;
+
         let worm_state_id = self.ctx.get_worm_state_id()?;
         let pyth_state_id = self.ctx.get_pyth_state_id()?;
         px.add_object_ids(vec![
-            worm_package_id,
             worm_state_id,
-            pyth_package_id,
             pyth_state_id,
             self.ctx.config.scale_oracle_package_id,
             self.ctx.config.scale_oracle_state_id,
             self.ctx.config.scale_oracle_pyth_state_id,
             SUI_CLOCK_OBJECT_ID,
         ]);
-        px.add_object_ids(price_info_object_ids);
-        let gas = self.get_gas(self.gas_budget + total_pyth_fee)?;
+        px.add_object_ids(price_info_object_ids.clone());
+        let gas = self.get_gas(self.gas_budget + total_pyth_fee).await?;
         px.init(gas).await?;
         // init object input
         let worm_state_input = px.get_object_input(worm_state_id, false)?;
@@ -189,10 +196,10 @@ impl Tool {
             if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
                 let call_args = vec![
                     worm_state_input,
-                    tx.input(CallArg::Pure(bcs::to_bytes(&b).unwrap()))?,
+                    px.tx.input(CallArg::Pure(bcs::to_bytes(&b).unwrap()))?,
                     clok_object_input,
                 ];
-                let verified_vaa = tx.programmable_move_call(
+                let verified_vaa = px.tx.programmable_move_call(
                     worm_package_id,
                     WORM_VAA_MODULE.to_owned(),
                     Identifier::from_str("parse_and_verify")?,
@@ -206,19 +213,19 @@ impl Tool {
                 );
             }
         }
-        let vaas = tx.command(Command::MakeMoveVec(
+        let vaas = px.tx.command(Command::MakeMoveVec(
             Some(self.ctx.get_worm_vaa_type()?),
             vaa_verified_datas,
         ));
-        let mut hot = tx.programmable_move_call(
+        let mut hot = px.tx.programmable_move_call(
             pyth_package_id,
             PYTH_PYTH_MODULE.to_owned(),
             Identifier::from_str("create_price_infos_hot_potato")?,
             vec![],
             vec![pyth_state_input, vaas, clok_object_input],
         );
-        let amount = tx.pure(PYTH_PRICE_UPDATE_FEE)?;
-        let coin_token = px.split_one_gas(amount)?;
+        let amount = px.tx.pure(PYTH_PRICE_UPDATE_FEE)?;
+        let coin_token = px.split_one_gas(total_pyth_fee)?;
         let coin_input = px
             .tx
             .obj(ObjectArg::ImmOrOwnedObject(coin_token.object_ref()))?;
@@ -230,7 +237,7 @@ impl Tool {
                 vec![self.get_sui_coin_type()?],
                 vec![coin_input, amount],
             );
-            let info_input = tx.input(CallArg::Object(objects.get_obj_arg(info, true)?))?;
+            let info_input = px.get_object_input(info, false)?;
             hot = px.tx.programmable_move_call(
                 pyth_package_id,
                 PYTH_PYTH_MODULE.to_owned(),
@@ -259,16 +266,6 @@ impl Tool {
             vec![self.ctx.get_price_info_type()?],
             vec![hot],
         );
-
-        let pt = tx.finish();
-
-        let tx_data = TransactionData::new(
-            TransactionKind::ProgrammableTransaction(pt.to_owned()),
-            sender,
-            gas.object_ref(),
-            self.gas_budget,
-            gas_price.to_owned(),
-        );
         return Ok(px);
     }
 
@@ -279,11 +276,11 @@ impl Tool {
         price_info_object_ids: Vec<ObjectID>,
     ) -> anyhow::Result<()> {
         debug!("update pyth price bat");
-        let mut px = self
+        let px = self
             .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
             .await?;
 
-        let tx_data = px.get_transaction_data()?;
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
         // let response = self
         //     .ctx
         //     .client
@@ -399,7 +396,11 @@ impl Tool {
             }
         }
         if amout < budget {
-            return Err(CliError::InsufficientGasBalance.into());
+            let msg = format!(
+                "Insufficient gas balance, need {} but only have {}",
+                budget, amout
+            );
+            return Err(CliError::InsufficientGasBalance(msg).into());
         }
         Ok(token_objects)
     }
@@ -669,7 +670,7 @@ impl Tool {
         println!("gas_coins: {:?}", gas_coins);
         let richest_coin = gas_coins.pop().unwrap();
         let richest_coin_gas = gas_coins.first().unwrap();
-        let original_coin_arg = ObjectArg::ImmOrOwnedObject(richest_coin.object_ref());
+        let original_coin_arg = ObjectArg::ImmOrOwnedObject(richest_coin.1.object_ref());
         let original_coin_arg = pt_builder.obj(original_coin_arg)?;
         let sui_coin_arg_type = TypeTag::from_str("0x2::sui::SUI")?;
         let value_function = Identifier::from_str("value")?;
@@ -691,7 +692,7 @@ impl Tool {
             .dry_run_transaction_block(TransactionData::new(
                 tx_data,
                 sender,
-                richest_coin_gas.object_ref(),
+                richest_coin_gas.1.object_ref(),
                 self.gas_budget,
                 gas_price.to_owned(),
             ))
