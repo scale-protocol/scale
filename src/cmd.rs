@@ -112,9 +112,9 @@ fn sui_oracle() -> Command {
         .subcommand(
             Command::new("update_pyth_price_bat")
                 .about("update pyth price bat.")
-                .arg(arg!(-b --budget <BUDGET> "The budget of the transaction fee.").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-f --update_fee <UPDATE_FEE> "The budget of the transaction fee.").value_parser(clap::value_parser!(u64)))
                 .arg(
-                    arg!(-d --data <SYMBOL> "vaa data , get it from pyth network,If empty, try to automatically obtain")
+                    arg!(-d --data <SYMBOL> "vaa data , get it from pyth network, If empty, try to automatically obtain")
                         .action(ArgAction::Append),
                 ),
         )
@@ -198,9 +198,7 @@ fn sui_trade() -> Command {
         .arg_required_else_help(true)
         .subcommand(
             Command::new("create_account")
-            .arg_required_else_help(true)
-                .about("Create a transaction account.")
-                .arg(arg!(-c --coin <COIN> "Used to specify transaction currency.")),
+                .about("Create a transaction account."),
         )
         .subcommand(
             Command::new("deposit")
@@ -242,12 +240,15 @@ fn sui_trade() -> Command {
                 ),
         )
         .subcommand(
+            Command::new("create_lsp")
+                .about("Create a liquidity pool."),
+        )
+        .subcommand(
             Command::new("create_market")
                 .about("Create a market object.")
                 .arg_required_else_help(true)
                 .arg(arg!(-s --symbol <SYMBOL> "The transaction pair symbol needs pyth.network to support quotation."))
                 .arg(arg!(-i --icon <ICON> "The icon of the market."))
-                .arg(arg!(-p --pyth_id <PYTH_ID> "Pyth.network oracle quote object ID."))
                 .arg(arg!(-z --size <SIZE> "The basic unit of open position is 1 by default, and the final position size is equal to size * lot.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-o --opening_price <OPENING_PRICE> "The opening price of the current day is used to calculate the spread, and the subsequent value will be automatically triggered and updated by the robot.").value_parser(clap::value_parser!(u64)))
                 .arg(
@@ -545,6 +546,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("create_market", matches)) => {
                             tool.create_market(matches).await?;
+                        }
+                        Some(("create_lsp", matches)) => {
+                            tool.create_lsp(matches).await?;
                         }
                         Some(("update_max_leverage", matches)) => {
                             tool.update_max_leverage(matches).await?;

@@ -24,6 +24,7 @@ pub struct Config {
     pub scale_package_id: ObjectID,
     pub scale_market_list_id: ObjectID,
     pub scale_bond_factory_id: ObjectID,
+    pub scale_publisher_id: ObjectID,
     pub scale_coin_package_id: ObjectID,
     pub scale_coin_reserve_id: ObjectID,
     pub scale_coin_admin_id: ObjectID,
@@ -73,6 +74,7 @@ impl Context {
             .active_address
             .ok_or_else(|| CliError::NoActiveAccount("no active account".to_string()))?)
     }
+
     pub fn get_feed_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
         let mut ids = Vec::new();
         for i in self.config.price_config.get_feed_ids() {
@@ -106,13 +108,6 @@ impl Context {
         );
         Ok(TypeTag::from_str(t.as_str())?)
     }
-    pub fn get_sui_coin_type(&self) -> anyhow::Result<TypeTag> {
-        let t = format!(
-            "{}::sui::SUI",
-            SUI_FRAMEWORK_PACKAGE_ID.to_string().as_str()
-        );
-        Ok(TypeTag::from_str(t.as_str())?)
-    }
     pub fn get_worm_state_id(&self) -> anyhow::Result<ObjectID> {
         Ok(ObjectID::from_str(
             self.config.price_config.worm_state.as_str(),
@@ -143,6 +138,7 @@ impl Default for Config {
             scale_package_id: default_id,
             scale_market_list_id: default_id,
             scale_bond_factory_id: default_id,
+            scale_publisher_id: default_id,
             scale_coin_package_id: default_id,
             scale_coin_reserve_id: default_id,
             scale_coin_admin_id: default_id,
@@ -175,6 +171,7 @@ impl cfg for Config {
                 self.scale_package_id = c.scale_package_id;
                 self.scale_market_list_id = c.scale_market_list_id;
                 self.scale_bond_factory_id = c.scale_bond_factory_id;
+                self.scale_publisher_id = c.scale_publisher_id;
                 self.scale_admin_cap_id = c.scale_admin_cap_id;
                 self.scale_coin_package_id = c.scale_coin_package_id;
                 self.scale_coin_reserve_id = c.scale_coin_reserve_id;
@@ -212,6 +209,7 @@ scale store path: {}
 scale package id: {}
 scale market list id: {}
 scale bond factory id: {}
+scale publisher id: {}
 scale admin id: {}
 scale coin package id: {}
 scale coin reserve id: {}
@@ -228,6 +226,7 @@ scale nft admin id: {}
             self.scale_package_id,
             self.scale_market_list_id,
             self.scale_bond_factory_id,
+            self.scale_publisher_id,
             self.scale_admin_cap_id,
             self.scale_coin_package_id,
             self.scale_coin_reserve_id,
@@ -257,7 +256,7 @@ impl Config {
                         .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
                         .await
                     {
-                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
+                        // self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
                     } else {
                         println!("please init scale package");
                         return;
@@ -277,7 +276,7 @@ impl Config {
                         .get_publish_info(&client, com::SUI_ORACLE_PUBLISH_TX)
                         .await
                     {
-                        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
+                        // self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
                     } else {
                         println!("please init oracle package");
                         return;
@@ -316,6 +315,7 @@ impl Config {
                         version: _,
                         digest: _,
                     } => {
+                        debug!("object type: {:?}", object_type);
                         if object_type.module.as_str() == "scale" {
                             if object_type.name.as_str() == "AdminCap" {
                                 self.scale_coin_admin_id = object_id;
@@ -355,6 +355,11 @@ impl Config {
                         if object_type.module.as_str() == "nft" {
                             if object_type.name.as_str() == "AdminCap" {
                                 self.scale_nft_admin_id = object_id;
+                            }
+                        }
+                        if object_type.module.as_str() == "package" {
+                            if object_type.name.as_str() == "Publisher" {
+                                self.scale_publisher_id = object_id;
                             }
                         }
                     }

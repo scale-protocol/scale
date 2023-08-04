@@ -178,7 +178,9 @@ fn run_sui_app(
             error!("sync all orders error: {}", e);
         }
         // start event task
-        let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone()).await;
+        let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone())
+            .await
+            .expect("event task init error");
         info!("bot start success");
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");

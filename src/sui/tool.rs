@@ -1,13 +1,13 @@
-use crate::bot::state::{Address, MoveCall};
-use crate::com;
-use crate::utils;
 use crate::{
     bot::state::DENOMINATOR,
+    bot::state::{Address, MoveCall},
+    com,
     com::CliError,
     sui::{
         config::{Config, Context, Ctx},
-        object,
+        object::{self, ObjectParams},
     },
+    utils,
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -17,8 +17,9 @@ use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
 use std::str::FromStr;
 use sui_json_rpc_types::{
-    MoveCallParams, RPCTransactionRequestParams, SuiObjectData, SuiObjectDataFilter,
-    SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery, SuiTypeTag,
+    MoveCallParams, RPCTransactionRequestParams, SuiExecutionStatus, SuiObjectData,
+    SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery,
+    SuiTransactionBlockEffects, SuiTypeTag,
 };
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
@@ -27,14 +28,12 @@ use sui_sdk::{
     types::{base_types::ObjectID, transaction::Transaction},
 };
 use sui_types::{
-    base_types::SequenceNumber,
     coin::{self, Coin},
     crypto::Signature,
-    object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder as PTB,
     quorum_driver_types::ExecuteTransactionRequestType,
-    transaction::{CallArg, Command, ObjectArg, TransactionData, TransactionKind},
-    Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID,
+    transaction::{Argument, CallArg, Command, ObjectArg, TransactionData, TransactionKind},
+    Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID,
 };
 
 const COIN_MODULE_NAME: &str = "scale";
@@ -42,18 +41,258 @@ const SCALE_MODULE_NAME: &str = "enter";
 const NFT_MODULE_NAME: &str = "nft";
 const ORACLE_MODULE_NAME: &str = "oracle";
 const ORACLE_PYTH_MODULE_NAME: &str = "pyth_network";
-
 const USDT_TYPE_TAG: &str = "xxx::USDT::USDT";
-// const SUI_CLOCK_OBJECT_ID: &str = "0x6";
+
+const WORM_VAA_MODULE: &IdentStr = ident_str!("vaa");
+const PYTH_PYTH_MODULE: &IdentStr = ident_str!("pyth");
+const PYTH_HOT_POTATO_MODULE: &IdentStr = ident_str!("hot_potato_vector");
+const PYTH_NETEORK_MODULE: &IdentStr = ident_str!("pyth_network");
+const PYTH_PRICE_UPDATE_FEE: u64 = 1;
 pub struct Tool {
     ctx: Ctx,
     gas_budget: u64,
 }
-
+struct PTBCtx {
+    object_ids: Vec<ObjectID>,
+    objects: ObjectParams,
+    tx: PTB,
+    is_init: bool,
+    gas_coins: Vec<(u64, SuiObjectData)>,
+    ctx: Ctx,
+    gas_budget: u64,
+}
+impl PTBCtx {
+    pub fn new(ctx: Ctx, gas_budget: u64) -> Self {
+        Self {
+            object_ids: Vec::new(),
+            objects: ObjectParams::new(),
+            tx: PTB::new(),
+            is_init: false,
+            gas_coins: Vec::new(),
+            ctx,
+            gas_budget,
+        }
+    }
+    pub fn add_object_id(&mut self, object_id: ObjectID) {
+        self.object_ids.push(object_id);
+    }
+    pub fn add_object_ids(&mut self, object_ids: Vec<ObjectID>) {
+        self.object_ids.extend(object_ids);
+    }
+    pub fn add_object(&mut self, object: ObjectParams) {
+        self.objects.merge(object);
+    }
+    pub fn add_objects(&mut self, objects: Vec<ObjectParams>) {
+        self.objects.extend(objects);
+    }
+    pub async fn init(&mut self, gas: Vec<SuiObjectData>) -> anyhow::Result<()> {
+        if self.is_init {
+            return Ok(());
+        }
+        self.objects = object::get_object_args(self.ctx.clone(), self.object_ids).await?;
+        self.gas_coins = gas;
+        self.is_init = true;
+        Ok(())
+    }
+    pub fn get_object_input(&self, id: ObjectID, is_mutable_ref: bool) -> anyhow::Result<Argument> {
+        if !self.is_init {
+            return Err(CliError::PTBCtxNotInit.into());
+        }
+        self.tx.input(CallArg::Object(
+            self.objects.get_obj_arg(id, is_mutable_ref)?,
+        ))?;
+    }
+    pub fn split_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
+        if !self.is_init {
+            return Err(CliError::PTBCtxNotInit.into());
+        }
+        if self.gas_coins.len() != 1 {
+            return self.select_one_gas(budget);
+        }
+        // TODO if account has only one gas coin, split it
+        let (_balance, gas_coin_data) = self.gas_coins.pop().ok_or(CliError::NoGasCoin.into())?;
+        Ok(gas_coin_data)
+    }
+    pub fn select_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
+        if !self.is_init {
+            return Err(CliError::PTBCtxNotInit.into());
+        }
+        for (balance, gas_coin_data) in self.gas_coins.iter() {
+            if balance >= budget {
+                return Ok(gas_coin_data.clone());
+            }
+        }
+        Err(CliError::NoGasCoin.into())
+    }
+    pub fn get_transaction_data(&self) -> anyhow::Result<TransactionData> {
+        if !self.is_init {
+            return Err(CliError::PTBCtxNotInit.into());
+        }
+        let pt = tx.finish();
+        let gas = self.select_one_gas(self.gas_budget)?;
+        let sender = self.ctx.get_active_address()?;
+        let tx_data = TransactionData::new(
+            TransactionKind::ProgrammableTransaction(pt.to_owned()),
+            sender,
+            gas.object_ref(),
+            self.gas_budget,
+            gas_price.to_owned(),
+        );
+        Ok(tx_data)
+    }
+}
 impl Tool {
     pub async fn new(conf: Config, gas_budget: u64) -> anyhow::Result<Self> {
         let ctx = Context::new(conf).await?;
         Ok(Self { ctx, gas_budget })
+    }
+    // package the infos of the update price transaction
+    async fn init_price_update_transaction(
+        &self,
+        total_pyth_fee: u64,
+        vaa_data: Vec<String>,
+        price_info_object_ids: Vec<ObjectID>,
+    ) -> anyhow::Result<PTBCtx> {
+        if total_pyth_fee == 0 {
+            return Err(CliError::InvalidCliParams("budget is zero".to_string()).into());
+        }
+        if vaa_data.len() == 0 {
+            return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
+        }
+        let mut px = PTBCtx::new(self.ctx.clone());
+        let worm_state_id = self.ctx.get_worm_state_id()?;
+        let pyth_state_id = self.ctx.get_pyth_state_id()?;
+        px.add_object_ids(vec![
+            worm_package_id,
+            worm_state_id,
+            pyth_package_id,
+            pyth_state_id,
+            self.ctx.config.scale_oracle_package_id,
+            self.ctx.config.scale_oracle_state_id,
+            self.ctx.config.scale_oracle_pyth_state_id,
+            SUI_CLOCK_OBJECT_ID,
+        ]);
+        px.add_object_ids(price_info_object_ids);
+        let gas = self.get_gas(self.gas_budget + total_pyth_fee)?;
+        px.init(gas).await?;
+        // init object input
+        let worm_state_input = px.get_object_input(worm_state_id, false)?;
+        let pyth_state_input = px.get_object_input(pyth_state_id, false)?;
+        let clok_object_input = px.get_object_input(SUI_CLOCK_OBJECT_ID, false)?;
+        let oracle_pyth_state_input =
+            px.get_object_input(self.ctx.config.scale_oracle_pyth_state_id, false)?;
+        let oracle_state_input =
+            px.get_object_input(self.ctx.config.scale_oracle_state_id, true)?;
+        // parse_and_verify
+        let mut vaa_verified_datas = Vec::new();
+        for d in vaa_data.iter() {
+            if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
+                let call_args = vec![
+                    worm_state_input,
+                    tx.input(CallArg::Pure(bcs::to_bytes(&b).unwrap()))?,
+                    clok_object_input,
+                ];
+                let verified_vaa = tx.programmable_move_call(
+                    worm_package_id,
+                    WORM_VAA_MODULE.to_owned(),
+                    Identifier::from_str("parse_and_verify")?,
+                    vec![],
+                    call_args,
+                );
+                vaa_verified_datas.push(verified_vaa);
+            } else {
+                return Err(
+                    CliError::InvalidCliParams("vaa_data is not base64".to_string()).into(),
+                );
+            }
+        }
+        let vaas = tx.command(Command::MakeMoveVec(
+            Some(self.ctx.get_worm_vaa_type()?),
+            vaa_verified_datas,
+        ));
+        let mut hot = tx.programmable_move_call(
+            pyth_package_id,
+            PYTH_PYTH_MODULE.to_owned(),
+            Identifier::from_str("create_price_infos_hot_potato")?,
+            vec![],
+            vec![pyth_state_input, vaas, clok_object_input],
+        );
+        let amount = tx.pure(PYTH_PRICE_UPDATE_FEE)?;
+        let coin_token = px.split_one_gas(amount)?;
+        let coin_input = px
+            .tx
+            .obj(ObjectArg::ImmOrOwnedObject(coin_token.object_ref()))?;
+        for info in price_info_object_ids {
+            let c = px.tx.programmable_move_call(
+                SUI_FRAMEWORK_PACKAGE_ID,
+                coin::COIN_MODULE_NAME.to_owned(),
+                Identifier::from_str("split")?,
+                vec![self.get_sui_coin_type()?],
+                vec![coin_input, amount],
+            );
+            let info_input = tx.input(CallArg::Object(objects.get_obj_arg(info, true)?))?;
+            hot = px.tx.programmable_move_call(
+                pyth_package_id,
+                PYTH_PYTH_MODULE.to_owned(),
+                Identifier::from_str("update_single_price_feed")?,
+                vec![],
+                vec![pyth_state_input, hot, info_input, c, clok_object_input],
+            );
+            px.tx.programmable_move_call(
+                self.ctx.config.scale_oracle_package_id,
+                PYTH_NETEORK_MODULE.to_owned(),
+                Identifier::from_str("async_pyth_price")?,
+                vec![],
+                vec![
+                    info_input,
+                    pyth_state_input,
+                    oracle_pyth_state_input,
+                    oracle_state_input,
+                    clok_object_input,
+                ],
+            );
+        }
+        px.tx.programmable_move_call(
+            pyth_package_id,
+            PYTH_HOT_POTATO_MODULE.to_owned(),
+            Identifier::from_str("destroy")?,
+            vec![self.ctx.get_price_info_type()?],
+            vec![hot],
+        );
+
+        let pt = tx.finish();
+
+        let tx_data = TransactionData::new(
+            TransactionKind::ProgrammableTransaction(pt.to_owned()),
+            sender,
+            gas.object_ref(),
+            self.gas_budget,
+            gas_price.to_owned(),
+        );
+        return Ok(px);
+    }
+
+    async fn update_pyth_price_bat_inner(
+        &self,
+        total_pyth_fee: u64,
+        vaa_data: Vec<String>,
+        price_info_object_ids: Vec<ObjectID>,
+    ) -> anyhow::Result<()> {
+        debug!("update pyth price bat");
+        let mut px = self
+            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
+            .await?;
+
+        let tx_data = px.get_transaction_data()?;
+        // let response = self
+        //     .ctx
+        //     .client
+        //     .read_api()
+        //     .dry_run_transaction_block(tx_data)
+        //     .await?;
+        // println!("dry_run_transaction_block: {:?}", response.effects);
+        // Ok(())
+        self.exec(tx_data).await
     }
 
     pub fn get_t_str(&self) -> String {
@@ -80,31 +319,41 @@ impl Tool {
             .expect("cannot parse SuiTypeTag"),
         )
     }
-
-    pub async fn get_gas(&self, budget: u64) -> anyhow::Result<Vec<SuiObjectData>> {
+    pub fn get_sui_coin_type(&self) -> anyhow::Result<TypeTag> {
+        let t = format!(
+            "{}::sui::SUI",
+            SUI_FRAMEWORK_PACKAGE_ID.to_string().as_str()
+        );
+        Ok(TypeTag::from_str(t.as_str())?)
+    }
+    pub async fn get_gas(&self, budget: u64) -> anyhow::Result<Vec<(u64, SuiObjectData)>> {
         let active_address = self.ctx.get_active_address()?;
         let gas_objects = self.ctx.wallet.gas_objects(active_address).await?;
         let mut sui_objects = Vec::new();
         let mut amout = 0u64;
         for gas_object in gas_objects {
             amout += gas_object.0;
-            sui_objects.push(gas_object.1);
+            sui_objects.push(gas_object);
             if amout >= budget {
                 break;
             }
         }
         if amout < budget {
-            return Err(CliError::InsufficientGasBalance.into());
+            let msg = format!(
+                "Insufficient gas balance, need {} but only have {}",
+                budget, amout
+            );
+            return Err(CliError::InsufficientGasBalance(msg).into());
         }
         Ok(sui_objects)
     }
 
-    pub async fn get_all_gas(&self) -> anyhow::Result<Vec<SuiObjectData>> {
+    pub async fn get_all_gas(&self) -> anyhow::Result<Vec<(u64, SuiObjectData)>> {
         let active_address = self.ctx.get_active_address()?;
         let gas_objects = self.ctx.wallet.gas_objects(active_address).await?;
         let mut sui_objects = Vec::new();
         for gas_object in gas_objects {
-            sui_objects.push(gas_object.1);
+            sui_objects.push(gas_object);
         }
         Ok(sui_objects)
     }
@@ -188,6 +437,18 @@ impl Tool {
             println!("exec: {:?} , success", tx.digest.to_string());
         } else {
             println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
+        }
+        if let Some(e) = tx.effects {
+            let SuiTransactionBlockEffects::V1(v) = e;
+            match v.status {
+                SuiExecutionStatus::Success => {
+                    return Ok(());
+                }
+                SuiExecutionStatus::Failure { error } => {
+                    println!(" error: {:?}", error);
+                    return Err(CliError::TransactionExecutionFailure(error).into());
+                }
+            }
         }
         Ok(())
     }
@@ -321,7 +582,13 @@ impl Tool {
     }
 
     async fn get_vaa_data_inner(&self) -> anyhow::Result<Vec<String>> {
-        utils::get_vaa_data(&self.ctx.http_client, &self.ctx.config.price_config).await
+        let feed_ids = self.ctx.config.price_config.get_feed_ids();
+        utils::get_vaa_data(
+            &self.ctx.http_client,
+            self.ctx.config.price_config.price_server_url.clone(),
+            feed_ids,
+        )
+        .await
     }
 
     pub async fn get_latest_vaas(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -356,158 +623,40 @@ impl Tool {
             .await?;
         self.exec(ts_data).await
     }
-    pub const SUI_COIN_MODULE: &IdentStr = ident_str!("coin");
-    pub const WORM_VAA_MODULE: &IdentStr = ident_str!("vaa");
-    pub const PYTH_PYTH_MODULE: &IdentStr = ident_str!("pyth");
-    pub const PYTH_HOT_POTATO_MODULE: &IdentStr = ident_str!("hot_potato_vector");
-    pub const PYTH_NETEORK_MODULE: &IdentStr = ident_str!("pyth_network");
-    async fn update_pyth_price_bat_inner(
-        &self,
-        budget: u64,
-        vaa_data: Vec<String>,
-    ) -> anyhow::Result<()> {
-        if budget == 0 {
-            return Err(CliError::InvalidCliParams("budget is zero".to_string()).into());
-        }
-        if vaa_data.len() == 0 {
-            return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
-        }
-        let sender = self.ctx.get_active_address()?;
-        let worm_package_id = self.ctx.get_worm_package_id()?;
-        let worm_state_id = self.ctx.get_worm_state_id()?;
-        let pyth_package_id = self.ctx.get_pyth_package_id()?;
-        let pyth_state_id = self.ctx.get_pyth_state_id()?;
-        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
-        let mut object_ids = vec![
-            worm_package_id,
-            worm_state_id,
-            pyth_package_id,
-            pyth_state_id,
-            self.ctx.config.scale_oracle_package_id,
-            self.ctx.config.scale_oracle_state_id,
-            self.ctx.config.scale_oracle_pyth_state_id,
-            SUI_CLOCK_OBJECT_ID,
-        ];
-        object_ids.extend(price_info_object_ids.clone());
 
-        let objects = object::get_object_args(self.ctx.clone(), object_ids).await?;
-        let mut tx = PTB::new();
-        let mut vaa_verified_datas = Vec::new();
-        // parse_and_verify
-        let worm_state_id_input =
-            tx.input(CallArg::Object(objects.get_obj_arg(worm_state_id, false)?))?;
-        let pyth_state_id_input =
-            tx.input(CallArg::Object(objects.get_obj_arg(pyth_state_id, false)?))?;
-        let clok_object_input = tx.input(CallArg::Object(
-            objects.get_obj_arg(SUI_CLOCK_OBJECT_ID, false)?,
-        ))?;
-        let mut gas_coins = self.get_gas(1000000000).await?;
-        let gas_price = self.ctx.client.read_api().get_reference_gas_price().await?;
-        let gas = gas_coins
-            .pop()
-            .ok_or(CliError::InvalidCliParams("gas coin is empty".to_string()))?;
-        let coin_token = gas_coins
-            .pop()
-            .ok_or(CliError::InvalidCliParams("gas coin is empty".to_string()))?;
-        for d in vaa_data.iter() {
-            if let Ok(b) = general_purpose::STANDARD.decode(d.as_str()) {
-                let call_args = vec![
-                    worm_state_id_input,
-                    tx.input(CallArg::Pure(bcs::to_bytes(&b).unwrap()))?,
-                    clok_object_input,
-                ];
-                let verified_vaa = tx.programmable_move_call(
-                    worm_package_id,
-                    Self::WORM_VAA_MODULE.to_owned(),
-                    Identifier::from_str("parse_and_verify")?,
-                    vec![],
-                    call_args,
-                );
-                vaa_verified_datas.push(verified_vaa);
-            } else {
-                return Err(
-                    CliError::InvalidCliParams("vaa_data is not base64".to_string()).into(),
-                );
-            }
-        }
-        let vaas = tx.command(Command::MakeMoveVec(
-            Some(self.ctx.get_worm_vaa_type()?),
-            vaa_verified_datas,
-        ));
-        let mut hot = tx.programmable_move_call(
-            pyth_package_id,
-            Self::PYTH_PYTH_MODULE.to_owned(),
-            Identifier::from_str("create_price_infos_hot_potato")?,
-            vec![],
-            vec![pyth_state_id_input, vaas, clok_object_input],
-        );
-        let amount = tx.pure(1u64)?;
-        let coin_input = tx.obj(ObjectArg::ImmOrOwnedObject(coin_token.object_ref()))?;
-        for info in price_info_object_ids {
-            let c = tx.programmable_move_call(
-                SUI_FRAMEWORK_PACKAGE_ID,
-                coin::COIN_MODULE_NAME.to_owned(),
-                Identifier::from_str("split")?,
-                vec![self.ctx.get_sui_coin_type()?],
-                vec![coin_input, amount],
-            );
-            let info_input = tx.input(CallArg::Object(objects.get_obj_arg(info, true)?))?;
-            hot = tx.programmable_move_call(
-                pyth_package_id,
-                Self::PYTH_PYTH_MODULE.to_owned(),
-                Identifier::from_str("update_single_price_feed")?,
-                vec![],
-                vec![pyth_state_id_input, hot, info_input, c, clok_object_input],
-            );
-            tx.programmable_move_call(
-                self.ctx.config.scale_oracle_package_id,
-                Self::PYTH_NETEORK_MODULE.to_owned(),
-                Identifier::from_str("async_pyth_price")?,
-                vec![],
-                vec![pyth_state_id_input, hot, info_input, c, clok_object_input],
-            );
-        }
-        tx.programmable_move_call(
-            pyth_package_id,
-            Self::PYTH_HOT_POTATO_MODULE.to_owned(),
-            Identifier::from_str("destroy")?,
-            vec![self.ctx.get_price_info_type()?],
-            vec![hot],
-        );
-
-        let pt = tx.finish();
-
-        let tx_data = TransactionData::new(
-            TransactionKind::ProgrammableTransaction(pt.to_owned()),
-            sender,
-            gas.object_ref(),
-            self.gas_budget,
-            gas_price.to_owned(),
-        );
-
-        // let response = self
-        //     .ctx
-        //     .client
-        //     .read_api()
-        //     .dry_run_transaction_block(tx_data)
-        //     .await?;
-        // println!("dry_run_transaction_block: {:?}", response.effects);
-        // Ok(())
-        self.exec(tx_data).await
+    pub async fn update_pyth_price_auto(&self) -> anyhow::Result<()> {
+        // let total_pyth_fee = price_info_object_ids.len() as u64 * PYTH_PRICE_UPDATE_FEE;
+        // vaa_data = utils::get_vaa_data(
+        //     &self.ctx.http_client,
+        //     self.ctx.config.price_config.price_server_url.clone(),
+        //     self.ctx.config.price_config.get_feed_ids(),
+        // )
+        // .await?;
+        // debug!("vaa data: {:?}", vaa_data);
+        // self.update_pyth_price_bat_inner(*budget, vaa_data, price_info_object_ids)
+        //     .await
+        Ok(())
     }
-
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let vaa_data = args.get_many::<String>("data").unwrap_or_default();
         let mut vaa_data: Vec<String> = vaa_data.map(|d| d.to_string()).collect();
         if vaa_data.len() == 0 {
-            vaa_data =
-                utils::get_vaa_data(&self.ctx.http_client, &self.ctx.config.price_config).await?;
+            vaa_data = utils::get_vaa_data(
+                &self.ctx.http_client,
+                self.ctx.config.price_config.price_server_url.clone(),
+                self.ctx.config.price_config.get_feed_ids(),
+            )
+            .await?;
         }
         debug!("vaa data: {:?}", vaa_data);
-        let budget = args
-            .get_one::<u64>("budget")
-            .ok_or_else(|| CliError::InvalidCliParams("budget".to_string()))?;
-        self.update_pyth_price_bat_inner(*budget, vaa_data).await
+        let update_fee = args
+            .get_one::<u64>("update_fee")
+            .ok_or_else(|| CliError::InvalidCliParams("update_fee".to_string()))?;
+
+        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
+        let total_pyth_fee = price_info_object_ids.len() as u64 * *update_fee;
+        self.update_pyth_price_bat_inner(total_pyth_fee, vaa_data, price_info_object_ids)
+            .await
         // self._get_coin_value().await
     }
 
@@ -576,16 +725,13 @@ impl Tool {
         self.get_price_inner(symbol.as_str()).await
     }
 
-    pub async fn create_account(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
+    pub async fn create_account(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_MODULE_NAME,
                 "create_account",
-                vec![SuiJsonValue::new(json!(coin))?],
+                vec![],
                 vec![self.get_t()],
             )
             .await?;
@@ -834,11 +980,23 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+    pub async fn create_lsp(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "create_lsp",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_publisher_id),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
 
     pub async fn create_market(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let coin = args
-            .get_one::<String>("coin")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
             .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
@@ -854,9 +1012,6 @@ impl Tool {
         let opening_price = args
             .get_one::<u64>("opening_price")
             .ok_or_else(|| CliError::InvalidCliParams("opening_price".to_string()))?;
-        let pyth_id = args
-            .get_one::<String>("pyth_id")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -864,15 +1019,13 @@ impl Tool {
                 "create_market",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(coin.as_str())?),
                     SuiJsonValue::new(json!(symbol.as_bytes()))?,
                     SuiJsonValue::new(json!(icon.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(size.to_string()))?,
                     SuiJsonValue::new(json!(opening_price.to_string()))?,
-                    SuiJsonValue::from_object_id(ObjectID::from_str(pyth_id.as_str())?),
                 ],
-                vec![self.get_t()],
+                vec![self.get_p(), self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await

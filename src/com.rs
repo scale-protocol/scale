@@ -8,9 +8,9 @@ use tokio::{
 };
 
 pub const SUI_COIN_PUBLISH_TX: &str = "8VMqXszSCfB3Ug6zKEWSj5R197ZJVfngYp9xt8hF19uE";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "26WV3dDbHKhwe6kCgCS4h9F2B7Cc7QLXfU7LLo8a5QbQ";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "2SfbjhUiTNoyYDyosBY45GJiv3B9SwW3VRLzHRRq24bJ";
 pub const SUI_NFT_PUBLISH_TX: &str = "CT1SoqQbCJmL3obt8kyWf1AV74Dm9WdVLRjDkaWQ7wA9";
-pub const SUI_SCALE_PUBLISH_TX: &str = "6RNBBzjwHS7hua3XXVJCEEALBcNXjDL6chTbwHYZ3br2";
+pub const SUI_SCALE_PUBLISH_TX: &str = "8KYcgUMJPSP9pREZvPM59WYVX61XKYkBuQUtFNYBpiWT";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
@@ -52,10 +52,16 @@ pub enum CliError {
     GetObjectError(String),
     #[error("Not Active Account: {0}")]
     NoActiveAccount(String),
-    #[error("Insufficient gas balance")]
-    InsufficientGasBalance,
+    #[error("Insufficient gas balance: {0}")]
+    InsufficientGasBalance(String),
     #[error("object not found: {0}")]
     ObjectNotFound(String),
+    #[error("transaction execution failure: {0}")]
+    TransactionExecutionFailure(String),
+    #[error("PTB context not init, please call init first")]
+    PTBCtxNotInit,
+    #[error("no gas coin in account")]
+    NoGasCoin,
 }
 
 pub fn f64_round(f: f64) -> f64 {

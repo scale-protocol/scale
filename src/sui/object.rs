@@ -32,6 +32,7 @@ pub enum ObjectType {
     Market,
     Account,
     Position,
+    PythPriceUpdate,
     None,
 }
 impl<'a> From<&'a str> for ObjectType {
@@ -42,6 +43,8 @@ impl<'a> From<&'a str> for ObjectType {
             Self::Account
         } else if value.contains("Position") {
             Self::Position
+        } else if value.contains("PriceFeedUpdateEvent") {
+            Self::PythPriceUpdate
         } else {
             Self::None
         }
@@ -53,6 +56,7 @@ impl fmt::Display for ObjectType {
             Self::Market => "market",
             Self::Account => "account",
             Self::Position => "position",
+            Self::PythPriceUpdate => "price_update",
             Self::None => "None",
         };
         write!(f, "{}", t)
@@ -243,6 +247,7 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
                                 event: Event::None,
                             });
                         }
+                        ObjectType::PythPriceUpdate => {}
                         ObjectType::None => {
                             error!("got none object type");
                         }
@@ -570,4 +575,17 @@ impl From<SuiPosition> for Position {
             icon: "".to_string(),
         }
     }
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PriceIdentifier {
+    bytes: Vec<u8>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PriceFeed {
+    price_identifier: PriceIdentifier,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PriceFeedUpdateEvent {
+    price_feed: PriceFeed,
+    timestamp: u64,
 }

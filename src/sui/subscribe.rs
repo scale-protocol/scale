@@ -19,20 +19,37 @@ use tokio::{
 use futures::StreamExt;
 use serde_json::Value;
 pub struct EventSubscriber {
-    task: JoinHandle<anyhow::Result<()>>,
+    tasks: Vec<JoinHandle<anyhow::Result<()>>>,
     close_tx: watch::Sender<bool>,
 }
 
 impl EventSubscriber {
-    pub async fn new(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> Self {
+    pub async fn new(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> anyhow::Result<Self> {
         let (close_tx, close_rx) = watch::channel(false);
-        Self {
-            task: tokio::spawn(Self::run(ctx, close_rx, watch_tx)),
-            close_tx,
-        }
+        let scale_package_id = ctx.config.scale_package_id;
+        let pyth_package_id = ctx.get_pyth_package_id()?;
+        let tasks = vec![
+            // scale event
+            tokio::spawn(Self::run(
+                ctx.clone(),
+                EventFilter::All(vec![EventFilter::Package(scale_package_id)]),
+                close_rx.clone(),
+                watch_tx.clone(),
+            )),
+            // pyth event
+            tokio::spawn(Self::run(
+                ctx,
+                EventFilter::All(vec![EventFilter::Package(pyth_package_id)]),
+                close_rx,
+                watch_tx,
+            )),
+        ];
+        Ok(Self { tasks, close_tx })
     }
+
     async fn run(
         ctx: Ctx,
+        filter: EventFilter,
         mut close_rx: watch::Receiver<bool>,
         watch_tx: UnboundedSender<Message>,
     ) -> anyhow::Result<()> {
@@ -98,8 +115,10 @@ impl EventSubscriber {
             error!("EventSubscriber close_tx send error: {:?}", e);
         }
         if let Err(e) = time::timeout(Duration::from_secs(2), async {
-            if let Err(e) = self.task.await {
-                error!("task shutdown error: {:?}", e);
+            for task in self.tasks {
+                if let Err(e) = task.await {
+                    error!("task shutdown error: {:?}", e);
+                }
             }
         })
         .await
@@ -121,12 +140,17 @@ fn get_change_object(event: SuiEvent) -> Option<EventResult> {
         if let TypeTag::Struct(v) = &event.type_.type_params[0] {
             if let Value::Object(obj) = &event.parsed_json {
                 let ot: ObjectType = v.name.as_str().into();
-                return Some(EventResult {
-                    object_type: ot,
-                    object_id: ObjectID::from_str(obj.get("id").unwrap().as_str().unwrap())
-                        .unwrap(),
-                    event: event.type_.name.as_str().into(),
-                });
+                if let Some(id) = obj.get("id") {
+                    return Some(EventResult {
+                        object_type: ot,
+                        object_id: ObjectID::from_str(id.as_str().unwrap()).unwrap(),
+                        event: event.type_.name.as_str().into(),
+                    });
+                } else {
+                    if let Some(timestamp) = obj.get("timestamp") {
+                        // todo: get object id by timestamp
+                    }
+                }
             }
         }
     }
