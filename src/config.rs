@@ -61,6 +61,12 @@ pub struct PriceConfig {
     pub pyth_state: String,
     pub pyth_symbol: Vec<PythSymbol>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SqlDbConfig {
+    // mysql or postgresql
+    pub db_type: String,
+    pub db_url: String,
+}
 impl PriceConfig {
     pub fn get_feed_ids(&self) -> Vec<String> {
         let mut ids = vec![];

@@ -271,7 +271,7 @@ pub struct SuiList {
     /// 1 project team
     /// 2 Certified Third Party
     /// 3 Community
-    officer: u8,
+    pub officer: u8,
     /// coin pool of the market
     pub pool: SuiPool,
     pub total: u64,
@@ -531,7 +531,7 @@ pub struct Info {
     open_time: u64,
     close_time: u64,
     /// The effective time of the order.
-    /// If the position is not opened successcrossy after this time in the order listing mode,
+    /// If the position is not opened success crossy after this time in the order listing mode,
     /// the order will be closed directly
     validity_time: u64,
     /// Opening operator (the user manually, or the clearing robot in the listing mode)

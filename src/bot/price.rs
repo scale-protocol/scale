@@ -115,7 +115,7 @@ pub async fn sub_price(
     price_ws_url: String,
     inf_db: Influxdb,
     sds: SharedDmSymbolId,
-    enable_db: bool,
+    full_node: bool,
     is_broadcast_price: bool,
 ) -> anyhow::Result<(WsClient, PriceWatchRx)> {
     debug!("start sub price url: {:?}", price_ws_url);
@@ -167,7 +167,7 @@ pub async fn sub_price(
                             error!("send ws price msg error: {:?}", e);
                         }
                     }
-                    if !enable_db {
+                    if !full_node {
                         return Ok(());
                     }
                     let _db_rs = influxdb_client

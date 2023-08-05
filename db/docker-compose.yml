@@ -12,6 +12,20 @@ services:
       - INFLUXDB_ADMIN_USER_TOKEN=admin
     volumes:
       - influxdb_data:/bitnami/influxdb
+  postgres:
+    image: docker.io/bitnami/postgresql:12
+    restart: always
+    container_name: postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=postgres
+      - POSTGRESQL_DATABASE=scale
+    volumes:
+      - postgres_data:/bitnami/postgresql
 volumes:
   influxdb_data:
+    driver: local
+  postgres_data:
     driver: local

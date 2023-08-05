@@ -50,7 +50,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-e --enable_db <DB_DISABLE> "If it is false, price data will not be written to influxdb,default false.").default_value("false").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-f --full <FULL> "If set to true, a full node will be started, and it is necessary to specify an external InfluxDB database and SQL database in order to start.").default_value("true").value_parser(clap::value_parser!(bool)))
                 .arg(arg!(-d --duration <DURATION> r#"If this option is set, the price of the simple price prediction machine will be updated within the interval.
                  Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5.
                   -1 means disable updates, 0 means unlimited time updates."#).value_parser(clap::value_parser!(i64)))
@@ -110,22 +110,18 @@ fn sui_oracle() -> Command {
                 .arg(arg!(-s --symbol <SYMBOL> "The symbol of the oracle.")),
         )
         .subcommand(
-            Command::new("update_pyth_price_bat")
-                .about("update pyth price bat.")
-                .arg(arg!(-f --update_fee <UPDATE_FEE> "The budget of the transaction fee.").value_parser(clap::value_parser!(u64)))
-                .arg(
-                    arg!(-d --data <SYMBOL> "vaa data , get it from pyth network, If empty, try to automatically obtain")
-                        .action(ArgAction::Append),
-                ),
+            Command::new("update_pyth_price_bat").about("update pyth price bat.")
+             .arg(
+                arg!(-f --update_fee <UPDATE_FEE> "The budget of the transaction fee.")
+                .value_parser(clap::value_parser!(u64)),
+            )
+            .arg(
+            arg!(-d --data <SYMBOL> "vaa data , get it from pyth network, If empty, try to automatically obtain")
+            .action(ArgAction::Append),
+            ),
         )
-        .subcommand(
-            Command::new("get_latest_vaas")
-                .about("get latest vaas."),
-        )
-        .subcommand(
-            Command::new("update_symbol")
-                .about("update symbol map."),
-        )
+        .subcommand(Command::new("get_latest_vaas").about("get latest vaas."))
+        .subcommand(Command::new("update_symbol").about("update symbol map."))
         .subcommand(
             Command::new("get_price")
                 .about("get price from china.")
@@ -490,6 +486,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("update_pyth_price_bat", matches)) => {
                             tool.update_pyth_price_bat(matches).await?;
+                        }
+                        Some(("update_all_pyth_price", _matches)) => {
+                            tool.update_all_pyth_price().await?;
                         }
                         Some(("get_latest_vaas", matches)) => {
                             tool.get_latest_vaas(matches).await?;

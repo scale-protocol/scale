@@ -10,4 +10,4 @@ call:
 linux:
 	CC_x86_64_unknown_linux_musl="x86_64-linux-musl-gcc" cargo build --release --target=x86_64-unknown-linux-musl
 update_price:
-	export RUST_LOG=scale=debug && export RUST_BACKTRACE=full && cargo run -- -g 10000000 sui trade update_pyth_price_bat
+	export RUST_LOG=scale=debug && export RUST_BACKTRACE=full && cargo run -- -g 10000000 sui oracle update_pyth_price_bat -f 300

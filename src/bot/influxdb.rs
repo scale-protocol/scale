@@ -23,10 +23,3 @@ impl Influxdb {
         }
     }
 }
-
-// pub async fn query_price_history(
-//     symbol: String,
-//     range: String,
-//     db: Arc<Influxdb>,
-// ) -> anyhow::Result<Vec<PriceData>> {
-// }

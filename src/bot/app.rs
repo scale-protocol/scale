@@ -58,7 +58,7 @@ pub fn run(
             .ok_or(CliError::HttpServerError("parsing none".to_string()))?;
         socket_addr = Some(addr);
     }
-    let enable_db = args.get_one::<bool>("enable_db").unwrap_or(&false);
+    let full_node = args.get_one::<bool>("full_node").unwrap_or(&false);
     let mut builder = Builder::new_multi_thread();
     match args.get_one::<usize>("threads") {
         Some(t) => {
@@ -80,7 +80,7 @@ pub fn run(
             config_file,
             runtime,
             socket_addr,
-            *enable_db,
+            *full_node,
             duration,
             tasks,
             gas_budget,
@@ -123,7 +123,7 @@ fn run_sui_app(
     config_file: Option<&PathBuf>,
     runtime: Runtime,
     socket_addr: Option<SocketAddr>,
-    enable_db: bool,
+    full_node: bool,
     duration: i64,
     tasks: usize,
     gas_budget: u64,
@@ -160,7 +160,7 @@ fn run_sui_app(
                 token: conf.price_config.db.token.clone(),
             },
             &conf.price_config.ws_url,
-            enable_db,
+            full_node,
             tasks,
             duration,
             Arc::new(tool),
@@ -213,7 +213,7 @@ async fn run_bot<C>(
     socket_addr: Option<SocketAddr>,
     ic: influxdb::InfluxdbConfig,
     price_ws_url: &str,
-    enable_db: bool,
+    full_node: bool,
     tasks: usize,
     duration: i64,
     call: Arc<C>,
@@ -244,7 +244,7 @@ where
         price_ws_url.to_string(),
         db.clone(),
         sds.clone(),
-        enable_db,
+        full_node,
         socket_addr.is_some() || duration >= 0,
     )
     .await?;

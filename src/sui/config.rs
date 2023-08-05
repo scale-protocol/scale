@@ -36,6 +36,7 @@ pub struct Config {
     pub scale_nft_package_id: ObjectID,
     pub scale_nft_admin_id: ObjectID,
     pub price_config: config::PriceConfig,
+    pub sql_db_config: config::SqlDbConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

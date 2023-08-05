@@ -115,9 +115,11 @@ impl PTBCtx {
         if !self.is_init {
             return Err(CliError::PTBCtxNotInit.into());
         }
-        for (balance, gas_coin_data) in self.gas_coins.iter() {
-            if *balance >= budget {
-                return Ok(gas_coin_data.clone());
+        for i in 0..self.gas_coins.len() {
+            let (balance, gas_coin_data) = self.gas_coins[i].clone();
+            if balance >= budget {
+                self.gas_coins.remove(i);
+                return Ok(gas_coin_data);
             }
         }
         Err(CliError::NoGasCoin.into())
@@ -127,6 +129,7 @@ impl PTBCtx {
             return Err(CliError::PTBCtxNotInit.into());
         }
         let gas = px.select_one_gas(px.gas_budget)?;
+        debug!("transaction gas: {:?}", gas.object_id);
         let PTBCtx {
             tx,
             gas_budget,
@@ -180,7 +183,8 @@ impl Tool {
             SUI_CLOCK_OBJECT_ID,
         ]);
         px.add_object_ids(price_info_object_ids.clone());
-        let gas = self.get_gas(self.gas_budget + total_pyth_fee).await?;
+        let gas = self.get_all_gas().await?;
+
         px.init(gas).await?;
         // init object input
         let worm_state_input = px.get_object_input(worm_state_id, false)?;
@@ -226,6 +230,7 @@ impl Tool {
         );
         let amount = px.tx.pure(PYTH_PRICE_UPDATE_FEE)?;
         let coin_token = px.split_one_gas(total_pyth_fee)?;
+        debug!("transaction python pay gas: {:?}", coin_token.object_id);
         let coin_input = px
             .tx
             .obj(ObjectArg::ImmOrOwnedObject(coin_token.object_ref()))?;
@@ -237,7 +242,7 @@ impl Tool {
                 vec![self.get_sui_coin_type()?],
                 vec![coin_input, amount],
             );
-            let info_input = px.get_object_input(info, false)?;
+            let info_input = px.get_object_input(info, true)?;
             hot = px.tx.programmable_move_call(
                 pyth_package_id,
                 PYTH_PYTH_MODULE.to_owned(),
@@ -267,29 +272,6 @@ impl Tool {
             vec![hot],
         );
         return Ok(px);
-    }
-
-    async fn update_pyth_price_bat_inner(
-        &self,
-        total_pyth_fee: u64,
-        vaa_data: Vec<String>,
-        price_info_object_ids: Vec<ObjectID>,
-    ) -> anyhow::Result<()> {
-        debug!("update pyth price bat");
-        let px = self
-            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
-            .await?;
-
-        let tx_data = PTBCtx::get_transaction_data(px).await?;
-        // let response = self
-        //     .ctx
-        //     .client
-        //     .read_api()
-        //     .dry_run_transaction_block(tx_data)
-        //     .await?;
-        // println!("dry_run_transaction_block: {:?}", response.effects);
-        // Ok(())
-        self.exec(tx_data).await
     }
 
     pub fn get_t_str(&self) -> String {
@@ -638,6 +620,31 @@ impl Tool {
         //     .await
         Ok(())
     }
+    pub async fn update_all_pyth_price(&self) -> anyhow::Result<()> {
+        let vaa_data = utils::get_vaa_data(
+            &self.ctx.http_client,
+            self.ctx.config.price_config.price_server_url.clone(),
+            self.ctx.config.price_config.get_feed_ids(),
+        )
+        .await?;
+
+        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
+        let total_pyth_fee = price_info_object_ids.len() as u64 * PYTH_PRICE_UPDATE_FEE;
+        let px = self
+            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
+            .await?;
+
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
+        // let response = self
+        //     .ctx
+        //     .client
+        //     .read_api()
+        //     .dry_run_transaction_block(tx_data)
+        //     .await?;
+        // println!("dry_run_transaction_block: {:?}", response.effects);
+        // Ok(())
+        self.exec(tx_data).await
+    }
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let vaa_data = args.get_many::<String>("data").unwrap_or_default();
         let mut vaa_data: Vec<String> = vaa_data.map(|d| d.to_string()).collect();
@@ -656,9 +663,12 @@ impl Tool {
 
         let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
         let total_pyth_fee = price_info_object_ids.len() as u64 * *update_fee;
-        self.update_pyth_price_bat_inner(total_pyth_fee, vaa_data, price_info_object_ids)
-            .await
-        // self._get_coin_value().await
+        debug!("update pyth price bat");
+        let px = self
+            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
+            .await?;
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
+        self.exec(tx_data).await
     }
 
     async fn _get_coin_value(&self) -> anyhow::Result<()> {
