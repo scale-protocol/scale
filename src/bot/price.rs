@@ -77,14 +77,21 @@ pub struct EmaPrice {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
+    // #[serde(rename = "emitter_chain")]
+    // pub emitter_chain: i64,
+    // #[serde(rename = "attestation_time")]
+    // pub attestation_time: i64,
+    // #[serde(rename = "sequence_number")]
+    // pub sequence_number: i64,
+    // #[serde(rename = "price_service_receive_time")]
+    // pub price_service_receive_time: i64,
+    pub slot: i64,
     #[serde(rename = "emitter_chain")]
     pub emitter_chain: i64,
-    #[serde(rename = "attestation_time")]
-    pub attestation_time: i64,
-    #[serde(rename = "sequence_number")]
-    pub sequence_number: i64,
     #[serde(rename = "price_service_receive_time")]
     pub price_service_receive_time: i64,
+    #[serde(rename = "prev_publish_time")]
+    pub prev_publish_time: i64,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -145,7 +152,15 @@ pub async fn sub_price(
             Box::pin(async move {
                 if let WsClientMessage::Txt(txt) = msg {
                     // debug!("price txt: {:?}", txt);
-                    let resp: Response = serde_json::from_str(&txt)?;
+                    // let resp: Response = serde_json::from_str(&txt)?;
+                    let resp: Response = match serde_json::from_str(&txt) {
+                        Ok(resp) => resp,
+                        Err(e) => {
+                            error!("parse price resp error: {:?}", e);
+                            return Ok(());
+                        }
+                    };
+                    debug!("price resp: {:?}", resp);
                     let symbol_str = sds
                         .get(&resp.price_feed.id)
                         .ok_or_else(|| CliError::UnknownSymbol)?;
@@ -168,6 +183,7 @@ pub async fn sub_price(
                             error!("send ws price msg error: {:?}", e);
                         }
                     }
+                    debug!("enable_db: {:?}", enable_db);
                     if !enable_db {
                         return Ok(());
                     }
