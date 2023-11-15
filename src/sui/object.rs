@@ -320,7 +320,7 @@ pub struct SuiMarket {
     pub unit_size: u64,
     /// The price at 0 o'clock in the utc of the current day, which is used to calculate the spread_fee
     pub opening_price: u64,
-    pub pyth_id: ID,
+    pub list_id: ID,
 }
 
 impl From<SuiMarket> for Market {
@@ -341,11 +341,9 @@ impl From<SuiMarket> for Market {
             symbol_short: m.symbol.replace("Crypto.", "").replace("/", "-"),
             icon: m.icon,
             description: m.description,
-            officer: Officer::try_from(m.officer).unwrap(),
-            // pool: m.pool.into(),
             unit_size: m.unit_size,
             opening_price: m.opening_price,
-            pyth_id: Address::new(m.pyth_id.bytes.to_vec()),
+            list_id: Address::new(m.list_id.bytes.to_vec()),
         }
     }
 }

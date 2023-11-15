@@ -105,6 +105,16 @@ impl Default for PriceConfig {
         }
     }
 }
+
+impl Default for SqlDbConfig {
+    fn default() -> Self {
+        Self {
+            db_type: "postgres".to_string(),
+            db_url: "postgres://postgres:postgres@localhost:5432/scale?sslmode=disable".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Influxdb {
     pub url: String,

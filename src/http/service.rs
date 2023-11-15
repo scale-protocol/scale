@@ -5,7 +5,10 @@ use crate::bot::{
     ws::{PriceStatus, PriceStatusWatchRx, PriceWatchRx, SubType, WsSrvMessage, WsWatchRx},
 };
 
-use crate::bot::{machine::SharedStateMap, storage};
+use crate::bot::{
+    machine::SharedStateMap,
+    storage::local::{self, Storage},
+};
 use crate::com::{self, CliError, Task};
 use axum::extract::ws::{Message, WebSocket};
 use cached::proc_macro::cached;
@@ -55,10 +58,10 @@ pub fn get_position_list(
 ) -> anyhow::Result<Vec<Position>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-    let prefix = storage::Prefix::from_str(prefix.as_str())?;
+    let prefix = local::Prefix::from_str(prefix.as_str())?;
     let mut rs: Vec<Position> = Vec::new();
     match prefix {
-        storage::Prefix::Active => {
+        local::Prefix::Active => {
             let r = mp.position.get(&address);
             match r {
                 Some(p) => {
@@ -69,7 +72,7 @@ pub fn get_position_list(
                 None => {}
             }
         }
-        storage::Prefix::History => {
+        local::Prefix::History => {
             let items = mp.storage.get_position_history_list(&address);
             for i in items {
                 match i {
@@ -95,21 +98,21 @@ pub fn get_position_list(
                 }
             }
         }
-        storage::Prefix::None => {}
+        local::Prefix::None => {}
     }
     Ok(rs)
 }
 
 pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Result<Vec<Market>> {
-    let prefix = storage::Prefix::from_str(prefix.as_str())?;
+    let prefix = local::Prefix::from_str(prefix.as_str())?;
     let mut rs: Vec<Market> = Vec::new();
     match prefix {
-        storage::Prefix::Active => {
+        local::Prefix::Active => {
             for i in mp.market.iter() {
                 rs.push(i.value().clone());
             }
         }
-        storage::Prefix::History => {
+        local::Prefix::History => {
             let items = mp.storage.get_market_history_list();
             for i in items {
                 match i {
@@ -129,7 +132,7 @@ pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Resu
                 }
             }
         }
-        storage::Prefix::None => {}
+        local::Prefix::None => {}
     }
     Ok(rs)
 }

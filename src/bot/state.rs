@@ -90,12 +90,14 @@ pub enum State {
     Market(Market),
     Account(Account),
     Position(Position),
+    List(List),
     Price(OrgPrice),
     None,
 }
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let t = match *self {
+            Self::List(_) => "list",
             Self::Market(_) => "market",
             Self::Account(_) => "account",
             Self::Position(_) => "position",
@@ -151,6 +153,17 @@ pub struct Pool {
     pub spread_profit: u64,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct List {
+    pub id: Address,
+    pub total: u64,
+    /// Market operator,
+    /// 1 project team
+    /// 2 Certified Third Party
+    /// 3 Community
+    pub officer: Officer,
+    pub pool: Pool,
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Market {
     pub id: Address,
     /// Maximum allowable leverage ratio
@@ -184,19 +197,12 @@ pub struct Market {
     pub icon: String,
     /// market description
     pub description: String,
-    /// Market operator,
-    /// 1 project team
-    /// 2 Certified Third Party
-    /// 3 Community
-    pub officer: Officer,
-    /// coin pool of the market
-    // pub pool: Pool,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
     pub unit_size: u64,
     /// The price at 0 o'clock in the utc of the current day, which is used to calculate the spread_fee
     pub opening_price: u64,
-    pub pyth_id: Address,
+    pub list_id: Address,
 }
 impl Market {
     pub fn get_price(&self, real_price: u64) -> Price {

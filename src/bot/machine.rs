@@ -3,7 +3,10 @@ use crate::bot::state::{
     Account, Address, Direction, Event, Market, MoveCall, Position, PositionStatus, PositionType,
     Price, State, BURST_RATE,
 };
-use crate::bot::storage::{self, Storage};
+use crate::bot::storage::{
+    self,
+    local::{self, Storage},
+};
 use crate::bot::ws::{
     AccountDynamicData, PositionDynamicData, SpreadData, SupportedSymbol, WsServerState,
     WsSrvMessage, WsWatchTx,
@@ -51,7 +54,7 @@ pub struct StateMap {
 }
 impl StateMap {
     pub fn new(store_path: PathBuf, supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
-        let storage = storage::Storage::new(store_path)?;
+        let storage = local::Storage::new(store_path)?;
         let market: DmMarket = DashMap::new();
         let account: DmAccount = DashMap::new();
         let position: DmAccountPosition = DashMap::new();
@@ -72,14 +75,14 @@ impl StateMap {
 
     pub fn load_active_account_from_local(&mut self) -> anyhow::Result<()> {
         info!("start load active object from local!");
-        let p = storage::Prefix::Active;
+        let p = local::Prefix::Active;
         let r = self.storage.scan_prefix(&p);
         for i in r {
             match i {
                 Ok((k, v)) => {
                     let key = String::from_utf8(k.to_vec())
                         .map_err(|e| com::CliError::JsonError(e.to_string()))?;
-                    let keys = storage::Keys::from_str(key.as_str())?;
+                    let keys = local::Keys::from_str(key.as_str())?;
                     debug!("load objects from db: {}", keys.get_storage_key());
                     let pk = keys.get_end();
                     debug!("load address from db : {}", pk);
@@ -201,8 +204,9 @@ async fn keep_message(
     is_write_ws_event: bool,
 ) {
     let tag = msg.state.to_string();
-    let keys = storage::Keys::new(storage::Prefix::Active);
+    let keys = local::Keys::new(local::Prefix::Active);
     match msg.state {
+        State::List(list) => {}
         State::Market(market) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
             if msg.event == Event::Deleted {
@@ -352,7 +356,8 @@ async fn keep_message(
     }
 }
 
-fn save_as_history(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
+fn save_data(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {}
+fn save_as_history(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {
     match mp.storage.save_as_history(ks, data) {
         Ok(()) => {
             debug!(
@@ -370,7 +375,7 @@ fn save_as_history(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
     }
 }
 
-fn save_to_active(mp: SharedStateMap, ks: &mut storage::Keys, data: &State) {
+fn save_to_active(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {
     match mp.storage.save_to_active(ks, data) {
         Ok(()) => {
             debug!(

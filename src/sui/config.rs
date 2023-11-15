@@ -151,6 +151,7 @@ impl Default for Config {
             scale_nft_package_id: default_id,
             scale_nft_admin_id: default_id,
             price_config: config::PriceConfig::default(),
+            sql_db_config: config::SqlDbConfig::default(),
         }
     }
 }
