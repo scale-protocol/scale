@@ -1,6 +1,7 @@
 use crate::com::{self, CliError};
 use crate::config::{self, Config as cfg};
 use log::debug;
+use reqwest::Client as HttpClient;
 use std::sync::Arc;
 use std::{fs, path::PathBuf, str::FromStr, time::Duration};
 use sui_keys::keystore::{FileBasedKeystore, Keystore};
@@ -9,8 +10,7 @@ use sui_sdk::rpc_types::{
 };
 use sui_sdk::sui_client_config::{SuiClientConfig, SuiEnv};
 use sui_sdk::types::base_types::{ObjectID, SuiAddress, TransactionDigest};
-// use sui_sdk::SuiClient;
-use sui_sdk::SuiClient;
+use sui_sdk::{wallet_context::WalletContext, SuiClient};
 extern crate serde;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -50,21 +50,27 @@ pub struct KeystoreFile {
     pub file: PathBuf,
 }
 pub type Ctx = Arc<Context>;
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct Context {
     pub config: Config,
     pub client: SuiClient,
+    pub wallet: WalletContext,
+    pub http_client: HttpClient,
 }
 
 impl Context {
     pub async fn new(config: Config) -> anyhow::Result<Ctx> {
+        let wallet = WalletContext::new(
+            &config.sui_cli_config_file,
+            Some(Duration::from_secs(10)),
+            None,
+        )
+        .await?;
         Ok(Arc::new(Context {
             config: config.clone(),
-            client: config
-                .get_sui_config()?
-                .get_active_env()?
-                .create_rpc_client(Some(Duration::from_secs(10)))
-                .await?,
+            client: wallet.get_client().await?,
+            wallet,
+            http_client: HttpClient::new(),
         }))
     }
 }
@@ -210,17 +216,62 @@ impl Config {
     }
 
     fn init(&mut self) -> anyhow::Result<()> {
-        // get scale move package info
-        let scale_package = self.get_publish_info(com::SUI_SCALE_PUBLISH_TX)?;
-        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
-        // get coin package info
-        let coin_package = self.get_publish_info(com::SUI_COIN_PUBLISH_TX)?;
-        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.object_changes);
-        // get oracle package info
-        let oracle_package = self.get_publish_info(com::SUI_ORACLE_PUBLISH_TX)?;
-        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
-        let nft_package = self.get_publish_info(com::SUI_NFT_PUBLISH_TX)?;
-        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
+        com::new_tokio_one_thread().block_on(async {
+            let wallet = WalletContext::new(
+                &self.sui_cli_config_file,
+                Some(Duration::from_secs(10)),
+                None,
+            )
+            .await;
+            if let Ok(wallet) = wallet {
+                if let Ok(client) = wallet.get_client().await {
+                    // get scale move package info
+                    if let Ok(scale_package) = self
+                        .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
+                    } else {
+                        println!("please init scale package");
+                        return;
+                    }
+                    // get coin package info
+                    if let Ok(coin_package) = self
+                        .get_publish_info(&client, com::SUI_COIN_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_COIN_PUBLISH_TX, coin_package.object_changes);
+                    } else {
+                        println!("please init coin package");
+                        return;
+                    }
+                    // get oracle package info
+                    if let Ok(oracle_package) = self
+                        .get_publish_info(&client, com::SUI_ORACLE_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
+                    } else {
+                        println!("please init oracle package");
+                        return;
+                    }
+                    // get nft package info
+                    if let Ok(nft_package) = self
+                        .get_publish_info(&client, com::SUI_NFT_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
+                    } else {
+                        println!("please init nft package");
+                        return;
+                    }
+                } else {
+                }
+            } else {
+                println!("please init wallet first");
+                return;
+            }
+        });
         self.save()?;
         Ok(())
     }
@@ -300,50 +351,28 @@ impl Config {
         }
     }
 
-    fn get_publish_info(&self, tx: &str) -> anyhow::Result<SuiTransactionBlockResponse> {
-        let sui_config = self.get_sui_config()?;
-        debug!("get publish info: {:?}", sui_config.get_active_env());
-        com::new_tokio_one_thread().block_on(async {
-            debug!("get move package info");
-            if let Ok(active_envs) = sui_config.get_active_env() {
-                let client = active_envs
-                    .create_rpc_client(Some(Duration::from_secs(1000)))
-                    .await;
-                // let len = tx.len();
-                // if len > 32 {
-                //     return Err(CliError::CliError("tx is too long".to_string()).into());
-                // }
-                // let mut dg: [u8; 32] = Default::default();
-                // dg[..len].clone_from_slice(tx.as_bytes());
-                match client {
-                    Ok(client) => {
-                        let td = TransactionDigest::from_str(tx)?;
-                        let opt = SuiTransactionBlockResponseOptions {
-                            show_input: false,
-                            show_raw_input: false,
-                            show_effects: false,
-                            show_events: false,
-                            show_object_changes: true,
-                            show_balance_changes: false,
-                        };
-                        let rs = client
-                            .read_api()
-                            .get_transaction_with_options(td, opt)
-                            .await
-                            .map_err(|e| CliError::RpcError(e.to_string()))?;
-                        Ok(rs)
-                    }
-                    Err(e) => {
-                        debug!("get move package info failed: {:?}", e);
-                        Err(CliError::ActiveEnvNotFound.into())
-                    }
-                }
-            } else {
-                debug!("get move package info failed, active env not found");
-                Err(CliError::ActiveEnvNotFound.into())
-            }
-        })
+    async fn get_publish_info(
+        &self,
+        client: &SuiClient,
+        tx: &str,
+    ) -> anyhow::Result<SuiTransactionBlockResponse> {
+        let td = TransactionDigest::from_str(tx)?;
+        let opt = SuiTransactionBlockResponseOptions {
+            show_input: false,
+            show_raw_input: false,
+            show_effects: false,
+            show_events: false,
+            show_object_changes: true,
+            show_balance_changes: false,
+        };
+        let rs = client
+            .read_api()
+            .get_transaction_with_options(td, opt)
+            .await
+            .map_err(|e| CliError::RpcError(e.to_string()))?;
+        Ok(rs)
     }
+
     pub fn set_config(&mut self, args: &clap::ArgMatches) {
         let storage_path = args.get_one::<PathBuf>("storage");
         let sui_config_file = args.get_one::<PathBuf>("sui-client-config");

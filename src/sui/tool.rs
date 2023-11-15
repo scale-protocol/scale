@@ -12,16 +12,17 @@ use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
 use std::str::FromStr;
 use sui_json_rpc_types::SuiTypeTag;
+use sui_json_rpc_types::{SuiExecutionStatus, SuiTransactionBlockEffects};
 use sui_keys::keystore::AccountKeystore;
 use sui_sdk::{
     json::SuiJsonValue,
     rpc_types::SuiTransactionBlockResponseOptions,
-    types::{
-        base_types::ObjectID,
-        messages::{Command, Transaction, TransactionData, TransactionKind},
-    },
+    types::{base_types::ObjectID, transaction::Transaction},
 };
-use sui_types::messages::ExecuteTransactionRequestType;
+use sui_types::{
+    crypto::Signature, quorum_driver_types::ExecuteTransactionRequestType,
+    transaction::TransactionData,
+};
 
 const COIN_MODULE_NAME: &str = "scale";
 const SCALE_MODULE_NAME: &str = "enter";
@@ -56,38 +57,52 @@ impl Tool {
         )
     }
 
+    fn get_transaction_signature(&self, pm: &TransactionData) -> anyhow::Result<Signature> {
+        let address = self.ctx.wallet.config.active_address.ok_or_else(|| {
+            CliError::NoActiveAccount(
+                "no active account, please use sui client command create it .".to_string(),
+            )
+        })?;
+        let signature =
+            self.ctx
+                .wallet
+                .config
+                .keystore
+                .sign_secure(&address, pm, Intent::sui_transaction())?;
+        Ok(signature)
+    }
+
     async fn exec(&self, pm: TransactionData) -> anyhow::Result<()> {
-        let address =
-            self.ctx.config.sui_config.active_address.ok_or_else(|| {
-                CliError::InvalidCliParams("active address not found".to_string())
-            })?;
-        let signature = self.ctx.config.get_sui_config()?.keystore.sign_secure(
-            &address,
-            &pm,
-            Intent::sui_transaction(),
-        )?;
+        let signature = self.get_transaction_signature(&pm)?;
         let opt = SuiTransactionBlockResponseOptions::default();
         let tx = self
             .ctx
             .client
             .quorum_driver_api()
             .execute_transaction_block(
-                Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature])
-                    .verify()?,
+                Transaction::from_data(pm.clone(), Intent::sui_transaction(), vec![signature]),
                 opt,
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             )
             .await?;
-        let TransactionData::V1(v) = pm;
-        if let TransactionKind::ProgrammableTransaction(s) = v.kind {
-            s.commands.into_iter().for_each(|c| match c {
-                Command::MoveCall(m) => {
-                    println!("call: {}::{}::{}", m.package, m.module, m.function);
-                }
-                _ => {}
-            });
+
+        if tx.errors.is_empty() {
+            println!("exec: {:?} , success", tx.digest.to_string());
+        } else {
+            println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
         }
-        println!("exec: {:?} , error: {:?}", tx.digest.to_string(), tx.errors);
+        if let Some(e) = tx.effects {
+            let SuiTransactionBlockEffects::V1(v) = e;
+            match v.status {
+                SuiExecutionStatus::Success => {
+                    return Ok(());
+                }
+                SuiExecutionStatus::Failure { error } => {
+                    println!(" error: {:?}", error);
+                    return Err(CliError::TransactionExecutionFailure(error).into());
+                }
+            }
+        }
         Ok(())
     }
 

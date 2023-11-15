@@ -10,7 +10,7 @@ clap = "4.0.22"
 sui-sdk = { path = "../sui/crates/sui-sdk" }
 sui-keys = {  path = "../sui/crates/sui-keys" }
 sui-types = {  path = "../sui/crates/sui-types" }
-sui-adapter = {  path = "../sui/crates/sui-adapter" }
+# sui-adapter = {  path = "../sui/sui-execution/latest/sui-adapter" }
 sui-json-rpc-types = {  path = "../sui/crates/sui-json-rpc-types" }
 shared-crypto = { path = "../sui/crates/shared-crypto" }
 move-core-types = { path = "../sui/external-crates/move/move-core/types" }
@@ -44,3 +44,4 @@ influxdb2_client= {path="../influxdb2_client"}
 csv="1.1.6"
 # move-core-types = { git = "https://github.com/move-language/move", rev = "60cec12b1ed9382836aa4c141e445656d39375e1", features = ["address32"] }
 cached="0.42.0"
+reqwest = { version = "0.11", features = ["json"] }

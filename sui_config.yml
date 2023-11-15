@@ -1,0 +1,31 @@
+sui_cli_config_file: /Users/lihua/.sui/sui_config/client.yaml
+scale_store_path: /Users/lihua/.scale/.sui/store
+scale_package_id: "0x001f72073dcdc4425ba0e2b94ba0f02545b66da058b293cae695ee36e5d4a1ae"
+scale_market_list_id: "0xb7f0575d1124b05a7e94d986f52142c6cba676d2582378fd59aac572e22a034e"
+scale_nft_factory_id: "0x4660f1075e64aa08fa6665e4ace9022bf6d61c0f5c18c2f48258f93c5be4f658"
+scale_coin_package_id: "0xf2e07f814fcd4e37cc1acd7d7b335814cf6fbe4fe7f9d5483c814082c16556af"
+scale_coin_reserve_id: "0xfdb87fbc5299b768e29770e117af06646f72abf2a0fe40937d03238a8f08038f"
+scale_coin_admin_id: "0xc0ef05c5e06fe088032d9cbaea1e19b16b848ff488243f8cc31a5beb4fd63200"
+scale_oracle_package_id: "0x63f930881f4207460a67846db62bc89a82d87570a3dc2bedb546b30bd4c6ff19"
+scale_oracle_admin_id: "0x61efa26addca90039afae3186e812b5c65b79a7e12a283519f655348983cfade"
+scale_oracle_root_id: "0xd7ac4f380021b080f9506f42b99b21a3c65d7b685a50d4b7e5a6a22ce976a89b"
+scale_admin_cap_id: "0xa58b8e509daeb428e67ff164c6bcebbef9dd0869591825e0276867551cd301f1"
+scale_nft_package_id: "0x8d8081e0e4335ae66ee9cda1d927ee3c9e244ae7b8cd8bf5b8e40e6983f30d1e"
+scale_nft_admin_id: "0x21506eb83c042321e0d42ea2fc4f6121ee332b0f38fb9f22b5b1d09463782e61"
+price_config:
+  ws_url: wss://hermes.pyth.network/ws
+  db:
+    url: http://127.0.0.1:8086
+    org: scale
+    bucket: pyth.network
+    token: 9pvZ8_3oTDHYvxJDxU6PtYfkl5Sg2nRlJEmZoPZbu2oq2e6I0tRv0vr0tnUfMwZvhII251SP0J4dEtA39QwVTA==
+  pyth_symbol:
+    - symbol: Crypto.BTC/USD
+      id: 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
+      oracle_feed_address: 0x3f9ff3dde9169d6f3632523285a62e82dd7669908228771e0a8dcd2314582914
+    - symbol: Crypto.ETH/USD
+      id: 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace
+      oracle_feed_address: 0x8dbc7bacd7f761954dff3ebf1b7bb83f9a163547f7f7113ec6941ec86931bfb5
+    - symbol: Crypto.DOGE/USD
+      id: 0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c
+      oracle_feed_address: 0x6e8c7cb3b9d8385244499ee8201edbd3bb977e7ba9efdffa3ba8aaf0df368e55

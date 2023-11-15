@@ -43,12 +43,7 @@ impl EventSubscriber {
                 // SuiEventFilter::Module("enter".to_string()),
             ]);
             // todo: If the server is not running for the first time, it will continuously retry.
-            let client = ctx
-                .config
-                .get_sui_config()?
-                .get_active_env()?
-                .create_rpc_client(Some(Duration::from_secs(10)))
-                .await?;
+            let client = ctx.wallet.get_client().await?;
             let mut sub = client.event_api().subscribe_event(filter).await?;
             debug!("event sub created ...");
             // let mut timer = time::interval(Duration::from_secs(5));

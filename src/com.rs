@@ -50,6 +50,18 @@ pub enum CliError {
     InvalidWsAddressSigner,
     #[error("Get object error: {0}")]
     GetObjectError(String),
+    #[error("Not Active Account: {0}")]
+    NoActiveAccount(String),
+    #[error("Insufficient gas balance: {0}")]
+    InsufficientGasBalance(String),
+    #[error("object not found: {0}")]
+    ObjectNotFound(String),
+    #[error("transaction execution failure: {0}")]
+    TransactionExecutionFailure(String),
+    #[error("PTB context not init, please call init first")]
+    PTBCtxNotInit,
+    #[error("no gas coin in account")]
+    NoGasCoin,
 }
 
 pub fn f64_round(f: f64) -> f64 {
