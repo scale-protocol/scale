@@ -1,8 +1,8 @@
 #！/bin/bash
-DB="https://ifd.scale.exchange"
+DB="http://45.77.243.210:8086"
 ORG="scale"
 BUCKET="pyth.network"
-DB_TOKEN="b-HbA75meluyiNCR16mtC-ybMGUqN6dUG2lux1_i-oFFdKjhiFEJzL5yHcwDo9Fyv8VyRf5mJU4XrO28fmckaA=="
+DB_TOKEN="3pGATRJ6-=="
 if [ ! -d "$1" ]; then
     echo "please input the path of data"
     exit 1
