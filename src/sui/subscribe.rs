@@ -55,6 +55,7 @@ impl EventSubscriber {
                         break 'connection;
                     }
                     rs = sub.next() =>{
+                        debug!("event sub got next: {:?}", rs);
                         match rs {
                             Some(Ok(event)) => {
                                 debug!("event sub got event: {:?}", event);
@@ -63,6 +64,7 @@ impl EventSubscriber {
                                     if event_rs.object_type != ObjectType::None {
                                         match object::pull_object(ctx.clone(), event_rs.object_id).await{
                                             Ok(mut msg) => {
+                                                debug!("pull object success: {:?}", msg);
                                                 msg.event = event_rs.event;
                                                 if let Err(e) = watch_tx.send(msg) {
                                                     error!("watch_tx send error: {:?}", e);

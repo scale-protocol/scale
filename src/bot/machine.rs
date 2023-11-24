@@ -169,7 +169,7 @@ async fn watch_message(
     mut watch_rx: UnboundedReceiver<Message>,
     mut shutdown_rx: oneshot::Receiver<()>,
     event_ws_tx: WsWatchTx,
-    is_write_spread: bool,
+    is_write_ws_event: bool,
 ) -> anyhow::Result<()> {
     info!("start scale data watch ...");
     loop {
@@ -181,8 +181,7 @@ async fn watch_message(
             r = watch_rx.recv()=> {
                 match r {
                     Some(msg)=>{
-                        // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
+                        keep_message(mp.clone(), msg,event_ws_tx.clone(),is_write_ws_event).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -227,6 +226,8 @@ async fn keep_message(
             }
         }
         State::Account(account) => {
+            debug!("data channel got account : {:?}", account);
+
             let mut keys = keys.add(tag).add(msg.address.to_string());
 
             if msg.event == Event::Deleted {
@@ -236,6 +237,7 @@ async fn keep_message(
                 mp.account.insert(msg.address.clone(), account.clone());
                 save_to_active(mp.clone(), &mut keys, &State::Account(account.clone()))
             }
+            debug!("is_write_ws_event account: {}", is_write_ws_event);
             if is_write_ws_event {
                 let mut account_data = AccountDynamicData::default();
                 account_data.id = account.id;
@@ -250,7 +252,7 @@ async fn keep_message(
                     .0
                     .send(WsSrvMessage::AccountUpdate(account_data.clone()))
                 {
-                    error!("send spread data to channel error: {}", e);
+                    error!("send account data to channel error: {}", e);
                 }
             }
         }
@@ -294,6 +296,7 @@ async fn keep_message(
                 };
                 save_to_active(mp.clone(), &mut keys, &State::Position(position))
             }
+            debug!("is_write_ws_event position: {}", is_write_ws_event);
             if is_write_ws_event {
                 let mut position_data = PositionDynamicData::default();
                 if let Some(data) = mp.position_dynamic_data.get(&msg.address) {
@@ -307,7 +310,7 @@ async fn keep_message(
                     _ => WsSrvMessage::PositionUpdate(position_data),
                 };
                 if let Err(e) = event_ws_tx.0.send(ws_message) {
-                    error!("send spread data to channel error: {}", e);
+                    error!("send position data to channel error: {}", e);
                 }
             }
         }

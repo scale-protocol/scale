@@ -19,7 +19,7 @@ use sui_sdk::types::{
 use tokio::sync::mpsc::UnboundedSender;
 extern crate serde;
 
-const OBJECT_MAX_REQUEST_LIMIT: usize = 100;
+const OBJECT_MAX_REQUEST_LIMIT: usize = 50;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ObjectType {
     Market,

@@ -563,7 +563,7 @@ pub async fn handle_ws(
     loop {
         tokio::select! {
             Ok(price_status) = price_status_rx.0.recv() => {
-                debug!("got price from ws broadcast channel: {:?}", price_status);
+                // debug!("got price from ws broadcast channel: {:?}", price_status);
                 if symbols_set.contains(&price_status.symbol) {
                     if let Err(e) = socket.send(Message::Text(WsSrvMessage::PriceUpdate(price_status).into_txt())).await {
                         error!("send ws message error: {}", e);
@@ -574,6 +574,7 @@ pub async fn handle_ws(
             Ok(ws_event) = event_ws_rx.0.recv() => {
                 match ws_event {
                     WsSrvMessage::AccountUpdate(data) => {
+                        debug!("got ws account update: {:?}", data.id.to_string());
                         if data.id == user_account {
                             if let Err(e) = socket.send(Message::Text(WsSrvMessage::AccountUpdate(data).into_txt())).await {
                                 error!("send ws message error: {}", e);
@@ -583,7 +584,7 @@ pub async fn handle_ws(
                     },
                     WsSrvMessage::PositionUpdate(data) => {
                         if data.account_id == user_account {
-                            debug!("got position update: {:?}", data);
+                            debug!("got ws position update: {:?}", data.id.to_string());
                             if let Err(e) = socket.send(Message::Text(WsSrvMessage::PositionUpdate(data).into_txt())).await {
                                 error!("send ws message error: {}", e);
                                 break;
