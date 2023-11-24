@@ -1,3 +1,4 @@
+use std::f32::consts::E;
 use std::str::FromStr;
 
 use crate::bot::{machine::Message, state::Event};
@@ -38,10 +39,11 @@ impl EventSubscriber {
     ) -> anyhow::Result<()> {
         'connection: loop {
             info!("event sub connecting ...");
-            let filter = EventFilter::All(vec![
-                EventFilter::Package(ctx.config.scale_package_id),
-                // SuiEventFilter::Module("enter".to_string()),
-            ]);
+            // let filter = EventFilter::All(vec![
+            //     EventFilter::Package(ctx.config.scale_package_id),
+            //     // SuiEventFilter::Module("enter".to_string()),
+            // ]);
+            let filter = EventFilter::Package(ctx.config.scale_package_id);
             // todo: If the server is not running for the first time, it will continuously retry.
             let client = ctx.wallet.get_client().await?;
             let mut sub = client.event_api().subscribe_event(filter).await?;

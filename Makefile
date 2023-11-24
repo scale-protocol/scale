@@ -2,9 +2,10 @@ k?=x
 build:
 	cargo install --path .
 run:
-	RUST_LOG=scale::bot::price=debug scale -l /Users/lihua/work/lihua/blok/scale/scale/sui.log bot -b sui -d 5 -e true -p 8081 -t 2
+	RUST_LOG=scale::sui::subscribe=debug scale -l /Users/lihua/work/lihua/blok/scale/scale/sui.log bot -b sui -d 5 -e true -p 8081 -t 2
 debug:
-	RUST_LOG=scale::bot::price && export RUST_BACKTRACE=full && cargo run -- bot -b sui -e true -d 600 -p 8081 -t 10
+	cargo install --path .
+	RUST_LOG=scale::sui::subscribe=debug scale  bot -b sui -p 8081 -t 2
 config:
 	export RUST_LOG=scale=debug && export RUST_BACKTRACE=full && cargo run -- sui config get
 call:
