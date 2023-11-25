@@ -25,15 +25,15 @@ pub fn get_account_info(
     address: String,
     sync_tx: UnboundedSender<ObjectID>,
 ) -> anyhow::Result<Option<Account>> {
+    let id = ObjectID::from_str(address.to_string().as_str())
+        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+    sync_tx
+        .send(id)
+        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     let r = mp.account.get(&address);
     if r.is_none() {
-        let id = ObjectID::from_str(address.to_string().as_str())
-            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-        sync_tx
-            .send(id)
-            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
         return Ok(None);
     }
     Ok(r.map(|a| a.value().clone()))
