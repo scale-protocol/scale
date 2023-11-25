@@ -21,9 +21,10 @@ use axum::{
 };
 use log::*;
 use serde::Deserialize;
-
 use std::sync::Arc;
 use std::{borrow::Cow, time::Duration};
+use sui_sdk::types::base_types::ObjectID;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -41,11 +42,18 @@ impl HttpServer {
         db: Arc<Influxdb>,
         event_ws_rx: WsWatchRx,
         price_ws_rx: PriceWatchRx,
+        sync_tx: UnboundedSender<ObjectID>,
     ) -> Self {
         let dps = service::new_price_status();
         let (price_broadcast, price_status_rx) =
             service::PriceBroadcast::new(mp.clone(), dps.clone(), price_ws_rx, db.clone()).await;
-        let router = router(mp.clone(), db.clone(), price_status_rx, event_ws_rx);
+        let router = router(
+            mp.clone(),
+            db.clone(),
+            price_status_rx,
+            event_ws_rx,
+            sync_tx,
+        );
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -79,6 +87,7 @@ pub fn router(
     db: Arc<Influxdb>,
     price_status_rx: PriceStatusWatchRx,
     event_ws_rx: WsWatchRx,
+    sync_tx: UnboundedSender<ObjectID>,
 ) -> Router {
     let app: Router = Router::new()
         .route("/account/info/:address", get(get_user_info))
@@ -109,6 +118,7 @@ pub fn router(
         .layer(Extension(mp))
         .layer(Extension(price_status_rx))
         .layer(Extension(event_ws_rx))
+        .layer(Extension(sync_tx))
         .layer(Extension(db));
     app.fallback(handler_404)
 }
@@ -123,14 +133,22 @@ async fn handler_404() -> impl IntoResponse {
 async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
+    Extension(sync_tx): Extension<UnboundedSender<ObjectID>>,
 ) -> impl IntoResponse {
-    JsonResponse::from(service::get_account_info(state, address)).to_json()
+    JsonResponse::from(service::get_account_info(state, address, sync_tx)).to_json()
 }
 async fn get_position_info(
     Path((address, position_address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
+    Extension(sync_tx): Extension<UnboundedSender<ObjectID>>,
 ) -> impl IntoResponse {
-    JsonResponse::from(service::get_position_info(state, address, position_address)).to_json()
+    JsonResponse::from(service::get_position_info(
+        state,
+        address,
+        position_address,
+        sync_tx,
+    ))
+    .to_json()
 }
 
 async fn get_user_position_list(

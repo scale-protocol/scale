@@ -21,6 +21,8 @@ use std::{
         Arc,
     },
 };
+use sui_sdk::types::base_types::ObjectID;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::{runtime::Builder, runtime::Runtime, signal};
 
 pub fn run(
@@ -150,6 +152,10 @@ fn run_sui_app(
                 return;
             }
         }
+        let (sync_tx, sync_rx) = mpsc::unbounded_channel();
+        let ctx = SuiContext::new(conf.clone())
+            .await
+            .expect("sui context init error");
         let run = run_bot(
             mp.clone(),
             price_feed.clone(),
@@ -166,6 +172,7 @@ fn run_sui_app(
             tasks,
             duration,
             Arc::new(tool),
+            sync_tx,
         )
         .await;
         let (watch, liquidation, ws_client, http_server, oracle) = match run {
@@ -175,12 +182,13 @@ fn run_sui_app(
                 return;
             }
         };
-        let ctx = SuiContext::new(conf).await.expect("sui context init error");
+
         if let Err(e) = subscribe::sync_all_objects(ctx.clone(), watch.watch_tx.clone()).await {
             error!("sync all orders error: {}", e);
         }
         // start event task
-        let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone()).await;
+        let event_task =
+            subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone(), sync_rx).await;
         info!("bot start success");
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");
@@ -217,6 +225,7 @@ async fn run_bot<C>(
     tasks: usize,
     duration: i64,
     call: Arc<C>,
+    sync_tx: UnboundedSender<ObjectID>,
 ) -> anyhow::Result<(
     machine::Watch,
     machine::Liquidation,
@@ -256,6 +265,7 @@ where
                 Arc::new(db),
                 event_ws_rx,
                 price_ws_rx.clone(),
+                sync_tx,
             )
             .await,
         )

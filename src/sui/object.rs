@@ -58,16 +58,17 @@ pub async fn pull_objects_and_send(
     event: Event,
     watch_tx: UnboundedSender<Message>,
 ) -> anyhow::Result<()> {
+    debug!("pull_objects_and_send ids: {:?}", ids);
     while ids.len() > OBJECT_MAX_REQUEST_LIMIT {
         let ids_new = ids.split_off(OBJECT_MAX_REQUEST_LIMIT);
-        pull_objects_whith_limit_and_send(ctx.clone(), ids_new, event.clone(), watch_tx.clone())
+        pull_objects_with_limit_and_send(ctx.clone(), ids_new, event.clone(), watch_tx.clone())
             .await?;
     }
-    pull_objects_whith_limit_and_send(ctx, ids, event.clone(), watch_tx).await?;
+    pull_objects_with_limit_and_send(ctx, ids, event.clone(), watch_tx).await?;
     Ok(())
 }
 
-pub async fn pull_objects_whith_limit_and_send(
+pub async fn pull_objects_with_limit_and_send(
     ctx: Ctx,
     ids: Vec<ObjectID>,
     event: Event,
@@ -118,6 +119,34 @@ pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
         .get_object_with_options(id, opt)
         .await?;
     prase_object_response(rs).await
+}
+
+pub async fn pull_object_and_send(
+    ctx: Ctx,
+    id: ObjectID,
+    event: Event,
+    watch_tx: UnboundedSender<Message>,
+) -> anyhow::Result<()> {
+    let opt = SuiObjectDataOptions {
+        show_type: false,
+        show_owner: false,
+        show_previous_transaction: false,
+        show_display: false,
+        show_content: false,
+        show_bcs: true,
+        show_storage_rebate: false,
+    };
+    let rs = ctx
+        .client
+        .read_api()
+        .get_object_with_options(id, opt)
+        .await?;
+    let mut ev = prase_object_response(rs).await?;
+    ev.event = event.clone();
+    if let Err(e) = watch_tx.send(ev) {
+        error!("send message error: {:?}", e);
+    }
+    Ok(())
 }
 
 pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Message> {

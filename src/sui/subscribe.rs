@@ -10,7 +10,10 @@ use move_core_types::{identifier::Identifier, language_storage::TypeTag};
 use sui_sdk::rpc_types::{EventFilter, SuiEvent};
 use sui_sdk::types::base_types::ObjectID;
 use sui_types::event::EventID;
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::{
+    mpsc::{UnboundedReceiver, UnboundedSender},
+    watch,
+};
 use tokio::{
     task::JoinHandle,
     time::{self, Duration},
@@ -24,10 +27,14 @@ pub struct EventSubscriber {
 }
 
 impl EventSubscriber {
-    pub async fn new(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> Self {
+    pub async fn new(
+        ctx: Ctx,
+        watch_tx: UnboundedSender<Message>,
+        sync_rx: UnboundedReceiver<ObjectID>,
+    ) -> Self {
         let (close_tx, close_rx) = watch::channel(false);
         Self {
-            task: tokio::spawn(Self::run(ctx, close_rx, watch_tx)),
+            task: tokio::spawn(Self::run(ctx, close_rx, watch_tx, sync_rx)),
             close_tx,
         }
     }
@@ -35,6 +42,7 @@ impl EventSubscriber {
         ctx: Ctx,
         mut close_rx: watch::Receiver<bool>,
         watch_tx: UnboundedSender<Message>,
+        mut sync_rx: UnboundedReceiver<ObjectID>,
     ) -> anyhow::Result<()> {
         'connection: loop {
             info!("event sub connecting ...");
@@ -83,6 +91,14 @@ impl EventSubscriber {
                             None => {
                                 debug!("event sub got None");
                                 break 'sub;
+                            }
+                        }
+                    }
+                    id = sync_rx.recv() => {
+                        debug!("event sync got sync object id: {:?}", id);
+                        if let Some(id) = id {
+                            if let Err(e) = object::pull_object(ctx.clone(), id).await{
+                                error!("pull object error: {:?}", e);
                             }
                         }
                     }

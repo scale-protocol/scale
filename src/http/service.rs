@@ -17,14 +17,25 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::{broadcast, oneshot};
+use sui_sdk::types::base_types::ObjectID;
+use tokio::sync::{broadcast, mpsc::UnboundedSender, oneshot};
+
 pub fn get_account_info(
     mp: bot::machine::SharedStateMap,
     address: String,
+    sync_tx: UnboundedSender<ObjectID>,
 ) -> anyhow::Result<Option<Account>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     let r = mp.account.get(&address);
+    if r.is_none() {
+        let id = ObjectID::from_str(address.to_string().as_str())
+            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        sync_tx
+            .send(id)
+            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        return Ok(None);
+    }
     Ok(r.map(|a| a.value().clone()))
 }
 
@@ -32,6 +43,7 @@ pub fn get_position_info(
     mp: bot::machine::SharedStateMap,
     address: String,
     position_address: String,
+    sync_tx: UnboundedSender<ObjectID>,
 ) -> anyhow::Result<Option<Position>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
@@ -43,9 +55,24 @@ pub fn get_position_info(
         let s = v.get(&position_address);
         if let Some(p) = s {
             return Ok(Some(p.clone()));
+        } else {
+            let id = ObjectID::from_str(address.to_string().as_str())
+                .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+            sync_tx
+                .send(id)
+                .map_err(|e| CliError::HttpServerError(e.to_string()))?;
         }
     }
-    Ok(mp.storage.get_position_info(&address, &position_address))
+    if let Some(d) = mp.storage.get_position_info(&address, &position_address) {
+        return Ok(Some(d));
+    } else {
+        let id = ObjectID::from_str(address.to_string().as_str())
+            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        sync_tx
+            .send(id)
+            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+    }
+    Ok(None)
 }
 
 pub fn get_position_list(
