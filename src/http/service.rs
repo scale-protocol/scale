@@ -25,20 +25,28 @@ pub fn get_account_info(
     address: String,
     sync_tx: UnboundedSender<ObjectID>,
 ) -> anyhow::Result<Option<Account>> {
-    let id = ObjectID::from_str(address.to_string().as_str())
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-    sync_tx
-        .send(id)
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     let address = Address::from_str(address.as_str())
         .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+    sync_object(address.copy(), sync_tx);
     let r = mp.account.get(&address);
     if r.is_none() {
         return Ok(None);
     }
     Ok(r.map(|a| a.value().clone()))
 }
-
+pub fn sync_object(address: Address, sync_tx: UnboundedSender<ObjectID>) {
+    match ObjectID::from_str(address.to_string().as_str()) {
+        Ok(id) => match sync_tx.send(id) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("sync object error: {}", e);
+            }
+        },
+        Err(e) => {
+            error!("sync object error: {}", e);
+        }
+    }
+}
 pub fn get_position_info(
     mp: bot::machine::SharedStateMap,
     address: String,
@@ -55,23 +63,12 @@ pub fn get_position_info(
         let s = v.get(&position_address);
         if let Some(p) = s {
             return Ok(Some(p.clone()));
-        } else {
-            let id = ObjectID::from_str(address.to_string().as_str())
-                .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-            sync_tx
-                .send(id)
-                .map_err(|e| CliError::HttpServerError(e.to_string()))?;
         }
     }
     if let Some(d) = mp.storage.get_position_info(&address, &position_address) {
         return Ok(Some(d));
-    } else {
-        let id = ObjectID::from_str(address.to_string().as_str())
-            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
-        sync_tx
-            .send(id)
-            .map_err(|e| CliError::HttpServerError(e.to_string()))?;
     }
+    sync_object(address, sync_tx);
     Ok(None)
 }
 
