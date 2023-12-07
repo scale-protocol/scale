@@ -8,9 +8,9 @@ use sui_sdk::rpc_types::{
 };
 use sui_sdk::types::base_types::{ObjectID, TransactionDigest};
 use sui_sdk::{wallet_context::WalletContext, SuiClient};
-use sui_types::{base_types::SuiAddress, SUI_FRAMEWORK_PACKAGE_ID};
+use sui_types::base_types::SuiAddress;
 extern crate serde;
-use move_core_types::{identifier::Identifier, language_storage::TypeTag};
+use move_core_types::language_storage::TypeTag;
 use reqwest::Client as HttpClient;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -83,13 +83,13 @@ impl Context {
         }
         Ok(ids)
     }
-    pub fn get_price_info_object_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
-        let mut ids = Vec::new();
-        for i in self.config.price_config.get_price_info_object_ids() {
-            ids.push(ObjectID::from_str(i.as_str())?);
-        }
-        Ok(ids)
-    }
+    // pub fn get_price_info_object_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
+    //     let mut ids = Vec::new();
+    //     for i in self.config.price_config.get_price_info_object_ids() {
+    //         ids.push(ObjectID::from_str(i.as_str())?);
+    //     }
+    //     Ok(ids)
+    // }
     pub fn get_worm_package_id(&self) -> anyhow::Result<ObjectID> {
         Ok(ObjectID::from_str(
             self.config.price_config.worm_package.as_str(),
@@ -186,9 +186,9 @@ impl cfg for Config {
                 self.scale_nft_admin_id = c.scale_nft_admin_id;
                 self.price_config = c.price_config;
 
-                if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
-                    return self.init();
-                }
+                // if c.scale_package_id == ObjectID::from_str(DEFAULT_OBJECT_ID).unwrap() {
+                //     return self.init();
+                // }
             }
             Err(e) => {
                 debug!("load scale config error: {}", e);
@@ -258,7 +258,7 @@ impl Config {
                         .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
                         .await
                     {
-                        // self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
+                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
                     } else {
                         println!("please init scale package");
                         return;
@@ -278,7 +278,7 @@ impl Config {
                         .get_publish_info(&client, com::SUI_ORACLE_PUBLISH_TX)
                         .await
                     {
-                        // self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
+                        self.set_value(com::SUI_ORACLE_PUBLISH_TX, oracle_package.object_changes);
                     } else {
                         println!("please init oracle package");
                         return;

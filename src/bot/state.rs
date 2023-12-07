@@ -312,19 +312,21 @@ pub struct Account {
     /// Balance of user account (maintain the deposit,
     /// and the balance here will be deducted when the deposit used in the full position mode is deducted)
     pub balance: u64,
+    pub isolated_balance: u64,
     /// User settled profit
     pub profit: i64,
     /// Total amount of margin used.
     pub margin_total: u64,
-    /// Total amount of used margin in full warehouse mode.
-    pub margin_full_total: u64,
+    /// Total amount of used margin in cross warehouse mode.
+    pub margin_cross_total: u64,
     /// Total amount of used margin in isolated position mode.
     pub margin_isolated_total: u64,
-    pub margin_full_buy_total: u64,
-    pub margin_full_sell_total: u64,
+    pub margin_cross_buy_total: u64,
+    pub margin_cross_sell_total: u64,
     pub margin_isolated_buy_total: u64,
     pub margin_isolated_sell_total: u64,
-    pub full_position_idx: HashMap<String, Address>,
+    pub cross_position_idx: HashMap<String, Address>,
+    pub isolated_position_idx: Vec<Address>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -370,10 +372,6 @@ pub struct Position {
     pub create_time: u64,
     pub open_time: u64,
     pub close_time: u64,
-    /// The effective time of the order.
-    /// If the position is not opened successfully after this time in the order listing mode,
-    /// the order will be closed directly
-    pub validity_time: u64,
     /// Opening operator (the user manually, or the clearing robot in the listing mode)
     pub open_operator: Address,
     /// Account number of warehouse closing operator (user manual, or clearing robot)

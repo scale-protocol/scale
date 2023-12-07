@@ -75,13 +75,13 @@ impl PriceConfig {
         }
         ids
     }
-    pub fn get_price_info_object_ids(&self) -> Vec<String> {
-        let mut ids = vec![];
-        for symbol in &self.pyth_symbol {
-            ids.push(symbol.price_info_object_id.clone());
-        }
-        ids
-    }
+    // pub fn get_price_info_object_ids(&self) -> Vec<String> {
+    //     let mut ids = vec![];
+    //     for symbol in &self.pyth_symbol {
+    //         ids.push(symbol.price_info_object_id.clone());
+    //     }
+    //     ids
+    // }
     pub fn get_symbols(&self) -> Vec<String> {
         let mut symbols = vec![];
         for symbol in &self.pyth_symbol {
@@ -136,7 +136,7 @@ impl Default for Influxdb {
 pub struct PythSymbol {
     pub symbol: String,
     pub pyth_feed: String,
-    pub price_info_object_id: String,
+    // pub price_info_object_id: String,
 }
 
 impl Default for PythSymbol {
@@ -144,7 +144,7 @@ impl Default for PythSymbol {
         Self {
             symbol: "Crypto.BTC/USD".to_string(),
             pyth_feed: "0x0".to_string(),
-            price_info_object_id: "0x0".to_string(),
+            // price_info_object_id: "0x0".to_string(),
         }
     }
 }

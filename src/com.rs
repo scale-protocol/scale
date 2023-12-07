@@ -7,10 +7,10 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const SUI_COIN_PUBLISH_TX: &str = "8VMqXszSCfB3Ug6zKEWSj5R197ZJVfngYp9xt8hF19uE";
-pub const SUI_ORACLE_PUBLISH_TX: &str = "2SfbjhUiTNoyYDyosBY45GJiv3B9SwW3VRLzHRRq24bJ";
-pub const SUI_NFT_PUBLISH_TX: &str = "CT1SoqQbCJmL3obt8kyWf1AV74Dm9WdVLRjDkaWQ7wA9";
-pub const SUI_SCALE_PUBLISH_TX: &str = "8KYcgUMJPSP9pREZvPM59WYVX61XKYkBuQUtFNYBpiWT";
+pub const SUI_COIN_PUBLISH_TX: &str = "6p5SReD6qXixJPtMVXAo182fcFUdTTGrPezceD9NkQDT";
+pub const SUI_ORACLE_PUBLISH_TX: &str = "3L1pwBgKT3QrBSsaEZGLPpUr9nkBuGBawpk8BFtQ1SNP";
+pub const SUI_NFT_PUBLISH_TX: &str = "GAhGoVua9D5MGq9k9AqhLodQ4YYHkA75jE8Vs2RcyxEZ";
+pub const SUI_SCALE_PUBLISH_TX: &str = "BKadqNSsX8Zwur5FcMa9R7QD7cEH2ZSZctWVyepZkksc";
 
 pub const DECIMALS: u64 = 1000000;
 pub const DENOMINATOR: u64 = 10000;
@@ -62,6 +62,8 @@ pub enum CliError {
     PTBCtxNotInit,
     #[error("no gas coin in account")]
     NoGasCoin,
+    #[error("pyth price info not found: {0}")]
+    PythPriceInfoNotFound(String),
 }
 
 pub fn f64_round(f: f64) -> f64 {

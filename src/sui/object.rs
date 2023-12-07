@@ -1,6 +1,6 @@
 use crate::bot::machine::Message;
 use crate::bot::state::{
-    Account, Address, Direction, Event, Market, MarketStatus, Officer, Pool, Position,
+    Account, Address, Direction, Event, List, Market, MarketStatus, Officer, Pool, Position,
     PositionStatus, PositionType, State,
 };
 use crate::com::CliError;
@@ -13,14 +13,17 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
-use sui_json_rpc_types::{SuiObjectData, SuiObjectDataFilter, SuiObjectResponseQuery};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, SuiRawData};
+use sui_sdk::rpc_types::{
+    SuiMoveStruct, SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse,
+    SuiObjectResponseQuery, SuiParsedData, SuiRawData,
+};
 use sui_sdk::types::{
     balance::{Balance, Supply},
     base_types::{ObjectID, ObjectRef, SuiAddress},
+    dynamic_field::DynamicFieldInfo,
     id::{ID, UID},
     object::{Object, Owner},
-    transaction::{Argument, CallArg, ObjectArg, TransactionData, TransactionKind},
+    transaction::ObjectArg,
 };
 // use sui_types::gas_coin::GasCoin;
 use tokio::sync::mpsc::UnboundedSender;
@@ -63,7 +66,7 @@ impl fmt::Display for ObjectType {
     }
 }
 
-pub async fn get_own_objects_whith_type(
+pub async fn get_own_objects_with_type(
     ctx: Ctx,
     address: SuiAddress,
     t: &str,
@@ -102,14 +105,14 @@ pub async fn pull_objects_and_send(
 ) -> anyhow::Result<()> {
     while ids.len() > OBJECT_MAX_REQUEST_LIMIT {
         let ids_new = ids.split_off(OBJECT_MAX_REQUEST_LIMIT);
-        pull_objects_whith_limit_and_send(ctx.clone(), ids_new, event.clone(), watch_tx.clone())
+        pull_objects_with_limit_and_send(ctx.clone(), ids_new, event.clone(), watch_tx.clone())
             .await?;
     }
-    pull_objects_whith_limit_and_send(ctx, ids, event.clone(), watch_tx).await?;
+    pull_objects_with_limit_and_send(ctx, ids, event.clone(), watch_tx).await?;
     Ok(())
 }
 
-pub async fn pull_objects_whith_limit_and_send(
+pub async fn pull_objects_with_limit_and_send(
     ctx: Ctx,
     ids: Vec<ObjectID>,
     event: Event,
@@ -144,6 +147,54 @@ pub async fn pull_objects_whith_limit_and_send(
     Ok(())
 }
 
+pub async fn get_all_dynamic_field_object(
+    ctx: Ctx,
+    object_id: ObjectID,
+) -> anyhow::Result<Vec<DynamicFieldInfo>> {
+    let mut objects: Vec<DynamicFieldInfo> = Vec::new();
+    let mut cursor = None;
+    loop {
+        let response = ctx
+            .client
+            .read_api()
+            .get_dynamic_fields(object_id, cursor, None)
+            .await?;
+        objects.extend(response.data);
+        if response.has_next_page {
+            cursor = response.next_cursor;
+        } else {
+            break;
+        }
+    }
+    Ok(objects)
+}
+pub async fn get_object_content(ctx: Ctx, id: ObjectID) -> anyhow::Result<SuiParsedData> {
+    let opt = SuiObjectDataOptions {
+        show_type: false,
+        show_owner: false,
+        show_previous_transaction: false,
+        show_display: false,
+        show_content: true,
+        show_bcs: false,
+        show_storage_rebate: false,
+    };
+    let rs = ctx
+        .client
+        .read_api()
+        .get_object_with_options(id, opt)
+        .await?
+        .into_object()?;
+    rs.content
+        .ok_or(CliError::GetObjectError("No content".to_string()).into())
+}
+pub async fn get_dynamic_field_value(ctx: Ctx, id: ObjectID) -> anyhow::Result<SuiMoveStruct> {
+    let content = get_object_content(ctx.clone(), id).await?;
+    if let SuiParsedData::MoveObject(v) = content {
+        Ok(v.fields)
+    } else {
+        Err(CliError::GetObjectError("No content".to_string()).into())
+    }
+}
 pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
     let opt = SuiObjectDataOptions {
         show_type: false,
@@ -266,15 +317,25 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiList {
-    pub id: UID,
-    /// Market operator,
+    id: UID,
+    total: u64,
+    /// Market pool operator,
     /// 1 project team
     /// 2 Certified Third Party
     /// 3 Community
-    pub officer: u8,
+    officer: u8,
     /// coin pool of the market
-    pub pool: SuiPool,
-    pub total: u64,
+    pool: SuiPool,
+}
+impl From<SuiList> for List {
+    fn from(l: SuiList) -> Self {
+        Self {
+            id: Address::new(l.id.id.bytes.to_vec()),
+            total: l.total,
+            officer: Officer::try_from(l.officer).unwrap(),
+            pool: l.pool.into(),
+        }
+    }
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiMarket {
@@ -296,25 +357,20 @@ pub struct SuiMarket {
     /// Take the value of spread_fee when this value is true
     pub spread_fee_manual: bool,
     /// Market status:
-    /// 1 Normal;
+    /// 1. Normal;
     /// 2. Lock the market, allow closing settlement and not open positions;
-    /// 3 The market is frozen, and opening and closing positions are not allowed.
+    /// 3. The market is frozen, and opening and closing positions are not allowed.
     pub status: u8,
     /// Total amount of long positions in the market
     pub long_position_total: u64,
     /// Total amount of short positions in the market
     pub short_position_total: u64,
     /// Transaction pair (token type, such as BTC, ETH)
-    /// len: 4+20
     pub symbol: String,
     pub icon: String,
+    // officer: u8,
     /// market description
     pub description: String,
-    /// Market operator,
-    /// 1 project team
-    /// 2 Certified Third Party
-    /// 3 Community
-    pub officer: u8,
     /// Basic size of transaction pair contract
     /// Constant 1 in the field of encryption
     pub unit_size: u64,
@@ -395,44 +451,51 @@ pub struct SuiAccount {
     pub offset: u64,
     /// Balance of user account (maintain the deposit,
     /// and the balance here will be deducted when the deposit used in the full position mode is deducted)
-    pub balance: u64,
+    pub balance: Balance,
+    pub isolated_balance: Balance,
     /// User settled profit
     pub profit: I64,
     /// Total amount of margin used.
     pub margin_total: u64,
-    /// Total amount of used margin in full warehouse mode.
-    pub margin_full_total: u64,
+    /// Total amount of used margin in cross warehouse mode.
+    pub margin_cross_total: u64,
     /// Total amount of used margin in isolated position mode.
     pub margin_isolated_total: u64,
-    pub margin_full_buy_total: u64,
-    pub margin_full_sell_total: u64,
+    pub margin_cross_buy_total: u64,
+    pub margin_cross_sell_total: u64,
     pub margin_isolated_buy_total: u64,
     pub margin_isolated_sell_total: u64,
-    pub full_position_idx: Vec<Entry>,
-    pub isolated_position_idx: Vec<SuiAddress>,
+    pub cross_position_idx: Vec<Entry>,
+    pub isolated_position_idx: Vec<ID>,
 }
 
 impl From<SuiAccount> for Account {
     fn from(a: SuiAccount) -> Self {
-        let mut full_position_idx: HashMap<String, Address> = HashMap::new();
-        for e in a.full_position_idx {
+        let mut cross_position_idx: HashMap<String, Address> = HashMap::new();
+        for e in a.cross_position_idx {
             let (key, value): (String, Address) = e.into();
-            full_position_idx.insert(key, value);
+            cross_position_idx.insert(key, value);
         }
         Self {
             id: Address::new(a.id.id.bytes.to_vec()),
             owner: Address::new(a.owner.to_vec()),
             offset: a.offset,
-            balance: a.balance,
+            balance: a.balance.value(),
+            isolated_balance: a.isolated_balance.value(),
             profit: a.profit.into(),
             margin_total: a.margin_total,
-            margin_full_total: a.margin_full_total,
+            margin_cross_total: a.margin_cross_total,
             margin_isolated_total: a.margin_isolated_total,
-            margin_full_buy_total: a.margin_full_buy_total,
-            margin_full_sell_total: a.margin_full_sell_total,
+            margin_cross_buy_total: a.margin_cross_buy_total,
+            margin_cross_sell_total: a.margin_cross_sell_total,
             margin_isolated_buy_total: a.margin_isolated_buy_total,
             margin_isolated_sell_total: a.margin_isolated_sell_total,
-            full_position_idx,
+            cross_position_idx: cross_position_idx,
+            isolated_position_idx: a
+                .isolated_position_idx
+                .into_iter()
+                .map(|id| Address::new(id.bytes.to_vec()))
+                .collect(),
         }
     }
 }
@@ -481,72 +544,71 @@ impl From<I64> for i64 {
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiPosition {
-    id: UID,
+    pub id: UID,
+    pub offset: u64,
+    /// Initial position margin
+    pub margin: u64,
     /// Current actual margin balance of isolated
-    margin_balance: Balance,
-    info: Info,
+    pub margin_balance: Balance,
+    pub info: SuiPositionInfo,
 }
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Info {
-    offset: u64,
+pub struct SuiPositionInfo {
+    pub offset: u64,
     /// Initial position margin
-    margin: u64,
+    pub margin: u64,
     /// Current actual margin balance of isolated
     /// leverage size
-    leverage: u8,
+    pub leverage: u8,
     /// 1 cross position mode, 2 isolated position modes.
     #[serde(alias = "type")]
-    position_type: u8,
-    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending , 5 partial closeing , 6 auto closing
-    status: u8,
+    pub position_type: u8,
+    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending , 5 partial closeing , 6 auto closing , 7 merge close
+    pub status: u8,
     /// 1 buy long, 2 sell short.
-    direction: u8,
+    pub direction: u8,
     /// the position size
-    unit_size: u64,
+    pub unit_size: u64,
     /// lot size
-    lot: u64,
+    pub lot: u64,
     /// Opening quotation (expected opening price under the listing mode)
-    open_price: u64,
+    pub open_price: u64,
     /// Point difference data on which the quotation is based, scale 10000
-    open_spread: u64,
+    pub open_spread: u64,
     // Actual quotation currently obtained
-    open_real_price: u64,
+    pub open_real_price: u64,
     /// Closing quotation
-    close_price: u64,
+    pub close_price: u64,
     /// Point difference data on which the quotation is based , scale 10000
-    close_spread: u64,
+    pub close_spread: u64,
     // Actual quotation currently obtained
-    close_real_price: u64,
+    pub close_real_price: u64,
     // PL
-    profit: I64,
-    auto_open_price: u64,
+    pub profit: I64,
+    pub auto_open_price: u64,
     /// Automatic profit stop price
-    stop_surplus_price: u64,
+    pub stop_surplus_price: u64,
     /// Automatic stop loss price
-    stop_loss_price: u64,
+    pub stop_loss_price: u64,
     /// Order creation time
-    create_time: u64,
-    open_time: u64,
-    close_time: u64,
-    /// The effective time of the order.
-    /// If the position is not opened success crossy after this time in the order listing mode,
-    /// the order will be closed directly
-    validity_time: u64,
+    pub create_time: u64,
+    pub open_time: u64,
+    pub close_time: u64,
     /// Opening operator (the user manually, or the clearing robot in the listing mode)
-    open_operator: SuiAddress,
+    pub open_operator: SuiAddress,
     /// Account number of warehouse closing operator (user manual, or clearing robot Qiangping)
-    close_operator: SuiAddress,
-    symbol: Vec<u8>,
+    pub close_operator: SuiAddress,
+    pub symbol: String,
     /// Market account number of the position
-    market_id: ID,
-    account_id: ID,
+    pub market_id: ID,
+    pub account_id: ID,
 }
 impl From<SuiPosition> for Position {
     fn from(p: SuiPosition) -> Self {
         Self {
             id: Address::new(p.id.id.bytes.to_vec()),
-            offset: p.info.offset,
-            margin: p.info.margin,
+            offset: p.offset,
+            margin: p.margin,
             margin_balance: p.margin_balance.value(),
             leverage: p.info.leverage,
             position_type: PositionType::try_from(p.info.position_type).unwrap(),
@@ -566,7 +628,6 @@ impl From<SuiPosition> for Position {
             create_time: p.info.create_time,
             open_time: p.info.open_time,
             close_time: p.info.close_time,
-            validity_time: p.info.validity_time,
             open_operator: Address::new(p.info.open_operator.to_vec()),
             close_operator: Address::new(p.info.close_operator.to_vec()),
             market_id: Address::new(p.info.market_id.bytes.to_vec()),
@@ -576,17 +637,4 @@ impl From<SuiPosition> for Position {
             icon: "".to_string(),
         }
     }
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PriceIdentifier {
-    bytes: Vec<u8>,
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PriceFeed {
-    price_identifier: PriceIdentifier,
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PriceFeedUpdateEvent {
-    price_feed: PriceFeed,
-    timestamp: u64,
 }

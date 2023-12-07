@@ -682,7 +682,7 @@ async fn compute_pl_all_position<C>(
     account_data.balance = account.balance as i64;
     account_data.margin_total = account.margin_total as i64;
     account_data.id = account.id.copy();
-    let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.full_position_idx.len());
+    let mut position_sort: Vec<PositionSort> = Vec::with_capacity(account.cross_position_idx.len());
     let mut pl_full = 0i64;
     for v in dm_position.iter() {
         let position = v.value();
@@ -750,8 +750,8 @@ async fn compute_pl_all_position<C>(
         }
     }
     // check full position
-    let mut margin_full_buy_total = account.margin_full_buy_total;
-    let mut margin_full_sell_total = account.margin_full_sell_total;
+    let mut margin_full_buy_total = account.margin_cross_buy_total;
+    let mut margin_full_sell_total = account.margin_cross_sell_total;
     let equity = account.balance as i64 + pl_full;
     let margin_full_total = margin_full_buy_total.max(margin_full_sell_total);
     // Forced close

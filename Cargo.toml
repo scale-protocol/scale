@@ -10,11 +10,9 @@ clap = "4.0.22"
 sui-sdk = { path = "../sui/crates/sui-sdk" }
 sui-keys = {  path = "../sui/crates/sui-keys" }
 sui-types = {  path = "../sui/crates/sui-types" }
-# sui-config = {  path = "../sui/crates/sui-config" }
-# sui-adapter = {  path = "../sui/crates/sui-adapter" }
 sui-json-rpc-types = {  path = "../sui/crates/sui-json-rpc-types" }
 shared-crypto = { path = "../sui/crates/shared-crypto" }
-move-core-types = { path = "../sui/external-crates/move/move-core/types" }
+move-core-types = { path = "../sui/external-crates/move/crates/move-core-types" }
 sui = {  path = "../sui/crates/sui" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream="0.1.8"

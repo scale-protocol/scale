@@ -11,13 +11,17 @@ use crate::{
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
+use fastcrypto::encoding::{Encoding, Hex};
 use log::*;
 use move_core_types::{ident_str, identifier::IdentStr, language_storage::StructTag};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
+use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 use sui_json_rpc_types::{
-    MoveCallParams, RPCTransactionRequestParams, SuiExecutionStatus, SuiObjectData,
+    MoveCallParams, RPCTransactionRequestParams, SuiExecutionStatus, SuiMoveStruct, SuiObjectData,
     SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery,
     SuiTransactionBlockEffects, SuiTypeTag,
 };
@@ -35,7 +39,6 @@ use sui_types::{
     transaction::{Argument, CallArg, Command, ObjectArg, TransactionData, TransactionKind},
     Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID,
 };
-
 const COIN_MODULE_NAME: &str = "scale";
 const SCALE_MODULE_NAME: &str = "enter";
 const NFT_MODULE_NAME: &str = "nft";
@@ -51,6 +54,12 @@ const PYTH_PRICE_UPDATE_FEE: u64 = 1;
 pub struct Tool {
     ctx: Ctx,
     gas_budget: u64,
+    pyth_price_info_mp: HashMap<String, PriceInfo>,
+    is_init_pyth_price_info: bool,
+}
+struct PriceInfo {
+    // dynamic_object_id: ObjectID,
+    field_value: ObjectID,
 }
 struct PTBCtx {
     object_ids: Vec<ObjectID>,
@@ -88,6 +97,7 @@ impl PTBCtx {
         self.is_init = true;
         Ok(())
     }
+
     pub fn get_object_input(
         &mut self,
         id: ObjectID,
@@ -124,6 +134,7 @@ impl PTBCtx {
         }
         Err(CliError::NoGasCoin.into())
     }
+
     pub async fn get_transaction_data(mut px: PTBCtx) -> anyhow::Result<TransactionData> {
         if !px.is_init {
             return Err(CliError::PTBCtxNotInit.into());
@@ -150,10 +161,96 @@ impl PTBCtx {
         Ok(tx_data)
     }
 }
+#[derive(Debug, Deserialize, Serialize)]
+struct PriceIdentifier {
+    bytes: Vec<u8>,
+}
+impl PriceIdentifier {
+    pub fn to_hex_string(&self) -> String {
+        Hex::encode(self)
+    }
+}
+impl AsRef<[u8]> for PriceIdentifier {
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes[..]
+    }
+}
+impl fmt::Display for PriceIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#x}", self)
+    }
+}
+impl fmt::LowerHex for PriceIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
+        write!(f, "{}", Hex::encode(self))
+    }
+}
 impl Tool {
     pub async fn new(conf: Config, gas_budget: u64) -> anyhow::Result<Self> {
         let ctx = Context::new(conf).await?;
-        Ok(Self { ctx, gas_budget })
+        let mut tool = Self {
+            ctx,
+            gas_budget,
+            pyth_price_info_mp: HashMap::new(),
+            is_init_pyth_price_info: false,
+        };
+        tool.get_all_price_info_object().await?;
+        Ok(tool)
+    }
+
+    async fn get_all_price_info_object(&mut self) -> anyhow::Result<()> {
+        let pyth_state_id = ObjectID::from_str(self.ctx.config.price_config.pyth_state.as_str())?;
+        let rs = object::get_all_dynamic_field_object(self.ctx.clone(), pyth_state_id).await?;
+        let mut table_object_id: Option<ObjectID> = None;
+        for v in rs {
+            if v.object_type.contains("0x2::table::Table<") {
+                table_object_id = Some(v.object_id);
+            }
+        }
+        if let Some(id) = table_object_id {
+            let rs = object::get_all_dynamic_field_object(self.ctx.clone(), id).await?;
+            let feed_ids = self.ctx.config.price_config.get_feed_ids();
+            for v in rs {
+                let k: PriceIdentifier = serde_json::from_value(v.name.value)?;
+                // debug!("object k: {:?},v: {:?}", k.to_hex_string(), v.object_id);
+                let feed_id = format!("0x{}", k.to_hex_string());
+                if !feed_ids.contains(&feed_id) {
+                    debug!("feed_id: {} not used ,continue it", feed_id);
+                    continue;
+                }
+                let fields = object::get_dynamic_field_value(self.ctx.clone(), v.object_id).await?;
+                if let SuiMoveStruct::WithFields(f) = fields {
+                    let x = f.get("value").ok_or(CliError::PythPriceInfoNotFound(
+                        "value field not found".to_string(),
+                    ))?;
+                    let info_id: ObjectID = serde_json::from_value(x.clone().to_json_value())?;
+                    debug!("object field vv: {:?}", info_id);
+                    self.pyth_price_info_mp.insert(
+                        k.to_hex_string(),
+                        PriceInfo {
+                            // dynamic_object_id: v.object_id,
+                            field_value: info_id,
+                        },
+                    );
+                }
+            }
+        } else {
+            return Err(CliError::PythPriceInfoNotFound("table".to_string()).into());
+        }
+        self.is_init_pyth_price_info = true;
+        Ok(())
+    }
+
+    pub async fn get_pyth_price_info_id(&self, price_feed_id: &str) -> anyhow::Result<ObjectID> {
+        let s = price_feed_id.strip_prefix("0x").unwrap_or(price_feed_id);
+        debug!("query price info object of price_id: {}", s);
+        if let Some(info) = self.pyth_price_info_mp.get(s) {
+            return Ok(info.field_value);
+        }
+        Err(CliError::PythPriceInfoNotFound(price_feed_id.to_string()).into())
     }
     // package the infos of the update price transaction
     async fn init_price_update_transaction(
@@ -189,7 +286,7 @@ impl Tool {
         // init object input
         let worm_state_input = px.get_object_input(worm_state_id, false)?;
         let pyth_state_input = px.get_object_input(pyth_state_id, false)?;
-        let clok_object_input = px.get_object_input(SUI_CLOCK_OBJECT_ID, false)?;
+        let clock_object_input = px.get_object_input(SUI_CLOCK_OBJECT_ID, false)?;
         let oracle_pyth_state_input =
             px.get_object_input(self.ctx.config.scale_oracle_pyth_state_id, false)?;
         let oracle_state_input =
@@ -201,7 +298,7 @@ impl Tool {
                 let call_args = vec![
                     worm_state_input,
                     px.tx.input(CallArg::Pure(bcs::to_bytes(&b).unwrap()))?,
-                    clok_object_input,
+                    clock_object_input,
                 ];
                 let verified_vaa = px.tx.programmable_move_call(
                     worm_package_id,
@@ -226,7 +323,7 @@ impl Tool {
             PYTH_PYTH_MODULE.to_owned(),
             Identifier::from_str("create_price_infos_hot_potato")?,
             vec![],
-            vec![pyth_state_input, vaas, clok_object_input],
+            vec![pyth_state_input, vaas, clock_object_input],
         );
         let amount = px.tx.pure(PYTH_PRICE_UPDATE_FEE)?;
         let coin_token = px.split_one_gas(total_pyth_fee)?;
@@ -248,7 +345,7 @@ impl Tool {
                 PYTH_PYTH_MODULE.to_owned(),
                 Identifier::from_str("update_single_price_feed")?,
                 vec![],
-                vec![pyth_state_input, hot, info_input, c, clok_object_input],
+                vec![pyth_state_input, hot, info_input, c, clock_object_input],
             );
             px.tx.programmable_move_call(
                 self.ctx.config.scale_oracle_package_id,
@@ -260,7 +357,7 @@ impl Tool {
                     pyth_state_input,
                     oracle_pyth_state_input,
                     oracle_state_input,
-                    clok_object_input,
+                    clock_object_input,
                 ],
             );
         }
@@ -290,14 +387,14 @@ impl Tool {
         )
     }
 
-    pub fn get_p(&self) -> SuiTypeTag {
-        SuiTypeTag::from(
-            sui_types::parse_sui_type_tag(
-                format!("{}::pool::Scale", self.ctx.config.scale_package_id).as_str(),
-            )
-            .expect("cannot parse SuiTypeTag"),
-        )
-    }
+    // pub fn get_p(&self) -> SuiTypeTag {
+    //     SuiTypeTag::from(
+    //         sui_types::parse_sui_type_tag(
+    //             format!("{}::pool::Scale", self.ctx.config.scale_package_id).as_str(),
+    //         )
+    //         .expect("cannot parse SuiTypeTag"),
+    //     )
+    // }
     pub fn get_sui_coin_type(&self) -> anyhow::Result<TypeTag> {
         let t = format!(
             "{}::sui::SUI",
@@ -589,9 +686,9 @@ impl Tool {
                 type_arguments: vec![],
                 arguments: vec![
                     SuiJsonValue::new(json!(s.symbol.as_bytes()))?,
-                    SuiJsonValue::from_object_id(ObjectID::from_str(
-                        s.price_info_object_id.as_str(),
-                    )?),
+                    SuiJsonValue::from_object_id(
+                        self.get_pyth_price_info_id(s.pyth_feed.as_str()).await?,
+                    ),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_pyth_state_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
                 ],
@@ -621,19 +718,32 @@ impl Tool {
         Ok(())
     }
     pub async fn update_all_pyth_price(&self) -> anyhow::Result<()> {
+        let feed_ids = self.ctx.config.price_config.get_feed_ids();
+        self.update_pyth_price_by_ids(feed_ids, PYTH_PRICE_UPDATE_FEE)
+            .await
+    }
+
+    pub async fn update_pyth_price_by_ids(
+        &self,
+        feed_ids: Vec<String>,
+        update_fee: u64,
+    ) -> anyhow::Result<()> {
         let vaa_data = utils::get_vaa_data(
             &self.ctx.http_client,
             self.ctx.config.price_config.price_server_url.clone(),
             self.ctx.config.price_config.get_feed_ids(),
         )
         .await?;
-
-        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
-        let total_pyth_fee = price_info_object_ids.len() as u64 * PYTH_PRICE_UPDATE_FEE;
+        debug!("vaa data: {:?}", vaa_data);
+        let mut price_info_object_ids = Vec::new();
+        for id in feed_ids {
+            price_info_object_ids.push(self.get_pyth_price_info_id(id.as_str()).await?);
+        }
+        let total_pyth_fee = price_info_object_ids.len() as u64 * update_fee;
+        debug!("update pyth price bat");
         let px = self
             .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
             .await?;
-
         let tx_data = PTBCtx::get_transaction_data(px).await?;
         // let response = self
         //     .ctx
@@ -645,30 +755,15 @@ impl Tool {
         // Ok(())
         self.exec(tx_data).await
     }
+
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let vaa_data = args.get_many::<String>("data").unwrap_or_default();
-        let mut vaa_data: Vec<String> = vaa_data.map(|d| d.to_string()).collect();
-        if vaa_data.len() == 0 {
-            vaa_data = utils::get_vaa_data(
-                &self.ctx.http_client,
-                self.ctx.config.price_config.price_server_url.clone(),
-                self.ctx.config.price_config.get_feed_ids(),
-            )
-            .await?;
-        }
-        debug!("vaa data: {:?}", vaa_data);
+        let ids = args.get_many::<String>("ids").unwrap_or_default();
+        let ids: Vec<String> = ids.map(|d| d.to_string()).collect();
+        println!("ids: {:?}", ids);
         let update_fee = args
             .get_one::<u64>("update_fee")
             .ok_or_else(|| CliError::InvalidCliParams("update_fee".to_string()))?;
-
-        let price_info_object_ids = self.ctx.get_price_info_object_ids()?;
-        let total_pyth_fee = price_info_object_ids.len() as u64 * *update_fee;
-        debug!("update pyth price bat");
-        let px = self
-            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
-            .await?;
-        let tx_data = PTBCtx::get_transaction_data(px).await?;
-        self.exec(tx_data).await
+        return self.update_pyth_price_by_ids(ids, *update_fee).await;
     }
 
     async fn _get_coin_value(&self) -> anyhow::Result<()> {
@@ -795,7 +890,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1036,7 +1131,7 @@ impl Tool {
                     SuiJsonValue::new(json!(size.to_string()))?,
                     SuiJsonValue::new(json!(opening_price.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1064,7 +1159,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(max_leverage))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1093,7 +1188,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(insurance_fee.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1122,7 +1217,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(margin_fee.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1155,7 +1250,7 @@ impl Tool {
                     SuiJsonValue::new(json!(fund_fee.to_string()))?,
                     SuiJsonValue::new(json!(manual))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1183,7 +1278,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(status))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1211,7 +1306,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1244,7 +1339,7 @@ impl Tool {
                     SuiJsonValue::new(json!(spread_fee.to_string()))?,
                     SuiJsonValue::new(json!(manual))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1268,7 +1363,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::new(json!(officer))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1350,7 +1445,7 @@ impl Tool {
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(amount.to_string()))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1373,7 +1468,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(nft.as_str())?),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1396,7 +1491,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1428,7 +1523,7 @@ impl Tool {
                     SuiJsonValue::new(json!(t.timestamp().to_string()))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(address.as_str())?),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1455,7 +1550,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(nft.as_str())?),
                     SuiJsonValue::from_object_id(ObjectID::from_str(move_token.as_str())?),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1496,7 +1591,7 @@ impl Tool {
                     SuiJsonValue::new(json!(position_type))?,
                     SuiJsonValue::new(json!(direction))?,
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1524,7 +1619,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1546,7 +1641,7 @@ impl MoveCall for Tool {
                     )?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
@@ -1572,7 +1667,7 @@ impl MoveCall for Tool {
                         position_id.to_vec().as_slice(),
                     )?),
                 ],
-                vec![self.get_p(), self.get_t()],
+                vec![self.get_t()],
             )
             .await?;
         return Ok(());

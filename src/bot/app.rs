@@ -21,8 +21,7 @@ use std::{
         Arc,
     },
 };
-use tokio::{runtime::Builder, runtime::Runtime, signal};
-
+use tokio::{runtime::Builder, runtime::Runtime, signal, sync::mpsc};
 pub fn run(
     app: App,
     config_file: Option<&PathBuf>,
@@ -177,10 +176,10 @@ fn run_sui_app(
         if let Err(e) = subscribe::sync_all_objects(ctx.clone(), watch.watch_tx.clone()).await {
             error!("sync all orders error: {}", e);
         }
+        let (_sync_tx, sync_rx) = mpsc::unbounded_channel();
         // start event task
-        let event_task = subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone())
-            .await
-            .expect("event task init error");
+        let event_task =
+            subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone(), sync_rx).await;
         info!("bot start success");
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");

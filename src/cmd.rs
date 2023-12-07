@@ -116,7 +116,7 @@ fn sui_oracle() -> Command {
                 .value_parser(clap::value_parser!(u64)),
             )
             .arg(
-            arg!(-d --data <SYMBOL> "vaa data , get it from pyth network, If empty, try to automatically obtain")
+            arg!(-i --ids <IDS> "You can find the ids of prices at https://pyth.network/developers/price-feed-ids")
             .action(ArgAction::Append),
             ),
         )
