@@ -357,7 +357,7 @@ fn sui_trade() -> Command {
             Command::new("investment")
             .arg_required_else_help(true)
                 .about("Funding the market liquidity pool.")
-                .arg(arg!(-m --market <MARKET> "The nft style name."))
+                .arg(arg!(-i --issue_time <ISSUE_TIME> "issue time sec.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-c --coins <COINS> "Coins for deduction,If empty, try to automatically obtain").action(ArgAction::Append))
                 .arg(arg!(-n --name <NAME> "The nft style name. NFT credentials of the specified style will be obtained."))
                 .arg(
@@ -369,7 +369,6 @@ fn sui_trade() -> Command {
             Command::new("divestment")
             .arg_required_else_help(true)
                 .about("Withdraw funds from the market liquidity pool.")
-                .arg(arg!(-m --market <MARKET> "The nft style name."))
                 .arg(arg!(-n --nft <NFT> "The NFT certificate."))
                 ,
         )
@@ -392,27 +391,123 @@ fn sui_trade() -> Command {
                 ,
         )
         .subcommand(
-            Command::new("open_position")
+            Command::new("open_cross_position")
             .arg_required_else_help(true)
-                .about("Open a position.")
-                .arg(arg!(-m --market <MARKET> "The market object id."))
-                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                .about("Open a cross position.")
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol."))
+                .arg(arg!(-a --account <ACCOUNT> "The object id for trading account."))
                 .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
                 .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
-                .arg(arg!(-p --position_type <POSITION_TYPE> "The position type. 1 full position mode, 2 isolated position modes").value_parser(clap::value_parser!(u8)))
                 .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
                 ,
         )
+        .subcommand(
+                Command::new("open_isolated_position")
+                .arg_required_else_help(true)
+                    .about("Open a isolated position.")
+                    .arg(arg!(-s --symbol <SYMBOL> "The market symbol."))
+                    .arg(arg!(-a --account <ACCOUNT> "The object id for trading account."))
+                    .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
+                    .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
+                    .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
+                    .arg(arg!(-c --coins <COINS> "Coins for open position.").action(ArgAction::Append))
+                    .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
+                    .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
+                    .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
+                    ,
+            )
         .subcommand(
             Command::new("close_position")
             .arg_required_else_help(true)
                 .about("Close the position.")
-                .arg(arg!(-m --market <MARKET> "The market object id."))
-                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                 .arg(arg!(-p --position <POSITION> "Position object id."))
+                .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                 ,
         )
+        .subcommand(
+            Command::new("auto_close_position")
+            .arg_required_else_help(true)
+                .about("Auto close the position.")
+                .arg(arg!(-p --position <POSITION> "Position object id."))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                ,
+        )
+        .subcommand(
+            Command::new("force_liquidation")
+            .arg_required_else_help(true)
+                .about("Force close the position.")
+                .arg(arg!(-p --position <POSITION> "Position object id."))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                ,
+        )
+        .subcommand(
+            Command::new("process_fund_fee")
+            .arg_required_else_help(true)
+                .about("Process fund fee.")
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                ,
+        )
+        .subcommand(
+            Command::new("update_cross_limit_position")
+            .arg_required_else_help(true)
+                .about("Update cross limit position.")
+                .arg(arg!(-p --position <POSITION> "Position object id."))
+                .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                ,
+        )
+        .subcommand(
+            Command::new("update_isolated_limit_position")
+            .arg_required_else_help(true)
+                .about("Update cross limit position.")
+                .arg(arg!(-p --position <POSITION> "Position object id."))
+                .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
+                .arg(arg!(-c --coins <COINS> "Coins for open position.").action(ArgAction::Append))
+                .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+                ,
+        )
+        .subcommand(
+            Command::new("open_limit_position")
+            .arg_required_else_help(true)
+            .about("Open limit position.")
+            .arg(arg!(-p --position <POSITION> "Position object id."))
+            .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+            ,
+        )
+        .subcommand(
+            Command::new("update_automatic_price")
+            .arg_required_else_help(true)
+            .about("Update automatic price.")
+            .arg(arg!(-p --position <POSITION> "Position object id."))
+            .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+            .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
+            .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
+            .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
+            ,
+        )
+        .subcommand(
+            Command::new("isolated_deposit")
+            .arg_required_else_help(true)
+            .about("Isolated deposit.")
+            .arg(arg!(-p --position <POSITION> "Position object id."))
+            .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
+            .arg(arg!(-c --coins <COINS> "Coins for open position.").action(ArgAction::Append))
+            .arg(
+                arg!(-a --amount [AMOUNT] "The amount to deposit. If it is 0, the whole coin will be consumed.")
+                .value_parser(clap::value_parser!(u64)),
+            )
+            ,
+        )
 }
+
 fn sui() -> Command {
     Command::new("config")
         .about("cli program config.")
@@ -594,11 +689,35 @@ pub fn run() -> anyhow::Result<()> {
                         Some(("divestment_by_upgrade", matches)) => {
                             tool.divestment_by_upgrade(matches).await?;
                         }
-                        Some(("open_position", matches)) => {
-                            tool.open_position(matches).await?;
+                        Some(("open_cross_position", matches)) => {
+                            tool.open_cross_position(matches).await?;
+                        }
+                        Some(("open_isolated_position", matches)) => {
+                            tool.open_isolated_position(matches).await?;
                         }
                         Some(("close_position", matches)) => {
                             tool.close_position(matches).await?;
+                        }
+                        Some(("auto_close_position", matches)) => {
+                            tool.auto_close_position(matches).await?;
+                        }
+                        Some(("force_liquidation", matches)) => {
+                            tool.force_liquidation(matches).await?;
+                        }
+                        Some(("update_cross_limit_position", matches)) => {
+                            tool.update_cross_limit_position(matches).await?;
+                        }
+                        Some(("update_isolated_limit_position", matches)) => {
+                            tool.update_isolated_limit_position(matches).await?;
+                        }
+                        Some(("open_limit_position", matches)) => {
+                            tool.open_limit_position(matches).await?;
+                        }
+                        Some(("update_automatic_price", matches)) => {
+                            tool.update_automatic_price(matches).await?;
+                        }
+                        Some(("isolated_deposit", matches)) => {
+                            tool.isolated_deposit(matches).await?;
                         }
                         _ => unreachable!(),
                     }

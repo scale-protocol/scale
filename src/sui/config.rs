@@ -253,16 +253,6 @@ impl Config {
             .await;
             if let Ok(wallet) = wallet {
                 if let Ok(client) = wallet.get_client().await {
-                    // get scale move package info
-                    if let Ok(scale_package) = self
-                        .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
-                        .await
-                    {
-                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
-                    } else {
-                        println!("please init scale package");
-                        return;
-                    }
                     // get coin package info
                     if let Ok(coin_package) = self
                         .get_publish_info(&client, com::SUI_COIN_PUBLISH_TX)
@@ -291,6 +281,16 @@ impl Config {
                         self.set_value(com::SUI_NFT_PUBLISH_TX, nft_package.object_changes);
                     } else {
                         println!("please init nft package");
+                        return;
+                    }
+                    // get scale move package info
+                    if let Ok(scale_package) = self
+                        .get_publish_info(&client, com::SUI_SCALE_PUBLISH_TX)
+                        .await
+                    {
+                        self.set_value(com::SUI_SCALE_PUBLISH_TX, scale_package.object_changes);
+                    } else {
+                        println!("please init scale package");
                         return;
                     }
                 } else {
@@ -325,11 +325,6 @@ impl Config {
                             if object_type.name.as_str() == "Reserve" {
                                 self.scale_coin_reserve_id = object_id;
                             }
-                        }
-                        if object_type.module.as_str() == "market"
-                            && object_type.name.as_str() == "List"
-                        {
-                            self.scale_market_list_id = object_id;
                         }
                         if object_type.module.as_str() == "bond"
                             && object_type.name.as_str() == "BondFactory"

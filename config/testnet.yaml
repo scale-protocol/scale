@@ -1,9 +1,9 @@
 sui_cli_config_file: /Users/lihua/.sui/sui_config/client.yaml
 scale_store_path: /Users/lihua/.scale/.sui/store
-scale_package_id: 0xe750202831223bd85c14fda66b67a54438b4d304f67f6e80851110ad4561090b
-scale_market_list_id: "0x0000000000000000000000000000000000000000000000000000000000000001"
-scale_bond_factory_id: 0xe05956e7c8aa2b27f0ad2f582a2f46596ec49ac811e4d180cf912ff0dacadf3a
-scale_publisher_id: 0x02736023c06b6bf1116006bee6922adde8c82bf7f903119851b8f0ba8d686a98
+scale_package_id: 0x612e8e16d093e659a78d3969a97a204ea713e9015a41926f09496babb2d952e1
+scale_market_list_id: 0x0769d769e180b53097cf1a028c3e21f814609d3235b9b33dd90ab752b5454741
+scale_bond_factory_id: 0x90e3669684f0a6fbd643a1b02fa94c45ff0a9cb5632b39bd27c540868d1e34cf
+scale_publisher_id: 0xfb23aff90b76c321b8446886d4ffc3f308f6d24c54baabd67b6b9122eb1af56a
 scale_coin_package_id: 0x96d69a6e529949ea3a452f9705227860903b9085ba805808cb37a2f867883f64
 scale_coin_reserve_id: 0xb7e819757a75d83855146710d058e58a8348fab51f7f55664749a431b5475b0a
 scale_coin_admin_id: 0x4f965ebb03bcad455930d2b6485bda8ffb8ab0b55b95a9b0746ba4040503e5a0
@@ -11,12 +11,12 @@ scale_oracle_package_id: 0x94ceaf3a426c9a4493d529e7aa8222e405820efdb76fcd837167c
 scale_oracle_admin_id: 0x2d1c6b2f5b92915f2ab4f91b58f1ead1a079c39084af6aa9cc21dc08c6b6db44
 scale_oracle_state_id: 0x1d01a170efcab4aec9ae475e82300ee2865bf0f96b8962b876200d71b4ffd30b
 scale_oracle_pyth_state_id: 0xd56e486a7d15cd34c41b3601b06405c3a8b6a1553f6c89c11ec69654965dd3aa
-scale_admin_cap_id: 0x8a793805c461a4b5c9b10e91eb7b6b6a9f3a54410ae2e9bb0e09f8b5b4f8fbfd
+scale_admin_cap_id: 0xe3bb9129197ce1c4f38541d71a13cff2b9b730c9125826197dd76dec9fc2450d
 scale_nft_package_id: 0x5a6be00b683493bf3f9a435eb3bbd928fc25dcbc9ac96b1f880cf28c35d15d9b
 scale_nft_admin_id: 0x8336757542327fa12956bfa2fcbd6e2df2baae58ef8f5aa76ab28105fdc8c055
 price_config:
   price_server_url: https://hermes-beta.pyth.network
-  ws_url: wss://https://hermes-beta.pyth.network/ws
+  ws_url: wss://hermes-beta.pyth.network/ws
   db:
     url: http://127.0.0.1:8086
     org: scale
@@ -31,8 +31,10 @@ price_config:
       pyth_feed: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b"
     - symbol: Crypto.ETH/USD
       pyth_feed: "0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6"
-    - symbol: Crypto.DOGE/USD
-      pyth_feed: "0x31775e1d6897129e8a84eeba975778fb50015b88039e9bc140bbd839694ac0ae"
+    # - symbol: Crypto.DOGE/USD
+    #   pyth_feed: "0x31775e1d6897129e8a84eeba975778fb50015b88039e9bc140bbd839694ac0ae"
+    - symbol: Crypto.SUI/USD
+      pyth_feed: "0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266"
 sql_db_config:
   db_type: postgres
   db_url: postgres://postgres:postgres@localhost:5432/scale?sslmode=disable
