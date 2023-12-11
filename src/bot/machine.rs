@@ -527,7 +527,7 @@ where
 {
     for v in dm_market {
         // todo update opening price
-        if let Err(e) = call.trigger_update_opening_price(v.key().clone()).await {
+        if let Err(e) = call.trigger_update_opening_price(v.symbol.clone()).await {
             error!("update opening price error: {}", e);
         }
     }
@@ -703,7 +703,7 @@ async fn compute_pl_all_position<C>(
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
                             // close position force
                             if let Err(e) = call
-                                .burst_position(account.id.clone(), position.id.copy())
+                                .force_liquidation(account.id.clone(), position.id.copy())
                                 .await
                             {
                                 error!("burst position error: {}", e);
@@ -761,7 +761,7 @@ async fn compute_pl_all_position<C>(
         for p in position_sort {
             // close position
             if let Err(e) = call
-                .burst_position(account.id.clone(), p.position_address)
+                .force_liquidation(account.id.clone(), p.position_address)
                 .await
             {
                 error!("burst position error: {}", e);

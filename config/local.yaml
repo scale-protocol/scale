@@ -15,8 +15,8 @@ scale_admin_cap_id: 0xb1939ad76478266f6d146c3cffaa13b30fcfb1a513a2097bd2d8a2fbde
 scale_nft_package_id: 0x5a6be00b683493bf3f9a435eb3bbd928fc25dcbc9ac96b1f880cf28c35d15d9b
 scale_nft_admin_id: 0x8336757542327fa12956bfa2fcbd6e2df2baae58ef8f5aa76ab28105fdc8c055
 price_config:
-  price_server_url: https://hermes-beta.pyth.network
-  ws_url: wss://hermes-beta.pyth.network/ws
+  price_server_url: https://xc-testnet.pyth.network
+  ws_url: wss://xc-testnet.pyth.network/ws
   db:
     url: http://127.0.0.1:8086
     org: scale

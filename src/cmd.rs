@@ -110,6 +110,12 @@ fn sui_oracle() -> Command {
                 .arg(arg!(-s --symbol <SYMBOL> "The symbol of the oracle.")),
         )
         .subcommand(
+            Command::new("update_price_timeout")
+                .arg_required_else_help(true)
+                .about("update oracle price timeout.")
+                .arg(arg!(-t --timeout_ms <TIMEOUT_MS> "The timeout of the oracle price update, in milliseconds.").value_parser(clap::value_parser!(u64))),
+        )
+        .subcommand(
             Command::new("update_pyth_price_bat").about("update pyth price bat.")
              .arg(
                 arg!(-f --update_fee <UPDATE_FEE> "The budget of the transaction fee.")
@@ -256,7 +262,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the max_leverage of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-v --max_leverage <MAX_LEVERAGE> "The maximum leverage of the market will be modified to this value.").value_parser(clap::value_parser!(u8)))
                 ,
         )
@@ -265,7 +271,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the margin_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-v --margin_fee <MARGIN_FEE> "The margin fee rate of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
                 ,
         )
@@ -274,7 +280,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the insurance_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-v --insurance_fee <INSURANCE_FEE> "The insurance fee of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
                 ,
         )
@@ -282,7 +288,7 @@ fn sui_trade() -> Command {
             Command::new("trigger_update_opening_price")
             .arg_required_else_help(true)
                 .about("trigger update opening price.")
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 ,
         )
         .subcommand(
@@ -290,7 +296,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the fund_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-n --manual <MARKET> "Whether it is in manual mode. If the value is not true, the modified value will not be applied to the transaction."))
                 .arg(arg!(-v --fund_fee <FUND_FEE> "The fund fee rate of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
                 ,
@@ -300,7 +306,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the spread_fee of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-n --manual <MARKET> "Whether it is in manual mode. If the value is not true, the modified value will not be applied to the transaction."))
                 .arg(arg!(-v --spread_fee <SPREAD_FEE> "The spread_fee of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
                 ,
@@ -310,16 +316,25 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Update the description of market object.")
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-v --description <DESCRIPTION> "The description of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
                 ,
         )
         .subcommand(
-            Command::new("update_status")
+            Command::new("update_icon")
+            .arg_required_else_help(true)
+                .about("Update the icon of market object.")
+                .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
+                .arg(arg!(-v --description <DESCRIPTION> "The description of the market will be modified to this value.").value_parser(clap::value_parser!(f64)))
+                ,
+        )
+        .subcommand(
+    Command::new("update_status")
                 .about("Update the status of market object.")
                 .arg_required_else_help(true)
                 .arg(arg!(-a --admin <ADMIN> "The admin cap object id of market."))
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-v --status <STATUS> r#"The status of the market will be modified to this value.
                 1 Normal;
                 2. Lock the market, allow closing settlement and not open positions.
@@ -327,30 +342,37 @@ fn sui_trade() -> Command {
                 ,
         )
         .subcommand(
-            Command::new("update_officer")
+    Command::new("update_officer")
             .arg_required_else_help(true)
-                .about("Update the officer of market object.This must be run by the contract deployer.")
-                .arg(arg!(-m --market <MARKET> "The market object id."))
-                .arg(arg!(-v --officer <OFFICER> r#"The officer of the market will be modified to this value.
-                1 project team.
-                2 Certified Third Party.
-                3 Community."#).value_parser(clap::value_parser!(u8)))
-                ,
+            .about("Update the officer of market object.This must be run by the contract deployer.")
+            .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
+            .arg(arg!(-v --officer <OFFICER> r#"The officer of the market will be modified to this value.
+            1 project team.
+            2 Certified Third Party.
+            3 Community."#).value_parser(clap::value_parser!(u8)))
+            ,
         )
         .subcommand(
             Command::new("add_factory_mould")
             .arg_required_else_help(true)
-                .about("Add NFT style.This must be run by the contract deployer.")
-                .arg(arg!(-n --name <NAME> "The nft style name."))
-                .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
-                .arg(arg!(-u --url <URL> "The nft image url."))
-                ,
+            .about("Add NFT style.This must be run by the contract deployer.")
+            .arg(arg!(-n --name <NAME> "The nft style name."))
+            .arg(arg!(-d --description <DESCRIPTION> "The nft description."))
+            .arg(arg!(-u --url <URL> "The nft image url."))
+            ,
         )
         .subcommand(
             Command::new("remove_factory_mould")
             .arg_required_else_help(true)
                 .about("Remove NFT style.This must be run by the contract deployer.")
                 .arg(arg!(-n --name <NAME> "The nft style name."))
+                ,
+        )
+        .subcommand(
+            Command::new("update_penalty_fee")
+            .arg_required_else_help(true)
+                .about("Update the penalty_fee of bond object.")
+                .arg(arg!(-f --penalty_fee <PENALTY_FEE> "The bond penalty fee rate will be modified to this value.").value_parser(clap::value_parser!(u64)))
                 ,
         )
         .subcommand(
@@ -385,7 +407,7 @@ fn sui_trade() -> Command {
             Command::new("divestment_by_upgrade")
             .arg_required_else_help(true)
                 .about("The user holding the fund transfer voucher transfers the fund to the new version of the contract.")
-                .arg(arg!(-m --market <MARKET> "The market object id."))
+                .arg(arg!(-s --symbol <SYMBOL> "The market symbol. "))
                 .arg(arg!(-n --nft <NFT> "The NFT certificate."))
                 .arg(arg!(-t --move_token <MOVE_TOKEN> "Fund transfer voucher."))
                 ,
@@ -395,13 +417,13 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Open a cross position.")
                 .arg(arg!(-s --symbol <SYMBOL> "The market symbol."))
-                .arg(arg!(-a --account <ACCOUNT> "The object id for trading account."))
+                .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                 .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
                 .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
                 .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
-                .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
-                .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
-                .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-p --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-P --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(f64)))
                 ,
         )
         .subcommand(
@@ -409,14 +431,14 @@ fn sui_trade() -> Command {
                 .arg_required_else_help(true)
                     .about("Open a isolated position.")
                     .arg(arg!(-s --symbol <SYMBOL> "The market symbol."))
-                    .arg(arg!(-a --account <ACCOUNT> "The object id for trading account."))
+                    .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                     .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
                     .arg(arg!(-L --leverage <LEVERAGE> "The leverage.").value_parser(clap::value_parser!(u8)))
                     .arg(arg!(-d --direction <DIRECTION> "The direction. 1 buy long, 2 sell short").value_parser(clap::value_parser!(u8)))
                     .arg(arg!(-c --coins <COINS> "Coins for open position.").action(ArgAction::Append))
-                    .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
-                    .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
-                    .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
+                    .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(f64)))
+                    .arg(arg!(-p --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(f64)))
+                    .arg(arg!(-P --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(f64)))
                     ,
             )
         .subcommand(
@@ -488,9 +510,9 @@ fn sui_trade() -> Command {
             .about("Update automatic price.")
             .arg(arg!(-p --position <POSITION> "Position object id."))
             .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
-            .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(u64)))
-            .arg(arg!(-t --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(u64)))
-            .arg(arg!(-T --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(u64)))
+            .arg(arg!(-o --auto_open_price <AUTO_OPEN_PRICE> "Automatic open price").default_value("0").value_parser(clap::value_parser!(f64)))
+            .arg(arg!(-p --stop_surplus_price <STOP_SURPLUS_PRICE> "Automatic profit stop price").default_value("0").value_parser(clap::value_parser!(f64)))
+            .arg(arg!(-P --stop_loss_price <STOP_LOSS_PRICE> "Automatic stop loss price").default_value("0").value_parser(clap::value_parser!(f64)))
             ,
         )
         .subcommand(
@@ -579,6 +601,9 @@ pub fn run() -> anyhow::Result<()> {
                         Some(("create_price_feed", matches)) => {
                             tool.create_price_feed(matches).await?;
                         }
+                        Some(("update_price_timeout", matches)) => {
+                            tool.update_price_timeout(matches).await?;
+                        }
                         Some(("update_pyth_price_bat", matches)) => {
                             tool.update_pyth_price_bat(matches).await?;
                         }
@@ -665,6 +690,9 @@ pub fn run() -> anyhow::Result<()> {
                         Some(("update_description", matches)) => {
                             tool.update_description(matches).await?;
                         }
+                        Some(("update_icon", matches)) => {
+                            tool.update_icon(matches).await?;
+                        }
                         Some(("update_spread_fee", matches)) => {
                             tool.update_spread_fee(matches).await?;
                         }
@@ -676,6 +704,9 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("remove_factory_mould", matches)) => {
                             tool.remove_factory_mould(matches).await?;
+                        }
+                        Some(("update_penalty_fee", matches)) => {
+                            tool.update_penalty_fee(matches).await?;
                         }
                         Some(("investment", matches)) => {
                             tool.investment(matches).await?;

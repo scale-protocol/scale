@@ -1,8 +1,9 @@
 #!/bin/bash
 
 dir=$(dirname $0)
-account='0xcc1e73ed90b498dc8ab2abf83841c529c128a3e3a17bf2e2ba23b7373d56e209'
-scale_coin='0x122f5d1f2062f646343c9f7601176d267a9c4cb151e8ae2909efd6d86f6b041f'
+account='0x0e58a921ef201e7f990590a7600d86cb3c614b6b464dc74b58f60509ff6a4f5c'
+scale_coin='0xd2e9c858c190f3d83e2d00da12b9a2bc9e4aa3dfca33be0f456e8e97dc47dee4'
+# scale_coin='0xc97e6a1bb0f1f98efd7a84075a8c66f09808b2945a5f52ad51d98bbd3eb3a6ca'
 
 if [ "$1" == "coin" ]; then
     echo "airdrop coin"
@@ -42,6 +43,25 @@ then {
     echo "investment"
     timestamp=$(date +%s)
     timestamp=$((timestamp+100000))
+    scale -g 10000000 sui trade investment -i $timestamp -c $scale_coin -n 'scale' -a 0
+}
+elif [ "$1" = "open_cross_position" ]
+then {
+    # scale -g 100000000 sui oracle update_price_timeout -t 60000
+    scale -g 100000000 sui oracle update_pyth_price_bat -f 1 -i 0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266
+    scale -g 100000000 sui trade open_cross_position -s 'Crypto.SUI/USD' -t $account -l 1 -L 2 -d 1
+    scale -g 10000000 sui trade open_cross_position -s 'Crypto.SUI/USD' -t $account -l 1 -L 4 -d 2
+    scale -g 10000000 sui trade open_cross_position -s 'Crypto.SUI/USD' -t $account -l 10 -L 2 -d 1 -o 1000.12
+    scale -g 10000000 sui trade open_cross_position -s 'Crypto.SUI/USD' -t $account -l 1.2 -L 4 -d 1 -p 1200.12
+    scale -g 10000000 sui trade open_cross_position -s 'Crypto.SUI/USD' -t $account -l 1.2 -L 4 -d 1 -p 1200.12 -P 800.12
+}
+elif [ "$1" = "open_isolated_position" ]
+then {
+    scale -g 100000000 sui oracle update_pyth_price_bat -f 1 -i 0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266
+    scale -g 10000000 sui trade open_isolated_position -s 'Crypto.SUI/USD' -t $account -l 10 -L 2 -d 1 -c $scale_coin
+}
+elif [ "$1" = "close_position" ]
+then {
     scale -g 10000000 sui trade investment -i $timestamp -c $scale_coin -n 'scale' -a 0
 }
 fi

@@ -661,6 +661,25 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+    pub async fn update_price_timeout(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let timeout = args
+            .get_one::<u64>("timeout_ms")
+            .ok_or_else(|| CliError::InvalidCliParams("timeout_ms".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_oracle_package_id,
+                ORACLE_MODULE_NAME,
+                "update_price_timeout",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_admin_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::new(json!(timeout.to_string()))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
 
     async fn get_vaa_data_inner(&self) -> anyhow::Result<Vec<String>> {
         let feed_ids = self.ctx.config.price_config.get_feed_ids();
@@ -760,7 +779,6 @@ impl Tool {
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let ids = args.get_many::<String>("ids").unwrap_or_default();
         let ids: Vec<String> = ids.map(|d| d.to_string()).collect();
-        println!("ids: {:?}", ids);
         let update_fee = args
             .get_one::<u64>("update_fee")
             .ok_or_else(|| CliError::InvalidCliParams("update_fee".to_string()))?;
@@ -773,7 +791,6 @@ impl Tool {
 
         let gas_price = self.ctx.client.read_api().get_reference_gas_price().await?;
         let mut gas_coins = self.get_gas(1000000000).await?;
-        println!("gas_coins: {:?}", gas_coins);
         let richest_coin = gas_coins.pop().unwrap();
         let richest_coin_gas = gas_coins.first().unwrap();
         let original_coin_arg = ObjectArg::ImmOrOwnedObject(richest_coin.1.object_ref());
@@ -1143,10 +1160,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let max_leverage = args
             .get_one::<u8>("max_leverage")
             .ok_or_else(|| CliError::InvalidCliParams("max_leverage".to_string()))?;
@@ -1156,10 +1172,10 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_max_leverage",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(max_leverage))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(max_leverage))?,
                 ],
                 vec![self.get_t()],
             )
@@ -1171,10 +1187,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let insurance_fee = args
             .get_one::<f64>("insurance_fee")
             .ok_or_else(|| CliError::InvalidCliParams("insurance_fee".to_string()))?;
@@ -1185,10 +1200,10 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_insurance_fee",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(insurance_fee.to_string()))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(insurance_fee.to_string()))?,
                 ],
                 vec![self.get_t()],
             )
@@ -1200,10 +1215,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let margin_fee = args
             .get_one::<f64>("margin_fee")
             .ok_or_else(|| CliError::InvalidCliParams("margin_fee".to_string()))?;
@@ -1214,10 +1228,10 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_margin_fee",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(margin_fee.to_string()))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(margin_fee.to_string()))?,
                 ],
                 vec![self.get_t()],
             )
@@ -1229,10 +1243,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let fund_fee = args
             .get_one::<f64>("fund_fee")
             .ok_or_else(|| CliError::InvalidCliParams("fund_fee".to_string()))?;
@@ -1246,11 +1259,11 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_fund_fee",
                 vec![
-                    SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
                     SuiJsonValue::new(json!(fund_fee.to_string()))?,
                     SuiJsonValue::new(json!(manual))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                 ],
                 vec![self.get_t()],
             )
@@ -1262,10 +1275,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let status = args
             .get_one::<u8>("status")
             .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
@@ -1275,10 +1287,10 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_status",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(status))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(status))?,
                 ],
                 vec![self.get_t()],
             )
@@ -1290,10 +1302,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let description = args
             .get_one::<String>("description")
             .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
@@ -1303,10 +1314,37 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_description",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(description.to_string()))?,
                     SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(description.as_bytes()))?,
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn update_icon(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let admin = args
+            .get_one::<String>("admin")
+            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        let icon = args
+            .get_one::<String>("icon")
+            .ok_or_else(|| CliError::InvalidCliParams("icon".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_icon",
+                vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(icon.to_string()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                 ],
                 vec![self.get_t()],
             )
@@ -1318,10 +1356,9 @@ impl Tool {
         let admin = args
             .get_one::<String>("admin")
             .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
-
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let spread_fee = args
             .get_one::<f64>("spread_fee")
             .ok_or_else(|| CliError::InvalidCliParams("spread_fee".to_string()))?;
@@ -1335,11 +1372,11 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_spread_fee",
                 vec![
-                    SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
                     SuiJsonValue::new(json!(spread_fee.to_string()))?,
                     SuiJsonValue::new(json!(manual))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(admin.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                 ],
                 vec![self.get_t()],
             )
@@ -1348,9 +1385,9 @@ impl Tool {
     }
 
     pub async fn update_officer(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let officer = args
             .get_one::<u8>("officer")
             .ok_or_else(|| CliError::InvalidCliParams("officer".to_string()))?;
@@ -1360,10 +1397,10 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "update_officer",
                 vec![
+                    SuiJsonValue::new(json!(symbol.to_string()))?,
+                    SuiJsonValue::new(json!(officer))?,
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::new(json!(officer))?,
                 ],
                 vec![self.get_t()],
             )
@@ -1387,11 +1424,11 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "add_factory_mould",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                     SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::new(json!(description.as_bytes()))?,
                     SuiJsonValue::new(json!(url.as_bytes()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                 ],
                 vec![],
             )
@@ -1409,9 +1446,28 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "remove_factory_mould",
                 vec![
+                    SuiJsonValue::new(json!(name.as_bytes()))?,
                     SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
-                    SuiJsonValue::new(json!(name.as_bytes()))?,
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn update_penalty_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let penalty_fee = args
+            .get_one::<u64>("penalty_fee")
+            .ok_or_else(|| CliError::InvalidCliParams("penalty_fee".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_penalty_fee",
+                vec![
+                    SuiJsonValue::new(json!(penalty_fee.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
                 ],
                 vec![],
             )
@@ -1475,28 +1531,32 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
-
-    pub async fn trigger_update_opening_price(
-        &self,
-        args: &clap::ArgMatches,
-    ) -> anyhow::Result<()> {
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+    pub async fn trigger_update_opening_price_inner(&self, symbol: String) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_MODULE_NAME,
                 "trigger_update_opening_price",
                 vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(symbol.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
+    }
+    pub async fn trigger_update_opening_price(
+        &self,
+        args: &clap::ArgMatches,
+    ) -> anyhow::Result<()> {
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        self.trigger_update_opening_price_inner(symbol.to_string())
+            .await
     }
 
     pub async fn generate_upgrade_move_token(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -1559,7 +1619,7 @@ impl Tool {
     }
 
     pub async fn open_cross_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let market = args
+        let symbol = args
             .get_one::<String>("symbol")
             .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
         let account = args
@@ -1572,26 +1632,38 @@ impl Tool {
         let leverage = args
             .get_one::<u8>("leverage")
             .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
-        let position_type = args
-            .get_one::<u8>("position_type")
-            .ok_or_else(|| CliError::InvalidCliParams("position_type".to_string()))?;
         let direction = args
             .get_one::<u8>("direction")
             .ok_or_else(|| CliError::InvalidCliParams("direction".to_string()))?;
+        let auto_open_price = args
+            .get_one::<f64>("auto_open_price")
+            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+        let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
+        let stop_surplus_price = args
+            .get_one::<f64>("stop_surplus_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+        let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
+        let stop_loss_price = args
+            .get_one::<f64>("stop_loss_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+        let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_MODULE_NAME,
-                "open_position",
+                "open_cross_position",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::new(json!(symbol.as_bytes()))?,
                     SuiJsonValue::new(json!(lot.to_string()))?,
                     SuiJsonValue::new(json!(leverage))?,
-                    SuiJsonValue::new(json!(position_type))?,
                     SuiJsonValue::new(json!(direction))?,
+                    SuiJsonValue::new(json!(auto_open_price.to_string()))?,
+                    SuiJsonValue::new(json!(stop_surplus_price.to_string()))?,
+                    SuiJsonValue::new(json!(stop_loss_price.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
             )
@@ -1599,12 +1671,68 @@ impl Tool {
         self.exec(transaction_data).await
     }
     pub async fn open_isolated_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
+        let symbol = args
+            .get_one::<String>("symbol")
+            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let lot = args
+            .get_one::<f64>("lot")
+            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+        let lot = (lot * com::DENOMINATOR as f64) as u64;
+        let leverage = args
+            .get_one::<u8>("leverage")
+            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+        let direction = args
+            .get_one::<u8>("direction")
+            .ok_or_else(|| CliError::InvalidCliParams("direction".to_string()))?;
+        let auto_open_price = args
+            .get_one::<f64>("auto_open_price")
+            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+        let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
+        let stop_surplus_price = args
+            .get_one::<f64>("stop_surplus_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+        let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
+        let stop_loss_price = args
+            .get_one::<f64>("stop_loss_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+        let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
+        let coins = args
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "open_isolated_position",
+                vec![
+                    SuiJsonValue::new(json!(symbol.as_bytes()))?,
+                    SuiJsonValue::new(json!(lot.to_string()))?,
+                    SuiJsonValue::new(json!(leverage))?,
+                    SuiJsonValue::new(json!(direction))?,
+                    SuiJsonValue::new(json!(auto_open_price.to_string()))?,
+                    SuiJsonValue::new(json!(stop_surplus_price.to_string()))?,
+                    SuiJsonValue::new(json!(stop_loss_price.to_string()))?,
+                    SuiJsonValue::new(json!(coins))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
     }
     pub async fn close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        let market = args
-            .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+        let lot = args
+            .get_one::<f64>("lot")
+            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+        let lot = (lot * com::DENOMINATOR as f64) as u64;
         let account = args
             .get_one::<String>("account")
             .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
@@ -1617,11 +1745,34 @@ impl Tool {
                 SCALE_MODULE_NAME,
                 "close_position",
                 vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(market.as_str())?),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::new(json!(lot.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn auto_close_position_inner(
+        &self,
+        account: String,
+        position: String,
+    ) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "auto_close_position",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
             )
@@ -1629,84 +1780,48 @@ impl Tool {
         self.exec(transaction_data).await
     }
     pub async fn auto_close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        self.auto_close_position_inner(account.to_string(), position.to_string())
+            .await
     }
-    pub async fn force_liquidation(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn process_fund_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn update_cross_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn update_isolated_limit_position(
+    async fn force_liquidation_inner(
         &self,
-        args: &clap::ArgMatches,
+        account: String,
+        position: String,
     ) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn open_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn update_automatic_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-    pub async fn isolated_deposit(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl MoveCall for Tool {
-    async fn trigger_update_opening_price(&self, market_id: Address) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
                 SCALE_MODULE_NAME,
-                "trigger_update_opening_price",
+                "force_liquidation",
                 vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
-                        market_id.to_vec().as_slice(),
-                    )?),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
     }
-
-    async fn burst_position(
-        &self,
-        account_id: Address,
-        position_id: Address,
-    ) -> anyhow::Result<()> {
-        let _transaction_data = self
-            .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_MODULE_NAME,
-                "burst_position",
-                vec![
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
-                        account_id.to_vec().as_slice(),
-                    )?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
-                        position_id.to_vec().as_slice(),
-                    )?),
-                ],
-                vec![self.get_t()],
-            )
-            .await?;
-        return Ok(());
-
-        // self.exec(transaction_data).await
+    pub async fn force_liquidation(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        self.force_liquidation_inner(account.to_string(), position.to_string())
+            .await
     }
-
-    async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()> {
+    async fn process_fund_fee_inner(&self, account: String) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1714,14 +1829,232 @@ impl MoveCall for Tool {
                 "process_fund_fee",
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_bytes(
-                        account_id.to_vec().as_slice(),
-                    )?),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
                 ],
                 vec![self.get_t()],
             )
             .await?;
         self.exec(transaction_data).await
+    }
+    pub async fn process_fund_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        self.process_fund_fee_inner(account.clone()).await
+    }
+    pub async fn update_cross_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let lot = args
+            .get_one::<f64>("lot")
+            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+        let lot = (lot * com::DENOMINATOR as f64) as u64;
+        let leverage = args
+            .get_one::<u8>("leverage")
+            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+        let auto_open_price = args
+            .get_one::<f64>("auto_open_price")
+            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+        let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_cross_limit_position",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::new(json!(lot.to_string()))?,
+                    SuiJsonValue::new(json!(leverage))?,
+                    SuiJsonValue::new(json!(auto_open_price.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn update_isolated_limit_position(
+        &self,
+        args: &clap::ArgMatches,
+    ) -> anyhow::Result<()> {
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let lot = args
+            .get_one::<f64>("lot")
+            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+        let lot = (lot * com::DENOMINATOR as f64) as u64;
+        let leverage = args
+            .get_one::<u8>("leverage")
+            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+        let auto_open_price = args
+            .get_one::<f64>("auto_open_price")
+            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+        let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
+        let coins = args
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_isolated_limit_position",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::new(json!(lot.to_string()))?,
+                    SuiJsonValue::new(json!(leverage))?,
+                    SuiJsonValue::new(json!(auto_open_price.to_string()))?,
+                    SuiJsonValue::new(json!(coins))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    async fn open_limit_position_inner(
+        &self,
+        account: String,
+        position: String,
+    ) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "open_limit_position",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn open_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        self.open_limit_position_inner(account.to_string(), position.to_string())
+            .await
+    }
+    pub async fn update_automatic_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let stop_surplus_price = args
+            .get_one::<f64>("stop_surplus_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+        let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
+        let stop_loss_price = args
+            .get_one::<f64>("stop_loss_price")
+            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+        let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_automatic_price",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::new(json!(stop_surplus_price.to_string()))?,
+                    SuiJsonValue::new(json!(stop_loss_price.to_string()))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn isolated_deposit(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let position = args
+            .get_one::<String>("position")
+            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+        let coins = args
+            .get_many::<String>("coins")
+            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .map(|c| json!(c))
+            .collect::<Vec<JsonValue>>();
+        let account = args
+            .get_one::<String>("account")
+            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+        let amount = args
+            .get_one::<u64>("amount")
+            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "isolated_deposit",
+                vec![
+                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
+                    SuiJsonValue::new(json!(amount.to_string()))?,
+                    SuiJsonValue::new(json!(coins))?,
+                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                ],
+                vec![self.get_t()],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+}
+
+#[async_trait]
+impl MoveCall for Tool {
+    async fn trigger_update_opening_price(&self, symbol: String) -> anyhow::Result<()> {
+        self.trigger_update_opening_price_inner(symbol).await
+    }
+
+    async fn force_liquidation(
+        &self,
+        account_id: Address,
+        position_id: Address,
+    ) -> anyhow::Result<()> {
+        self.force_liquidation_inner(account_id.to_string(), position_id.to_string())
+            .await
+    }
+
+    async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()> {
+        self.process_fund_fee_inner(account_id.to_string()).await
+    }
+
+    async fn auto_close_position(
+        &self,
+        account_id: Address,
+        position_id: Address,
+    ) -> anyhow::Result<()> {
+        self.auto_close_position_inner(account_id.to_string(), position_id.to_string())
+            .await
+    }
+
+    async fn open_limit_position(
+        &self,
+        account_id: Address,
+        position_id: Address,
+    ) -> anyhow::Result<()> {
+        self.open_limit_position_inner(account_id.to_string(), position_id.to_string())
+            .await
     }
 
     async fn get_price(&self, symbol: &str) -> anyhow::Result<()> {
