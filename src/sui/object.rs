@@ -376,6 +376,7 @@ pub struct SuiMarket {
     pub unit_size: u64,
     /// The price at 0 o'clock in the utc of the current day, which is used to calculate the spread_fee
     pub opening_price: u64,
+    pub latest_opening_price_ms: u64,
     pub list_id: ID,
 }
 
@@ -417,6 +418,8 @@ pub struct SuiPool {
     insurance_balance: Balance,
     // Spread benefits, to prevent robot cheating and provide benefits to sponsors
     spread_profit: Balance,
+    // Final profit within a cycle
+    epoch_profit: Vec<EntryU64>,
 }
 
 impl From<SuiPool> for Pool {
@@ -455,6 +458,7 @@ pub struct SuiAccount {
     pub isolated_balance: Balance,
     /// User settled profit
     pub profit: I64,
+    pub latest_settlement_ms: u64,
     /// Total amount of margin used.
     pub margin_total: u64,
     /// Total amount of used margin in cross warehouse mode.
@@ -520,6 +524,11 @@ impl From<PFK> for String {
 pub struct Entry {
     pub key: PFK,
     pub value: ID,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EntryU64 {
+    pub key: u64,
+    pub value: u64,
 }
 
 impl From<Entry> for (String, Address) {

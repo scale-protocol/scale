@@ -376,6 +376,31 @@ fn sui_trade() -> Command {
                 ,
         )
         .subcommand(
+            Command::new("update_award_ratio")
+            .arg_required_else_help(true)
+                .about("Update the update_award_ratio of bond object.")
+                .arg(arg!(-a --award_ratio <AWARD_RATIO> "Reward a portion of profits to the NFT holder.").value_parser(clap::value_parser!(u64)))
+                ,
+        )
+        .subcommand(
+            Command::new("update_bot_reward_ratio")
+            .arg_required_else_help(true)
+                .about("Update the update_bot_reward_ratio of bot object.")
+                .arg(arg!(-r --reward_ratio <REWARD_RATIO> "Reward a portion of profits to the robot.").value_parser(clap::value_parser!(u64)))
+                ,
+        )
+        .subcommand(
+            Command::new("receive_award")
+            .arg_required_else_help(true)
+                .about("Receive the award of the NFT.")
+                .arg(arg!(-n --nft <NFT> "The NFT object id."))
+                ,
+        )
+        .subcommand(
+            Command::new("receive_reward")
+            .about("Receive the reward of the robot.")
+        )
+        .subcommand(
             Command::new("investment")
             .arg_required_else_help(true)
                 .about("Funding the market liquidity pool.")
@@ -707,6 +732,18 @@ pub fn run() -> anyhow::Result<()> {
                         }
                         Some(("update_penalty_fee", matches)) => {
                             tool.update_penalty_fee(matches).await?;
+                        }
+                        Some(("update_award_ratio", matches)) => {
+                            tool.update_award_ratio(matches).await?;
+                        }
+                        Some(("update_bot_reward_ratio", matches)) => {
+                            tool.update_bot_reward_ratio(matches).await?;
+                        }
+                        Some(("receive_award", matches)) => {
+                            tool.receive_award(matches).await?;
+                        }
+                        Some(("receive_reward", matches)) => {
+                            tool.receive_reward(matches).await?;
                         }
                         Some(("investment", matches)) => {
                             tool.investment(matches).await?;

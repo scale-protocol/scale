@@ -703,7 +703,7 @@ async fn compute_pl_all_position<C>(
                         if (pl_and_fund_fee as f64 / position.margin as f64) < BURST_RATE {
                             // close position force
                             if let Err(e) = call
-                                .force_liquidation(account.id.clone(), position.id.copy())
+                                .force_liquidation(account.id.clone(), position.id.copy(), 0)
                                 .await
                             {
                                 error!("burst position error: {}", e);
@@ -761,7 +761,7 @@ async fn compute_pl_all_position<C>(
         for p in position_sort {
             // close position
             if let Err(e) = call
-                .force_liquidation(account.id.clone(), p.position_address)
+                .force_liquidation(account.id.clone(), p.position_address, 0)
                 .await
             {
                 error!("burst position error: {}", e);

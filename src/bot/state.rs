@@ -342,7 +342,7 @@ pub struct Position {
     /// 1 cross position mode, 2 isolated position modes.
     #[serde(rename = "type")]
     pub position_type: PositionType,
-    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending.
+    /// Position status: 1 normal, 2 normal closing, 3 Forced closing, 4 pending , 5 partial closeing , 6 auto closing , 7 merge close
     pub status: PositionStatus,
     /// 1 buy long, 2 sell short.
     pub direction: Direction,
@@ -450,12 +450,24 @@ pub enum PositionStatus {
     NormalClosing,
     ForcedClosing,
     Pending,
+    PartialClosing,
+    AutoClosing,
+    MergeClose,
 }
 #[derive(Clone, Debug, TryFromPrimitive, PartialEq, Deserialize, Serialize)]
 #[repr(u8)]
 pub enum PositionType {
     Cross = 1,
     Isolated,
+}
+// position type into u8
+impl PositionType {
+    pub fn is_cross(&self) -> bool {
+        *self == Self::Cross
+    }
+    pub fn is_isolated(&self) -> bool {
+        *self == Self::Isolated
+    }
 }
 #[derive(
     Clone, Debug, Copy, TryFromPrimitive, PartialEq, Deserialize, Serialize, Eq, Ord, PartialOrd,
@@ -488,19 +500,24 @@ pub trait MoveCall {
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()>;
     async fn force_liquidation(
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()>;
     async fn open_limit_position(
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()>;
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()>;
     async fn get_price(&self, symbol: &str) -> anyhow::Result<()>;
+    async fn receive_award(&self, nft: String) -> anyhow::Result<()>;
+    async fn receive_reward(&self) -> anyhow::Result<()>;
 }
 #[cfg(test)]
 mod tests {

@@ -1455,6 +1455,7 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+
     pub async fn update_penalty_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let penalty_fee = args
             .get_one::<u64>("penalty_fee")
@@ -1474,6 +1475,88 @@ impl Tool {
             .await?;
         self.exec(transaction_data).await
     }
+    pub async fn update_award_ratio(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let award_ratio = args
+            .get_one::<u64>("award_ratio")
+            .ok_or_else(|| CliError::InvalidCliParams("award_ratio".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_award_ratio",
+                vec![
+                    SuiJsonValue::new(json!(award_ratio.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn update_bot_reward_ratio(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let reward_ratio = args
+            .get_one::<u64>("reward_ratio")
+            .ok_or_else(|| CliError::InvalidCliParams("reward_ratio".to_string()))?;
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "update_bot_reward_ratio",
+                vec![
+                    SuiJsonValue::new(json!(reward_ratio.to_string()))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_admin_cap_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn receive_award_inner(&self, nft: String) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "receive_award",
+                vec![
+                    SuiJsonValue::new(json!(nft))?,
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bond_factory_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+    pub async fn receive_award(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
+        let nft = args
+            .get_one::<u64>("nft")
+            .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
+        self.receive_award_inner(nft.to_string()).await
+    }
+    pub async fn receive_reward_inner(&self) -> anyhow::Result<()> {
+        let transaction_data = self
+            .get_transaction_data(
+                self.ctx.config.scale_package_id,
+                SCALE_MODULE_NAME,
+                "receive_reward",
+                vec![
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                ],
+                vec![],
+            )
+            .await?;
+        self.exec(transaction_data).await
+    }
+
+    pub async fn receive_reward(&self, _args: &clap::ArgMatches) -> anyhow::Result<()> {
+        self.receive_reward_inner().await
+    }
+
     pub async fn investment(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let issue_time = args
             .get_one::<u64>("issue_time")
@@ -1540,6 +1623,7 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(ObjectID::from_str(symbol.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
@@ -1761,6 +1845,7 @@ impl Tool {
         &self,
         account: String,
         position: String,
+        position_type: u8,
     ) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
@@ -1772,6 +1857,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
                     SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
@@ -1786,13 +1872,14 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.auto_close_position_inner(account.to_string(), position.to_string())
+        self.auto_close_position_inner(account.to_string(), position.to_string(), 0)
             .await
     }
     async fn force_liquidation_inner(
         &self,
         account: String,
         position: String,
+        position_type: u8,
     ) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
@@ -1803,6 +1890,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
@@ -1818,7 +1906,7 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.force_liquidation_inner(account.to_string(), position.to_string())
+        self.force_liquidation_inner(account.to_string(), position.to_string(), 0)
             .await
     }
     async fn process_fund_fee_inner(&self, account: String) -> anyhow::Result<()> {
@@ -1830,6 +1918,8 @@ impl Tool {
                 vec![
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
+                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
                 vec![self.get_t()],
             )
@@ -1927,6 +2017,7 @@ impl Tool {
         &self,
         account: String,
         position: String,
+        position_type: u8,
     ) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
@@ -1937,6 +2028,7 @@ impl Tool {
                     SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
                     SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
+                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
                     SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
                     SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
                 ],
@@ -1952,7 +2044,7 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.open_limit_position_inner(account.to_string(), position.to_string())
+        self.open_limit_position_inner(account.to_string(), position.to_string(), 0)
             .await
     }
     pub async fn update_automatic_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -2030,9 +2122,14 @@ impl MoveCall for Tool {
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()> {
-        self.force_liquidation_inner(account_id.to_string(), position_id.to_string())
-            .await
+        self.force_liquidation_inner(
+            account_id.to_string(),
+            position_id.to_string(),
+            position_type,
+        )
+        .await
     }
 
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()> {
@@ -2043,20 +2140,35 @@ impl MoveCall for Tool {
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()> {
-        self.auto_close_position_inner(account_id.to_string(), position_id.to_string())
-            .await
+        self.auto_close_position_inner(
+            account_id.to_string(),
+            position_id.to_string(),
+            position_type,
+        )
+        .await
     }
 
     async fn open_limit_position(
         &self,
         account_id: Address,
         position_id: Address,
+        position_type: u8,
     ) -> anyhow::Result<()> {
-        self.open_limit_position_inner(account_id.to_string(), position_id.to_string())
-            .await
+        self.open_limit_position_inner(
+            account_id.to_string(),
+            position_id.to_string(),
+            position_type,
+        )
+        .await
     }
-
+    async fn receive_award(&self, nft: String) -> anyhow::Result<()> {
+        self.receive_award_inner(nft).await
+    }
+    async fn receive_reward(&self) -> anyhow::Result<()> {
+        self.receive_reward_inner().await
+    }
     async fn get_price(&self, symbol: &str) -> anyhow::Result<()> {
         self.get_price_inner(symbol).await
     }
