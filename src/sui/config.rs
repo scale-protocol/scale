@@ -79,7 +79,7 @@ impl Context {
 
     pub fn get_feed_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
         let mut ids = Vec::new();
-        for i in self.config.price_config.get_feed_ids() {
+        for i in self.config.price_config.get_feed_ids(None) {
             ids.push(ObjectID::from_str(i.as_str())?);
         }
         Ok(ids)

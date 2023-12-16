@@ -493,26 +493,29 @@ pub struct OrgPrice {
     pub update_time: i64,
     pub symbol: String,
 }
+#[derive(Debug, Clone)]
+pub struct PositionParams {
+    pub id: Address,
+    pub position_type: u8,
+    pub symbol: String,
+}
 #[async_trait]
 pub trait MoveCall {
     async fn trigger_update_opening_price(&self, symbol: String) -> anyhow::Result<()>;
     async fn auto_close_position(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()>;
     async fn force_liquidation(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()>;
     async fn open_limit_position(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()>;
     async fn process_fund_fee(&self, account_id: Address) -> anyhow::Result<()>;
     async fn get_price(&self, symbol: &str) -> anyhow::Result<()>;

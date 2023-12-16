@@ -68,10 +68,14 @@ pub struct SqlDbConfig {
     pub db_url: String,
 }
 impl PriceConfig {
-    pub fn get_feed_ids(&self) -> Vec<String> {
+    pub fn get_feed_ids(&self, symbol: Option<String>) -> Vec<String> {
         let mut ids = vec![];
-        for symbol in &self.pyth_symbol {
-            ids.push(symbol.pyth_feed.clone());
+        for s in &self.pyth_symbol {
+            let ss = s.pyth_feed.clone();
+            if symbol.is_some() && symbol.as_ref().unwrap() == &s.symbol {
+                return vec![ss];
+            }
+            ids.push(ss);
         }
         ids
     }

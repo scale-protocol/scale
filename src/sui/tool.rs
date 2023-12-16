@@ -1,6 +1,6 @@
 use crate::{
     bot::state::DENOMINATOR,
-    bot::state::{Address, MoveCall},
+    bot::state::{Address, MoveCall, PositionParams},
     com,
     com::CliError,
     sui::{
@@ -13,7 +13,11 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use fastcrypto::encoding::{Encoding, Hex};
 use log::*;
-use move_core_types::{ident_str, identifier::IdentStr, language_storage::StructTag};
+use move_core_types::{
+    ident_str,
+    identifier::IdentStr,
+    language_storage::{StructTag, TypeTag},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use shared_crypto::intent::Intent;
@@ -37,7 +41,7 @@ use sui_types::{
     programmable_transaction_builder::ProgrammableTransactionBuilder as PTB,
     quorum_driver_types::ExecuteTransactionRequestType,
     transaction::{Argument, CallArg, Command, ObjectArg, TransactionData, TransactionKind},
-    Identifier, TypeTag, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID,
+    Identifier, SUI_CLOCK_OBJECT_ID, SUI_FRAMEWORK_PACKAGE_ID,
 };
 const COIN_MODULE_NAME: &str = "scale";
 const SCALE_MODULE_NAME: &str = "enter";
@@ -49,8 +53,9 @@ const USDT_TYPE_TAG: &str = "xxx::USDT::USDT";
 const WORM_VAA_MODULE: &IdentStr = ident_str!("vaa");
 const PYTH_PYTH_MODULE: &IdentStr = ident_str!("pyth");
 const PYTH_HOT_POTATO_MODULE: &IdentStr = ident_str!("hot_potato_vector");
-const PYTH_NETEORK_MODULE: &IdentStr = ident_str!("pyth_network");
+const PYTH_NETWORK_MODULE: &IdentStr = ident_str!("pyth_network");
 const PYTH_PRICE_UPDATE_FEE: u64 = 1;
+const SCALE_ENTER_MODULE: &IdentStr = ident_str!("pyth_network");
 pub struct Tool {
     ctx: Ctx,
     gas_budget: u64,
@@ -88,6 +93,7 @@ impl PTBCtx {
     pub fn add_object_ids(&mut self, object_ids: Vec<ObjectID>) {
         self.object_ids.extend(object_ids);
     }
+
     pub async fn init(&mut self, gas: Vec<(u64, SuiObjectData)>) -> anyhow::Result<()> {
         if self.is_init {
             return Ok(());
@@ -110,6 +116,7 @@ impl PTBCtx {
             self.objects.get_obj_arg(id, is_mutable_ref)?,
         ))
     }
+
     pub fn split_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
         if !self.is_init {
             return Err(CliError::PTBCtxNotInit.into());
@@ -212,7 +219,7 @@ impl Tool {
         }
         if let Some(id) = table_object_id {
             let rs = object::get_all_dynamic_field_object(self.ctx.clone(), id).await?;
-            let feed_ids = self.ctx.config.price_config.get_feed_ids();
+            let feed_ids = self.ctx.config.price_config.get_feed_ids(None);
             for v in rs {
                 let k: PriceIdentifier = serde_json::from_value(v.name.value)?;
                 // debug!("object k: {:?},v: {:?}", k.to_hex_string(), v.object_id);
@@ -259,6 +266,7 @@ impl Tool {
         total_pyth_fee: u64,
         vaa_data: Vec<String>,
         price_info_object_ids: Vec<ObjectID>,
+        other_objects: Vec<ObjectID>,
     ) -> anyhow::Result<PTBCtx> {
         if total_pyth_fee == 0 {
             return Err(CliError::InvalidCliParams("budget is zero".to_string()).into());
@@ -272,6 +280,7 @@ impl Tool {
 
         let worm_state_id = self.ctx.get_worm_state_id()?;
         let pyth_state_id = self.ctx.get_pyth_state_id()?;
+        px.add_object_ids(other_objects);
         px.add_object_ids(vec![
             worm_state_id,
             pyth_state_id,
@@ -282,7 +291,6 @@ impl Tool {
         ]);
         px.add_object_ids(price_info_object_ids.clone());
         let gas = self.get_all_gas().await?;
-
         px.init(gas).await?;
         // init object input
         let worm_state_input = px.get_object_input(worm_state_id, false)?;
@@ -350,7 +358,7 @@ impl Tool {
             );
             px.tx.programmable_move_call(
                 self.ctx.config.scale_oracle_package_id,
-                PYTH_NETEORK_MODULE.to_owned(),
+                PYTH_NETWORK_MODULE.to_owned(),
                 Identifier::from_str("async_pyth_price")?,
                 vec![],
                 vec![
@@ -384,18 +392,14 @@ impl Tool {
     pub fn get_t(&self) -> SuiTypeTag {
         SuiTypeTag::from(
             sui_types::parse_sui_type_tag(self.get_t_str().as_str())
-                .expect("cannot patransaction_datae SuiTypeTag"),
+                .expect("cannot parse to TypeTag"),
         )
     }
+    pub fn get_tt(&self) -> TypeTag {
+        let st = self.get_t();
+        st.try_into().expect("cannot parse to TypeTag")
+    }
 
-    // pub fn get_p(&self) -> SuiTypeTag {
-    //     SuiTypeTag::from(
-    //         sui_types::parse_sui_type_tag(
-    //             format!("{}::pool::Scale", self.ctx.config.scale_package_id).as_str(),
-    //         )
-    //         .expect("cannot parse SuiTypeTag"),
-    //     )
-    // }
     pub fn get_sui_coin_type(&self) -> anyhow::Result<TypeTag> {
         let t = format!(
             "{}::sui::SUI",
@@ -682,7 +686,7 @@ impl Tool {
     }
 
     async fn get_vaa_data_inner(&self) -> anyhow::Result<Vec<String>> {
-        let feed_ids = self.ctx.config.price_config.get_feed_ids();
+        let feed_ids = self.ctx.config.price_config.get_feed_ids(None);
         utils::get_vaa_data(
             &self.ctx.http_client,
             self.ctx.config.price_config.price_server_url.clone(),
@@ -738,31 +742,18 @@ impl Tool {
         Ok(())
     }
     pub async fn update_all_pyth_price(&self) -> anyhow::Result<()> {
-        let feed_ids = self.ctx.config.price_config.get_feed_ids();
+        let feed_ids = self.ctx.config.price_config.get_feed_ids(None);
         self.update_pyth_price_by_ids(feed_ids, PYTH_PRICE_UPDATE_FEE)
             .await
     }
 
-    pub async fn update_pyth_price_by_ids(
+    async fn update_pyth_price_by_ids(
         &self,
         feed_ids: Vec<String>,
         update_fee: u64,
     ) -> anyhow::Result<()> {
-        let vaa_data = utils::get_vaa_data(
-            &self.ctx.http_client,
-            self.ctx.config.price_config.price_server_url.clone(),
-            self.ctx.config.price_config.get_feed_ids(),
-        )
-        .await?;
-        debug!("vaa data: {:?}", vaa_data);
-        let mut price_info_object_ids = Vec::new();
-        for id in feed_ids {
-            price_info_object_ids.push(self.get_pyth_price_info_id(id.as_str()).await?);
-        }
-        let total_pyth_fee = price_info_object_ids.len() as u64 * update_fee;
-        debug!("update pyth price bat");
         let px = self
-            .init_price_update_transaction(total_pyth_fee, vaa_data, price_info_object_ids)
+            .wrapper_ptb_with_pyth(feed_ids, update_fee, vec![])
             .await?;
         let tx_data = PTBCtx::get_transaction_data(px).await?;
         // let response = self
@@ -774,6 +765,36 @@ impl Tool {
         // println!("dry_run_transaction_block: {:?}", response.effects);
         // Ok(())
         self.exec(tx_data).await
+    }
+
+    async fn wrapper_ptb_with_pyth(
+        &self,
+        feed_ids: Vec<String>,
+        update_fee: u64,
+        other_objects: Vec<ObjectID>,
+    ) -> anyhow::Result<PTBCtx> {
+        let vaa_data = utils::get_vaa_data(
+            &self.ctx.http_client,
+            self.ctx.config.price_config.price_server_url.clone(),
+            feed_ids.clone(),
+        )
+        .await?;
+        debug!("vaa data: {:?}", vaa_data);
+        let mut price_info_object_ids = Vec::new();
+        for id in feed_ids {
+            price_info_object_ids.push(self.get_pyth_price_info_id(id.as_str()).await?);
+        }
+        let total_pyth_fee = price_info_object_ids.len() as u64 * update_fee;
+        debug!("update pyth price bat");
+        let px = self
+            .init_price_update_transaction(
+                total_pyth_fee,
+                vaa_data,
+                price_info_object_ids,
+                other_objects,
+            )
+            .await?;
+        Ok(px)
     }
 
     pub async fn update_pyth_price_bat(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -1846,24 +1867,41 @@ impl Tool {
         account: String,
         position: String,
         position_type: u8,
+        mut symbol: Option<String>,
     ) -> anyhow::Result<()> {
-        let transaction_data = self
-            .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_MODULE_NAME,
-                "auto_close_position",
-                vec![
-                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
-                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
-                ],
-                vec![self.get_t()],
-            )
+        if position_type != 2 {
+            symbol = None;
+        }
+        let feed_ids = self.ctx.config.price_config.get_feed_ids(symbol);
+        let mut input_objects = vec![
+            ObjectID::from_str(position.as_str())?,
+            self.ctx.config.scale_oracle_state_id,
+            ObjectID::from_str(account.as_str())?,
+            self.ctx.config.scale_market_list_id,
+            self.ctx.config.scale_bot_id,
+            SUI_CLOCK_OBJECT_ID,
+        ];
+        input_objects.reverse();
+        let mut px = self
+            .wrapper_ptb_with_pyth(feed_ids, PYTH_PRICE_UPDATE_FEE, input_objects.clone())
             .await?;
-        self.exec(transaction_data).await
+        let args = vec![
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+        ];
+        px.tx.programmable_move_call(
+            self.ctx.config.scale_package_id,
+            SCALE_ENTER_MODULE.to_owned(),
+            Identifier::from_str("auto_close_position")?,
+            vec![self.get_tt()],
+            args,
+        );
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
+        self.exec(tx_data).await
     }
     pub async fn auto_close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
@@ -1872,33 +1910,52 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.auto_close_position_inner(account.to_string(), position.to_string(), 0)
+        self.auto_close_position_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
+
     async fn force_liquidation_inner(
         &self,
         account: String,
         position: String,
         position_type: u8,
+        mut symbol: Option<String>,
     ) -> anyhow::Result<()> {
-        let transaction_data = self
-            .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_MODULE_NAME,
-                "force_liquidation",
-                vec![
-                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
-                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
-                ],
-                vec![self.get_t()],
-            )
+        if position_type != 2 {
+            symbol = None;
+        }
+        let feed_ids = self.ctx.config.price_config.get_feed_ids(symbol);
+        let mut input_objects = vec![
+            ObjectID::from_str(position.as_str())?,
+            self.ctx.config.scale_market_list_id,
+            ObjectID::from_str(account.as_str())?,
+            self.ctx.config.scale_bot_id,
+            self.ctx.config.scale_oracle_state_id,
+            SUI_CLOCK_OBJECT_ID,
+        ];
+        input_objects.reverse();
+        let mut px = self
+            .wrapper_ptb_with_pyth(feed_ids, PYTH_PRICE_UPDATE_FEE, input_objects.clone())
             .await?;
-        self.exec(transaction_data).await
+        let args = vec![
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+        ];
+        px.tx.programmable_move_call(
+            self.ctx.config.scale_package_id,
+            SCALE_ENTER_MODULE.to_owned(),
+            Identifier::from_str("force_liquidation")?,
+            vec![self.get_tt()],
+            args,
+        );
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
+        self.exec(tx_data).await
     }
+
     pub async fn force_liquidation(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
@@ -1906,9 +1963,10 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.force_liquidation_inner(account.to_string(), position.to_string(), 0)
+        self.force_liquidation_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
+
     async fn process_fund_fee_inner(&self, account: String) -> anyhow::Result<()> {
         let transaction_data = self
             .get_transaction_data(
@@ -2018,25 +2076,43 @@ impl Tool {
         account: String,
         position: String,
         position_type: u8,
+        mut symbol: Option<String>,
     ) -> anyhow::Result<()> {
-        let transaction_data = self
-            .get_transaction_data(
-                self.ctx.config.scale_package_id,
-                SCALE_MODULE_NAME,
-                "open_limit_position",
-                vec![
-                    SuiJsonValue::from_object_id(ObjectID::from_str(position.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_market_list_id),
-                    SuiJsonValue::from_object_id(ObjectID::from_str(account.as_str())?),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_bot_id),
-                    SuiJsonValue::from_object_id(self.ctx.config.scale_oracle_state_id),
-                    SuiJsonValue::from_object_id(SUI_CLOCK_OBJECT_ID),
-                ],
-                vec![self.get_t()],
-            )
+        if position_type != 2 {
+            symbol = None;
+        }
+        let feed_ids = self.ctx.config.price_config.get_feed_ids(symbol);
+        let mut input_objects = vec![
+            ObjectID::from_str(position.as_str())?,
+            self.ctx.config.scale_market_list_id,
+            ObjectID::from_str(account.as_str())?,
+            self.ctx.config.scale_bot_id,
+            self.ctx.config.scale_oracle_state_id,
+            SUI_CLOCK_OBJECT_ID,
+        ];
+        input_objects.reverse();
+        let mut px = self
+            .wrapper_ptb_with_pyth(feed_ids, PYTH_PRICE_UPDATE_FEE, input_objects.clone())
             .await?;
-        self.exec(transaction_data).await
+        let args = vec![
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), true)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+            px.get_object_input(input_objects.pop().unwrap(), false)?,
+        ];
+        px.tx.programmable_move_call(
+            self.ctx.config.scale_package_id,
+            SCALE_ENTER_MODULE.to_owned(),
+            Identifier::from_str("open_limit_position")?,
+            vec![self.get_tt()],
+            args,
+        );
+        let tx_data = PTBCtx::get_transaction_data(px).await?;
+        self.exec(tx_data).await
     }
+
     pub async fn open_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
@@ -2044,7 +2120,7 @@ impl Tool {
         let position = args
             .get_one::<String>("position")
             .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
-        self.open_limit_position_inner(account.to_string(), position.to_string(), 0)
+        self.open_limit_position_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
     pub async fn update_automatic_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
@@ -2121,13 +2197,13 @@ impl MoveCall for Tool {
     async fn force_liquidation(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()> {
         self.force_liquidation_inner(
             account_id.to_string(),
-            position_id.to_string(),
-            position_type,
+            position.id.to_string(),
+            position.position_type,
+            Some(position.symbol),
         )
         .await
     }
@@ -2139,13 +2215,13 @@ impl MoveCall for Tool {
     async fn auto_close_position(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()> {
         self.auto_close_position_inner(
             account_id.to_string(),
-            position_id.to_string(),
-            position_type,
+            position.id.to_string(),
+            position.position_type,
+            Some(position.symbol),
         )
         .await
     }
@@ -2153,13 +2229,13 @@ impl MoveCall for Tool {
     async fn open_limit_position(
         &self,
         account_id: Address,
-        position_id: Address,
-        position_type: u8,
+        position: PositionParams,
     ) -> anyhow::Result<()> {
         self.open_limit_position_inner(
             account_id.to_string(),
-            position_id.to_string(),
-            position_type,
+            position.id.to_string(),
+            position.position_type,
+            Some(position.symbol),
         )
         .await
     }

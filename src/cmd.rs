@@ -471,7 +471,7 @@ fn sui_trade() -> Command {
             .arg_required_else_help(true)
                 .about("Close the position.")
                 .arg(arg!(-p --position <POSITION> "Position object id."))
-                .arg(arg!(-l --lot <LOT> "The lot.").value_parser(clap::value_parser!(f64)))
+                .arg(arg!(-l --lot <LOT> "The lot.").default_value("0").value_parser(clap::value_parser!(f64)))
                 .arg(arg!(-t --account <ACCOUNT> "The object id for trading account."))
                 ,
         )

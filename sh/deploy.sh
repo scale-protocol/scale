@@ -1,8 +1,8 @@
 #!/bin/bash
 
 dir=$(dirname $0)
-account='0x0e58a921ef201e7f990590a7600d86cb3c614b6b464dc74b58f60509ff6a4f5c'
-scale_coin='0xd2e9c858c190f3d83e2d00da12b9a2bc9e4aa3dfca33be0f456e8e97dc47dee4'
+account='0xeed64d0b5b8f3caae56e94c0f0cff8b52a1af73fb07042e073815a0c1d37a9f5'
+scale_coin='0xb95422897e715dec8a3a70995501a2fbc7e99a84f38175396afbd6c2ba6c07d8'
 # scale_coin='0xc97e6a1bb0f1f98efd7a84075a8c66f09808b2945a5f52ad51d98bbd3eb3a6ca'
 
 if [ "$1" == "coin" ]; then
@@ -43,7 +43,8 @@ then {
     echo "investment"
     timestamp=$(date +%s)
     timestamp=$((timestamp+100000))
-    scale -g 10000000 sui trade investment -i $timestamp -c $scale_coin -n 'scale' -a 0
+    # scale -g 10000000 sui trade investment -i $timestamp -c $scale_coin -n 'scale' -a 0
+    scale -g 10000000 sui trade investment -i $timestamp -n 'scale' -a 0 -c '0x59b3e0212f55219932be69b7f5fbdb83997534d94e734653e5635c331ccbfac2' -c '0x66ebe6820f00bd94abef2e6703e9ce3a57c7336d5a003a01bb8929b7895c9d7f' -c '0x9b2db8cf6a8f8f54fa2139797e99cba362bec270b225c0d974e93e1308003db7'
 }
 elif [ "$1" = "open_cross_position" ]
 then {
@@ -62,6 +63,7 @@ then {
 }
 elif [ "$1" = "close_position" ]
 then {
-    scale -g 10000000 sui trade investment -i $timestamp -c $scale_coin -n 'scale' -a 0
+    scale -g 100000000 sui oracle update_pyth_price_bat -f 1 -i 0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266
+    scale -g 10000000 sui trade close_position -l 0 -t $account -p '0x06aff35e396da02507a30ddaa3b267f52eddf51f958b01562082c11857130140'
 }
 fi
