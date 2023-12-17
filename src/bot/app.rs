@@ -5,7 +5,7 @@ use crate::bot::{
     state::MoveCall,
     ws::{self, new_shared_dm_symbol_id},
 };
-use crate::com::CliError;
+use crate::com::ClientError;
 use crate::config;
 use crate::http::router::HttpServer;
 use crate::sui::config::{Config as SuiConfig, Context as SuiContext};
@@ -52,9 +52,9 @@ pub fn run(
     if port > 0 {
         let addr = address
             .to_socket_addrs()
-            .map_err(|e| CliError::HttpServerError(e.to_string()))?
+            .map_err(|e| ClientError::HttpServerError(e.to_string()))?
             .next()
-            .ok_or(CliError::HttpServerError("parsing none".to_string()))?;
+            .ok_or(ClientError::HttpServerError("parsing none".to_string()))?;
         socket_addr = Some(addr);
     }
     let full_node = args.get_one::<bool>("full_node").unwrap_or(&false);
@@ -73,7 +73,7 @@ pub fn run(
         })
         .enable_all()
         .build()
-        .map_err(|e| CliError::TokioRuntimeCreateField(e.to_string()))?;
+        .map_err(|e| ClientError::TokioRuntimeCreateField(e.to_string()))?;
     if app == App::Sui {
         let x = run_sui_app(
             config_file,
@@ -88,7 +88,7 @@ pub fn run(
     } else if app == App::Aptos {
         return run_aptos_app(config_file, socket_addr, tasks, runtime);
     } else {
-        return Err(CliError::CliError(app.to_string()).into());
+        return Err(ClientError::ClientError(app.to_string()).into());
     }
 }
 

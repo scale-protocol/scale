@@ -2,10 +2,9 @@
 // see https://docs.pyth.network/pythnet-price-feeds/best-practices
 // see ids: https://pyth.network/developers/price-feed-ids
 use crate::bot::influxdb::Influxdb;
-use crate::bot::machine::Message;
-use crate::bot::state::{Address, Event, OrgPrice, State};
+use crate::bot::state::{Address, Event, Message, OrgPrice, State};
 use crate::bot::ws::{PriceWatchRx, SharedDmSymbolId, SubType, WsClient, WsClientMessage};
-use crate::com::{CliError, DECIMALS};
+use crate::com::{ClientError, DECIMALS};
 use futures::prelude::*;
 use influxdb2_client::api::write::Precision;
 use influxdb2_client::models::DataPoint;
@@ -148,14 +147,14 @@ pub async fn sub_price(
                     let resp: Response = serde_json::from_str(&txt)?;
                     let symbol_str = sds
                         .get(&resp.price_feed.id)
-                        .ok_or_else(|| CliError::UnknownSymbol)?;
+                        .ok_or_else(|| ClientError::UnknownSymbol)?;
                     let op = OrgPrice {
                         price: resp.price_feed.price.get_real_price(),
                         update_time: resp.price_feed.price.publish_time,
                         symbol: symbol_str.to_string(),
                     };
                     let watch_msg = Message {
-                        address: Address::from_str(resp.price_feed.id.as_str())?,
+                        // address: Address::from_str(resp.price_feed.id.as_str())?,
                         state: State::Price(op.clone()),
                         event: Event::Created,
                     };

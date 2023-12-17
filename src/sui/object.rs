@@ -1,9 +1,8 @@
-use crate::bot::machine::Message;
 use crate::bot::state::{
-    Account, Address, Direction, Event, List, Market, MarketStatus, Officer, Pool, Position,
-    PositionStatus, PositionType, State,
+    Account, Address, Direction, Event, List, Market, MarketStatus, Message, Officer, Pool,
+    Position, PositionStatus, PositionType, State,
 };
-use crate::com::CliError;
+use crate::com::ClientError;
 use crate::sui::config::Ctx;
 use log::*;
 use move_core_types::language_storage::StructTag;
@@ -168,6 +167,7 @@ pub async fn get_all_dynamic_field_object(
     }
     Ok(objects)
 }
+
 pub async fn get_object_content(ctx: Ctx, id: ObjectID) -> anyhow::Result<SuiParsedData> {
     let opt = SuiObjectDataOptions {
         show_type: false,
@@ -185,14 +185,14 @@ pub async fn get_object_content(ctx: Ctx, id: ObjectID) -> anyhow::Result<SuiPar
         .await?
         .into_object()?;
     rs.content
-        .ok_or(CliError::GetObjectError("No content".to_string()).into())
+        .ok_or(ClientError::GetObjectError("No content".to_string()).into())
 }
 pub async fn get_dynamic_field_value(ctx: Ctx, id: ObjectID) -> anyhow::Result<SuiMoveStruct> {
     let content = get_object_content(ctx.clone(), id).await?;
     if let SuiParsedData::MoveObject(v) = content {
         Ok(v.fields)
     } else {
-        Err(CliError::GetObjectError("No content".to_string()).into())
+        Err(ClientError::GetObjectError("No content".to_string()).into())
     }
 }
 pub async fn pull_object(ctx: Ctx, id: ObjectID) -> anyhow::Result<Message> {
@@ -220,7 +220,7 @@ impl ObjectParams {
     pub fn get_obj(&self, id: ObjectID) -> anyhow::Result<&Object> {
         self.0
             .get(&id)
-            .ok_or(CliError::ObjectNotFound(id.to_string()).into())
+            .ok_or(ClientError::ObjectNotFound(id.to_string()).into())
     }
     pub fn get_ref(&self, id: ObjectID) -> anyhow::Result<ObjectRef> {
         let obj = self.get_obj(id)?;
@@ -261,7 +261,7 @@ pub async fn get_object_args(ctx: Ctx, ids: Vec<ObjectID>) -> anyhow::Result<Obj
 pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Message> {
     if let Some(e) = rs.error {
         error!("get object error: {:?}", e);
-        return Err(CliError::GetObjectError(e.to_string()).into());
+        return Err(ClientError::GetObjectError(e.to_string()).into());
     }
     debug!("get object: {:?}", rs);
     if let Some(data) = rs.data {
@@ -276,7 +276,7 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
                             debug!("market: {:?}", sui_market);
                             let market = Market::from(sui_market);
                             return Ok(Message {
-                                address: market.id.clone(),
+                                // address: market.id.clone(),
                                 state: State::Market(market),
                                 event: Event::None,
                             });
@@ -286,7 +286,7 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
                             debug!("account: {:?}", sui_account);
                             let account = Account::from(sui_account);
                             return Ok(Message {
-                                address: account.id.clone(),
+                                // address: account.id.clone(),
                                 state: State::Account(account),
                                 event: Event::None,
                             });
@@ -296,7 +296,7 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
                             debug!("position: {:?}", sui_position);
                             let position = Position::from(sui_position);
                             return Ok(Message {
-                                address: position.id.clone(),
+                                // address: position.id.clone(),
                                 state: State::Position(position),
                                 event: Event::None,
                             });
@@ -313,7 +313,7 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
             }
         }
     }
-    return Err(CliError::GetObjectError("Unresolved object information".to_string()).into());
+    return Err(ClientError::GetObjectError("Unresolved object information".to_string()).into());
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiList {
@@ -605,7 +605,7 @@ pub struct SuiPositionInfo {
     pub close_time: u64,
     /// Opening operator (the user manually, or the clearing robot in the listing mode)
     pub open_operator: SuiAddress,
-    /// Account number of warehouse closing operator (user manual, or clearing robot Qiangping)
+    /// Account number of warehouse closing operator (user manual, or clearing robot force close)
     pub close_operator: SuiAddress,
     pub symbol: String,
     /// Market account number of the position

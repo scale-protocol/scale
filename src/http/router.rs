@@ -6,7 +6,7 @@ use crate::bot::{
     machine::SharedStateMap,
     ws::{PriceStatusWatchRx, PriceWatchRx, WsWatchRx},
 };
-use crate::com::CliError;
+use crate::com::ClientError;
 use crate::http::query::empty_string_as_none;
 use crate::http::response::JsonResponse;
 use crate::http::service;
@@ -211,7 +211,7 @@ async fn ws_handler(
             address = Some(add);
         } else {
             return jr
-                .err(CliError::InvalidWsAddressSigner.into())
+                .err(ClientError::InvalidWsAddressSigner.into())
                 .to_json()
                 .into_response();
         }

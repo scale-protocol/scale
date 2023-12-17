@@ -63,9 +63,9 @@ pub struct PriceConfig {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqlDbConfig {
-    // mysql or postgresql
-    pub db_type: String,
     pub db_url: String,
+    pub pool_max_conn: u32,
+    pub pool_min_conn: u32,
 }
 impl PriceConfig {
     pub fn get_feed_ids(&self, symbol: Option<String>) -> Vec<String> {
@@ -113,8 +113,9 @@ impl Default for PriceConfig {
 impl Default for SqlDbConfig {
     fn default() -> Self {
         Self {
-            db_type: "postgres".to_string(),
             db_url: "postgres://postgres:postgres@localhost:5432/scale?sslmode=disable".to_string(),
+            pool_max_conn: 100,
+            pool_min_conn: 5,
         }
     }
 }

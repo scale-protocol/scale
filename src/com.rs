@@ -17,10 +17,10 @@ pub const DENOMINATOR: u64 = 10000;
 pub const DENOMINATOR128: u64 = 10000;
 
 #[derive(Error, Debug, PartialEq)]
-pub enum CliError {
+pub enum ClientError {
     #[error("Unknown error: {0}")]
-    CliError(String),
-    #[error("Invalid cli params: {0}")]
+    ClientError(String),
+    #[error("Invalid client command params: {0}")]
     InvalidCliParams(String),
     #[error("can not load scale config: {0}")]
     CanNotLoadScaleConfig(String),
@@ -64,6 +64,8 @@ pub enum CliError {
     NoGasCoin,
     #[error("pyth price info not found: {0}")]
     PythPriceInfoNotFound(String),
+    #[error("pyth price info not found: {0}")]
+    DBInitError(String),
 }
 
 pub fn f64_round(f: f64) -> f64 {

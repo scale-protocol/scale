@@ -46,4 +46,4 @@ cached="0.44.0"
 reqwest = { version = "0.11", features = ["json"] }
 base64="0.21.2"
 bcs = "0.1.4"
-sqlx = { version = "0.7", features = [ "runtime-tokio" ] }
+sea-orm = { version = "0.12", features = [ "sqlx-postgres","runtime-tokio", "macros" ,"debug-print","with-chrono","debug-print"] }

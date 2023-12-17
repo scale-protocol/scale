@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::bot::{machine::Message, state::Event};
+use crate::bot::state::{Event, Message, MessageSender};
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
@@ -29,7 +29,7 @@ pub struct EventSubscriber {
 impl EventSubscriber {
     pub async fn new(
         ctx: Ctx,
-        watch_tx: UnboundedSender<Message>,
+        watch_tx: MessageSender,
         sync_rx: UnboundedReceiver<ObjectID>,
     ) -> Self {
         let (close_tx, close_rx) = watch::channel(false);

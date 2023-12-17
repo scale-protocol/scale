@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Error};
 use std::str::FromStr;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub const DENOMINATOR: u64 = 10000;
 pub const BURST_RATE: f64 = 0.5;
@@ -94,6 +95,7 @@ pub enum State {
     Price(OrgPrice),
     None,
 }
+
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let t = match *self {
@@ -138,6 +140,14 @@ impl fmt::Display for Event {
         write!(f, "{}", t)
     }
 }
+#[derive(Debug, Clone)]
+pub struct Message {
+    // pub address: Address,
+    pub state: State,
+    pub event: Event,
+}
+pub type MessageSender = UnboundedSender<Message>;
+pub type MessageReceiver = UnboundedReceiver<Message>;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pool {
     // The original supply of the liquidity pool represents
@@ -521,6 +531,11 @@ pub trait MoveCall {
     async fn get_price(&self, symbol: &str) -> anyhow::Result<()>;
     async fn receive_award(&self, nft: String) -> anyhow::Result<()>;
     async fn receive_reward(&self) -> anyhow::Result<()>;
+}
+#[async_trait]
+pub trait Storage {
+    async fn save_one(&self, state: State) -> anyhow::Result<()>;
+    async fn load_all(&self, sender: MessageSender) -> anyhow::Result<()>;
 }
 #[cfg(test)]
 mod tests {

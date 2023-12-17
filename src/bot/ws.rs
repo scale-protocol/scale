@@ -1,5 +1,5 @@
 use crate::bot::state::{Address, OrgPrice};
-use crate::com::{CliError, Task};
+use crate::com::{ClientError, Task};
 use dashmap::{DashMap, DashSet};
 use futures_util::{SinkExt, StreamExt};
 use log::*;
@@ -299,7 +299,7 @@ impl WsClient {
         self.tx
             .send(msg)
             .await
-            .map_err(|e| CliError::WebSocketError(e.to_string()))?;
+            .map_err(|e| ClientError::WebSocketError(e.to_string()))?;
         Ok(())
     }
     pub async fn shutdown(self) {

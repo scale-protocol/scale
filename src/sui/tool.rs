@@ -2,7 +2,7 @@ use crate::{
     bot::state::DENOMINATOR,
     bot::state::{Address, MoveCall, PositionParams},
     com,
-    com::CliError,
+    com::ClientError,
     sui::{
         config::{Config, Context, Ctx},
         object::{self, ObjectParams},
@@ -110,7 +110,7 @@ impl PTBCtx {
         is_mutable_ref: bool,
     ) -> anyhow::Result<Argument> {
         if !self.is_init {
-            return Err(CliError::PTBCtxNotInit.into());
+            return Err(ClientError::PTBCtxNotInit.into());
         }
         self.tx.input(CallArg::Object(
             self.objects.get_obj_arg(id, is_mutable_ref)?,
@@ -119,18 +119,18 @@ impl PTBCtx {
 
     pub fn split_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
         if !self.is_init {
-            return Err(CliError::PTBCtxNotInit.into());
+            return Err(ClientError::PTBCtxNotInit.into());
         }
         if self.gas_coins.len() != 1 {
             return self.select_one_gas(budget);
         }
         // TODO if account has only one gas coin, split it
-        let (_balance, gas_coin_data) = self.gas_coins.pop().ok_or(CliError::NoGasCoin)?;
+        let (_balance, gas_coin_data) = self.gas_coins.pop().ok_or(ClientError::NoGasCoin)?;
         Ok(gas_coin_data)
     }
     pub fn select_one_gas(&mut self, budget: u64) -> anyhow::Result<SuiObjectData> {
         if !self.is_init {
-            return Err(CliError::PTBCtxNotInit.into());
+            return Err(ClientError::PTBCtxNotInit.into());
         }
         for i in 0..self.gas_coins.len() {
             let (balance, gas_coin_data) = self.gas_coins[i].clone();
@@ -139,12 +139,12 @@ impl PTBCtx {
                 return Ok(gas_coin_data);
             }
         }
-        Err(CliError::NoGasCoin.into())
+        Err(ClientError::NoGasCoin.into())
     }
 
     pub async fn get_transaction_data(mut px: PTBCtx) -> anyhow::Result<TransactionData> {
         if !px.is_init {
-            return Err(CliError::PTBCtxNotInit.into());
+            return Err(ClientError::PTBCtxNotInit.into());
         }
         let gas = px.select_one_gas(px.gas_budget)?;
         debug!("transaction gas: {:?}", gas.object_id);
@@ -231,7 +231,7 @@ impl Tool {
                 debug!("get feed id price info object: {:?}", feed_id);
                 let fields = object::get_dynamic_field_value(self.ctx.clone(), v.object_id).await?;
                 if let SuiMoveStruct::WithFields(f) = fields {
-                    let x = f.get("value").ok_or(CliError::PythPriceInfoNotFound(
+                    let x = f.get("value").ok_or(ClientError::PythPriceInfoNotFound(
                         "value field not found".to_string(),
                     ))?;
                     let info_id: ObjectID = serde_json::from_value(x.clone().to_json_value())?;
@@ -246,7 +246,7 @@ impl Tool {
                 }
             }
         } else {
-            return Err(CliError::PythPriceInfoNotFound("table".to_string()).into());
+            return Err(ClientError::PythPriceInfoNotFound("table".to_string()).into());
         }
         self.is_init_pyth_price_info = true;
         Ok(())
@@ -258,7 +258,7 @@ impl Tool {
         if let Some(info) = self.pyth_price_info_mp.get(s) {
             return Ok(info.field_value);
         }
-        Err(CliError::PythPriceInfoNotFound(price_feed_id.to_string()).into())
+        Err(ClientError::PythPriceInfoNotFound(price_feed_id.to_string()).into())
     }
     // package the infos of the update price transaction
     async fn init_price_update_transaction(
@@ -269,10 +269,10 @@ impl Tool {
         other_objects: Vec<ObjectID>,
     ) -> anyhow::Result<PTBCtx> {
         if total_pyth_fee == 0 {
-            return Err(CliError::InvalidCliParams("budget is zero".to_string()).into());
+            return Err(ClientError::InvalidCliParams("budget is zero".to_string()).into());
         }
         if vaa_data.len() == 0 {
-            return Err(CliError::InvalidCliParams("vaa data is empty".to_string()).into());
+            return Err(ClientError::InvalidCliParams("vaa data is empty".to_string()).into());
         }
         let mut px = PTBCtx::new(self.ctx.clone(), self.gas_budget);
         let worm_package_id = self.ctx.get_worm_package_id()?;
@@ -319,7 +319,7 @@ impl Tool {
                 vaa_verified_datas.push(verified_vaa);
             } else {
                 return Err(
-                    CliError::InvalidCliParams("vaa_data is not base64".to_string()).into(),
+                    ClientError::InvalidCliParams("vaa_data is not base64".to_string()).into(),
                 );
             }
         }
@@ -424,7 +424,7 @@ impl Tool {
                 "Insufficient gas balance, need {} but only have {}",
                 budget, amout
             );
-            return Err(CliError::InsufficientGasBalance(msg).into());
+            return Err(ClientError::InsufficientGasBalance(msg).into());
         }
         Ok(sui_objects)
     }
@@ -484,14 +484,14 @@ impl Tool {
                 "Insufficient gas balance, need {} but only have {}",
                 budget, amout
             );
-            return Err(CliError::InsufficientGasBalance(msg).into());
+            return Err(ClientError::InsufficientGasBalance(msg).into());
         }
         Ok(token_objects)
     }
 
     fn get_transaction_signature(&self, pm: &TransactionData) -> anyhow::Result<Signature> {
         let address = self.ctx.wallet.config.active_address.ok_or_else(|| {
-            CliError::NoActiveAccount(
+            ClientError::NoActiveAccount(
                 "no active account, please use sui client command create it .".to_string(),
             )
         })?;
@@ -531,7 +531,7 @@ impl Tool {
                 }
                 SuiExecutionStatus::Failure { error } => {
                     println!(" error: {:?}", error);
-                    return Err(CliError::TransactionExecutionFailure(error).into());
+                    return Err(ClientError::TransactionExecutionFailure(error).into());
                 }
             }
         }
@@ -551,7 +551,7 @@ impl Tool {
             .transaction_builder()
             .move_call(
                 self.ctx.wallet.config.active_address.ok_or_else(|| {
-                    CliError::NoActiveAccount(
+                    ClientError::NoActiveAccount(
                         "no active account, please use sui client command create it .".to_string(),
                     )
                 })?,
@@ -569,7 +569,7 @@ impl Tool {
     pub async fn coin_set(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let status = args
             .get_one::<u8>("status")
-            .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("status".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -589,7 +589,7 @@ impl Tool {
     pub async fn coin_burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coins".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         let transaction_data = self
@@ -610,7 +610,7 @@ impl Tool {
     pub async fn coin_airdrop(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -629,7 +629,7 @@ impl Tool {
     pub async fn coin_mint(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_coin_package_id,
@@ -649,7 +649,7 @@ impl Tool {
     pub async fn create_price_feed(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
@@ -668,7 +668,7 @@ impl Tool {
     pub async fn update_price_timeout(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let timeout = args
             .get_one::<u64>("timeout_ms")
-            .ok_or_else(|| CliError::InvalidCliParams("timeout_ms".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("timeout_ms".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_oracle_package_id,
@@ -802,7 +802,7 @@ impl Tool {
         let ids: Vec<String> = ids.map(|d| d.to_string()).collect();
         let update_fee = args
             .get_one::<u64>("update_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("update_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("update_fee".to_string()))?;
         return self.update_pyth_price_by_ids(ids, *update_fee).await;
     }
 
@@ -866,7 +866,7 @@ impl Tool {
     pub async fn get_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         self.get_price_inner(symbol.as_str()).await
     }
 
@@ -886,15 +886,15 @@ impl Tool {
     pub async fn deposit(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coins".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -914,10 +914,10 @@ impl Tool {
     pub async fn withdrawal(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -939,13 +939,13 @@ impl Tool {
     pub async fn mint(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let img_url = args
             .get_one::<String>("img_url")
-            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("img_url".to_string()))?;
         debug!(
             "package: {},module: {} ,name: {}, description: {}, img_url: {}",
             self.ctx.config.scale_nft_package_id, NFT_MODULE_NAME, name, description, img_url
@@ -970,7 +970,7 @@ impl Tool {
     pub async fn burn(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let id = args
             .get_one::<String>("id")
-            .ok_or_else(|| CliError::InvalidCliParams("id".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("id".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_nft_package_id,
@@ -989,16 +989,16 @@ impl Tool {
     pub async fn mint_recipient(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let img_url = args
             .get_one::<String>("img_url")
-            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("img_url".to_string()))?;
         let recipient = args
             .get_one::<String>("recipient")
-            .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("recipient".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_nft_package_id,
@@ -1020,19 +1020,19 @@ impl Tool {
     pub async fn mint_multiple_recipient(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let img_url = args
             .get_one::<String>("img_url")
-            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("img_url".to_string()))?;
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let recipient = args
             .get_one::<String>("recipient")
-            .ok_or_else(|| CliError::InvalidCliParams("recipient".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("recipient".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_nft_package_id,
@@ -1055,16 +1055,16 @@ impl Tool {
     pub async fn mint_multiple(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let img_url = args
             .get_one::<String>("img_url")
-            .ok_or_else(|| CliError::InvalidCliParams("img_url".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("img_url".to_string()))?;
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_nft_package_id,
@@ -1086,10 +1086,10 @@ impl Tool {
     pub async fn add_admin_member(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let member = args
             .get_one::<String>("member")
-            .ok_or_else(|| CliError::InvalidCliParams("member".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("member".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1108,10 +1108,10 @@ impl Tool {
     pub async fn remove_admin_member(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let member = args
             .get_one::<String>("member")
-            .ok_or_else(|| CliError::InvalidCliParams("member".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("member".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1145,19 +1145,19 @@ impl Tool {
     pub async fn create_market(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let icon = args
             .get_one::<String>("icon")
-            .ok_or_else(|| CliError::InvalidCliParams("icon".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("icon".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let size = args
             .get_one::<u64>("size")
-            .ok_or_else(|| CliError::InvalidCliParams("size".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("size".to_string()))?;
         let opening_price = args
             .get_one::<u64>("opening_price")
-            .ok_or_else(|| CliError::InvalidCliParams("opening_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("opening_price".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1180,13 +1180,13 @@ impl Tool {
     pub async fn update_max_leverage(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let max_leverage = args
             .get_one::<u8>("max_leverage")
-            .ok_or_else(|| CliError::InvalidCliParams("max_leverage".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("max_leverage".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1207,13 +1207,13 @@ impl Tool {
     pub async fn update_insurance_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let insurance_fee = args
             .get_one::<f64>("insurance_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("insurance_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("insurance_fee".to_string()))?;
         let insurance_fee = (insurance_fee * DENOMINATOR as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
@@ -1235,13 +1235,13 @@ impl Tool {
     pub async fn update_margin_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let margin_fee = args
             .get_one::<f64>("margin_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("margin_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("margin_fee".to_string()))?;
         let margin_fee = (margin_fee * DENOMINATOR as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
@@ -1263,17 +1263,17 @@ impl Tool {
     pub async fn update_fund_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let fund_fee = args
             .get_one::<f64>("fund_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("fund_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("fund_fee".to_string()))?;
         let fund_fee = (fund_fee * DENOMINATOR as f64) as u64;
         let manual = args
             .get_one::<bool>("manual")
-            .ok_or_else(|| CliError::InvalidCliParams("manual".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("manual".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1295,13 +1295,13 @@ impl Tool {
     pub async fn update_status(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let status = args
             .get_one::<u8>("status")
-            .ok_or_else(|| CliError::InvalidCliParams("status".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("status".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1322,13 +1322,13 @@ impl Tool {
     pub async fn update_description(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1349,13 +1349,13 @@ impl Tool {
     pub async fn update_icon(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let icon = args
             .get_one::<String>("icon")
-            .ok_or_else(|| CliError::InvalidCliParams("icon".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("icon".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1376,17 +1376,17 @@ impl Tool {
     pub async fn update_spread_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let admin = args
             .get_one::<String>("admin")
-            .ok_or_else(|| CliError::InvalidCliParams("admin".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("admin".to_string()))?;
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let spread_fee = args
             .get_one::<f64>("spread_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("spread_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("spread_fee".to_string()))?;
         let spread_fee = (spread_fee * DENOMINATOR as f64) as u64;
         let manual = args
             .get_one::<bool>("manual")
-            .ok_or_else(|| CliError::InvalidCliParams("manual".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("manual".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1408,10 +1408,10 @@ impl Tool {
     pub async fn update_officer(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let officer = args
             .get_one::<u8>("officer")
-            .ok_or_else(|| CliError::InvalidCliParams("officer".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("officer".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1432,13 +1432,13 @@ impl Tool {
     pub async fn add_factory_mould(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let description = args
             .get_one::<String>("description")
-            .ok_or_else(|| CliError::InvalidCliParams("description".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("description".to_string()))?;
         let url = args
             .get_one::<String>("url")
-            .ok_or_else(|| CliError::InvalidCliParams("url".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("url".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1460,7 +1460,7 @@ impl Tool {
     pub async fn remove_factory_mould(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1480,7 +1480,7 @@ impl Tool {
     pub async fn update_penalty_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let penalty_fee = args
             .get_one::<u64>("penalty_fee")
-            .ok_or_else(|| CliError::InvalidCliParams("penalty_fee".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("penalty_fee".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1499,7 +1499,7 @@ impl Tool {
     pub async fn update_award_ratio(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let award_ratio = args
             .get_one::<u64>("award_ratio")
-            .ok_or_else(|| CliError::InvalidCliParams("award_ratio".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("award_ratio".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1519,7 +1519,7 @@ impl Tool {
     pub async fn update_bot_reward_ratio(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let reward_ratio = args
             .get_one::<u64>("reward_ratio")
-            .ok_or_else(|| CliError::InvalidCliParams("reward_ratio".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("reward_ratio".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1555,7 +1555,7 @@ impl Tool {
     pub async fn receive_award(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let nft = args
             .get_one::<u64>("nft")
-            .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("nft".to_string()))?;
         self.receive_award_inner(nft.to_string()).await
     }
     pub async fn receive_reward_inner(&self) -> anyhow::Result<()> {
@@ -1581,20 +1581,20 @@ impl Tool {
     pub async fn investment(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let issue_time = args
             .get_one::<u64>("issue_time")
-            .ok_or_else(|| CliError::InvalidCliParams("issue_time".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("issue_time".to_string()))?;
         let issue_time_ms = issue_time * 1000;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coin".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coin".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         // let coins = coins.map(|c| c.as_str()).collect::<Vec<&str>>();
         let name = args
             .get_one::<String>("name")
-            .ok_or_else(|| CliError::InvalidCliParams("name".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("name".to_string()))?;
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1618,7 +1618,7 @@ impl Tool {
     pub async fn divestment(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let nft = args
             .get_one::<String>("nft")
-            .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("nft".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1659,7 +1659,7 @@ impl Tool {
     ) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         self.trigger_update_opening_price_inner(symbol.to_string())
             .await
     }
@@ -1667,16 +1667,16 @@ impl Tool {
     pub async fn generate_upgrade_move_token(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let market = args
             .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("market".to_string()))?;
         let nft = args
             .get_one::<String>("nft")
-            .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("nft".to_string()))?;
         let address = args
             .get_one::<String>("address")
-            .ok_or_else(|| CliError::InvalidCliParams("address".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("address".to_string()))?;
         let expiration_time = args
             .get_one::<String>("expiration_time")
-            .ok_or_else(|| CliError::InvalidCliParams("expiration_time".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("expiration_time".to_string()))?;
         let t = chrono::DateTime::parse_from_rfc3339(expiration_time.as_str())?;
         let transaction_data = self
             .get_transaction_data(
@@ -1699,13 +1699,13 @@ impl Tool {
     pub async fn divestment_by_upgrade(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let market = args
             .get_one::<String>("market")
-            .ok_or_else(|| CliError::InvalidCliParams("market".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("market".to_string()))?;
         let nft = args
             .get_one::<String>("nft")
-            .ok_or_else(|| CliError::InvalidCliParams("nft".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("nft".to_string()))?;
         let move_token = args
             .get_one::<String>("move_token")
-            .ok_or_else(|| CliError::InvalidCliParams("move_token".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("move_token".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1726,31 +1726,31 @@ impl Tool {
     pub async fn open_cross_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let lot = args
             .get_one::<f64>("lot")
-            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("lot".to_string()))?;
         let lot = (lot * com::DENOMINATOR as f64) as u64;
         let leverage = args
             .get_one::<u8>("leverage")
-            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("leverage".to_string()))?;
         let direction = args
             .get_one::<u8>("direction")
-            .ok_or_else(|| CliError::InvalidCliParams("direction".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("direction".to_string()))?;
         let auto_open_price = args
             .get_one::<f64>("auto_open_price")
-            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("auto_open_price".to_string()))?;
         let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
         let stop_surplus_price = args
             .get_one::<f64>("stop_surplus_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_surplus_price".to_string()))?;
         let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
         let stop_loss_price = args
             .get_one::<f64>("stop_loss_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_loss_price".to_string()))?;
         let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
@@ -1778,35 +1778,35 @@ impl Tool {
     pub async fn open_isolated_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let symbol = args
             .get_one::<String>("symbol")
-            .ok_or_else(|| CliError::InvalidCliParams("symbol".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("symbol".to_string()))?;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let lot = args
             .get_one::<f64>("lot")
-            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("lot".to_string()))?;
         let lot = (lot * com::DENOMINATOR as f64) as u64;
         let leverage = args
             .get_one::<u8>("leverage")
-            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("leverage".to_string()))?;
         let direction = args
             .get_one::<u8>("direction")
-            .ok_or_else(|| CliError::InvalidCliParams("direction".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("direction".to_string()))?;
         let auto_open_price = args
             .get_one::<f64>("auto_open_price")
-            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("auto_open_price".to_string()))?;
         let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
         let stop_surplus_price = args
             .get_one::<f64>("stop_surplus_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_surplus_price".to_string()))?;
         let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
         let stop_loss_price = args
             .get_one::<f64>("stop_loss_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_loss_price".to_string()))?;
         let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coins".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         let transaction_data = self
@@ -1836,14 +1836,14 @@ impl Tool {
     pub async fn close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let lot = args
             .get_one::<f64>("lot")
-            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("lot".to_string()))?;
         let lot = (lot * com::DENOMINATOR as f64) as u64;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,
@@ -1906,10 +1906,10 @@ impl Tool {
     pub async fn auto_close_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         self.auto_close_position_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
@@ -1959,10 +1959,10 @@ impl Tool {
     pub async fn force_liquidation(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         self.force_liquidation_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
@@ -1987,26 +1987,26 @@ impl Tool {
     pub async fn process_fund_fee(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         self.process_fund_fee_inner(account.clone()).await
     }
     pub async fn update_cross_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let lot = args
             .get_one::<f64>("lot")
-            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("lot".to_string()))?;
         let lot = (lot * com::DENOMINATOR as f64) as u64;
         let leverage = args
             .get_one::<u8>("leverage")
-            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("leverage".to_string()))?;
         let auto_open_price = args
             .get_one::<f64>("auto_open_price")
-            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("auto_open_price".to_string()))?;
         let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
@@ -2032,24 +2032,24 @@ impl Tool {
     ) -> anyhow::Result<()> {
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let lot = args
             .get_one::<f64>("lot")
-            .ok_or_else(|| CliError::InvalidCliParams("lot".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("lot".to_string()))?;
         let lot = (lot * com::DENOMINATOR as f64) as u64;
         let leverage = args
             .get_one::<u8>("leverage")
-            .ok_or_else(|| CliError::InvalidCliParams("leverage".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("leverage".to_string()))?;
         let auto_open_price = args
             .get_one::<f64>("auto_open_price")
-            .ok_or_else(|| CliError::InvalidCliParams("auto_open_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("auto_open_price".to_string()))?;
         let auto_open_price = (auto_open_price * com::DECIMALS as f64) as u64;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coins".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         let transaction_data = self
@@ -2116,27 +2116,27 @@ impl Tool {
     pub async fn open_limit_position(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         self.open_limit_position_inner(account.to_string(), position.to_string(), 0, None)
             .await
     }
     pub async fn update_automatic_price(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let stop_surplus_price = args
             .get_one::<f64>("stop_surplus_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_surplus_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_surplus_price".to_string()))?;
         let stop_surplus_price = (stop_surplus_price * com::DECIMALS as f64) as u64;
         let stop_loss_price = args
             .get_one::<f64>("stop_loss_price")
-            .ok_or_else(|| CliError::InvalidCliParams("stop_loss_price".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("stop_loss_price".to_string()))?;
         let stop_loss_price = (stop_loss_price * com::DECIMALS as f64) as u64;
         let transaction_data = self
             .get_transaction_data(
@@ -2157,18 +2157,18 @@ impl Tool {
     pub async fn isolated_deposit(&self, args: &clap::ArgMatches) -> anyhow::Result<()> {
         let position = args
             .get_one::<String>("position")
-            .ok_or_else(|| CliError::InvalidCliParams("position".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("position".to_string()))?;
         let coins = args
             .get_many::<String>("coins")
-            .ok_or_else(|| CliError::InvalidCliParams("coins".to_string()))?
+            .ok_or_else(|| ClientError::InvalidCliParams("coins".to_string()))?
             .map(|c| json!(c))
             .collect::<Vec<JsonValue>>();
         let account = args
             .get_one::<String>("account")
-            .ok_or_else(|| CliError::InvalidCliParams("account".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("account".to_string()))?;
         let amount = args
             .get_one::<u64>("amount")
-            .ok_or_else(|| CliError::InvalidCliParams("amount".to_string()))?;
+            .ok_or_else(|| ClientError::InvalidCliParams("amount".to_string()))?;
         let transaction_data = self
             .get_transaction_data(
                 self.ctx.config.scale_package_id,

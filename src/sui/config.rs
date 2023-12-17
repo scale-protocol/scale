@@ -1,4 +1,4 @@
-use crate::com::{self, CliError};
+use crate::com::{self, ClientError};
 use crate::config::{self, Config as cfg};
 use log::debug;
 use std::sync::Arc;
@@ -74,7 +74,7 @@ impl Context {
             .wallet
             .config
             .active_address
-            .ok_or_else(|| CliError::NoActiveAccount("no active account".to_string()))?)
+            .ok_or_else(|| ClientError::NoActiveAccount("no active account".to_string()))?)
     }
 
     pub fn get_feed_ids(&self) -> anyhow::Result<Vec<ObjectID>> {
@@ -405,7 +405,7 @@ impl Config {
             .read_api()
             .get_transaction_with_options(td, opt)
             .await
-            .map_err(|e| CliError::RpcError(e.to_string()))?;
+            .map_err(|e| ClientError::RpcError(e.to_string()))?;
         Ok(rs)
     }
 

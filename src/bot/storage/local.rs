@@ -1,4 +1,4 @@
-use crate::bot::state::{Address, State,Position};
+use crate::bot::state::{Address, Position, State};
 use crate::com;
 use sled::{Batch, Db};
 use std::fmt;
@@ -90,13 +90,13 @@ impl FromStr for Keys {
     }
 }
 #[derive(Clone)]
-pub struct Storage {
+pub struct Local {
     db: Db,
 }
-impl Storage {
+impl Local {
     pub fn new(store_path: PathBuf) -> anyhow::Result<Self> {
         let db = sled::open(store_path.join("accounts"))
-            .map_err(|e| com::CliError::DBError(e.to_string()))?;
+            .map_err(|e| com::ClientError::DBError(e.to_string()))?;
         Ok(Self { db })
     }
 
@@ -134,7 +134,7 @@ impl Storage {
                 tx.insert(history_key.as_bytes(), value)?;
                 Ok(())
             })
-            .map_err(|e| com::CliError::DBError(e.to_string()))?;
+            .map_err(|e| com::ClientError::DBError(e.to_string()))?;
         Ok(())
     }
 
@@ -156,7 +156,11 @@ impl Storage {
         self.db.scan_prefix(key.as_bytes())
     }
 
-    pub fn get_position_info(&self, address: &Address,position_address: &Address)-> Option<Position>{
+    pub fn get_position_info(
+        &self,
+        address: &Address,
+        position_address: &Address,
+    ) -> Option<Position> {
         let keys = Keys::new(Prefix::History)
             .add("position".to_string())
             .add(address.to_string())

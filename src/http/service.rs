@@ -7,9 +7,9 @@ use crate::bot::{
 
 use crate::bot::{
     machine::SharedStateMap,
-    storage::local::{self, Storage},
+    storage::local::{self, Local},
 };
-use crate::com::{self, CliError, Task};
+use crate::com::{self, ClientError, Task};
 use axum::extract::ws::{Message, WebSocket};
 use cached::proc_macro::cached;
 use chrono::Utc;
@@ -26,7 +26,7 @@ pub fn get_account_info(
     address: String,
 ) -> anyhow::Result<Option<Account>> {
     let address = Address::from_str(address.as_str())
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
     let r = mp.account.get(&address);
     Ok(r.map(|a| a.value().clone()))
 }
@@ -37,9 +37,9 @@ pub fn get_position_info(
     position_address: String,
 ) -> anyhow::Result<Option<Position>> {
     let address = Address::from_str(address.as_str())
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
     let position_address = Address::from_str(position_address.as_str())
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
     let r = mp.position.get(&address);
     if let Some(p) = r {
         let v = p.value();
@@ -57,7 +57,7 @@ pub fn get_position_list(
     address: String,
 ) -> anyhow::Result<Vec<Position>> {
     let address = Address::from_str(address.as_str())
-        .map_err(|e| CliError::HttpServerError(e.to_string()))?;
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
     let prefix = local::Prefix::from_str(prefix.as_str())?;
     let mut rs: Vec<Position> = Vec::new();
     match prefix {
@@ -78,13 +78,13 @@ pub fn get_position_list(
                 match i {
                     Ok((_k, v)) => {
                         // let key = String::from_utf8(k.to_vec())
-                        //     .map_err(|e| CliError::JsonError(e.to_string()))?;
+                        //     .map_err(|e| ClientError::JsonError(e.to_string()))?;
                         // let keys = storage::Keys::from_str(key.as_str())?;
                         // let pk = keys.get_end();
                         // let pbk = Address::from_str(pk.as_str())
-                        //     .map_err(|e| CliError::Unknown(e.to_string()))?;
+                        //     .map_err(|e| ClientError::Unknown(e.to_string()))?;
                         let values: State = serde_json::from_slice(v.to_vec().as_slice())
-                            .map_err(|e| CliError::JsonError(e.to_string()))?;
+                            .map_err(|e| ClientError::JsonError(e.to_string()))?;
                         match values {
                             State::Position(p) => {
                                 rs.push(p);
@@ -118,7 +118,7 @@ pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Resu
                 match i {
                     Ok((_k, v)) => {
                         let values: State = serde_json::from_slice(v.to_vec().as_slice())
-                            .map_err(|e| CliError::JsonError(e.to_string()))?;
+                            .map_err(|e| ClientError::JsonError(e.to_string()))?;
                         match values {
                             State::Market(m) => {
                                 rs.push(m);
@@ -199,7 +199,7 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
         "1W" => Ok(("-1y".to_string(), "1w".to_string())),
         "1M" => Ok(("-10y".to_string(), "1mo".to_string())),
         "1Y" => Ok(("-10y".to_string(), "1y".to_string())),
-        _ => Err(CliError::InvalidRange.into()),
+        _ => Err(ClientError::InvalidRange.into()),
     }
 }
 
@@ -296,11 +296,11 @@ pub async fn get_price_history(
     range: Option<String>,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<Vec<Price>> {
-    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    let symbol = symbol.ok_or_else(|| ClientError::UnknownSymbol)?;
     if symbol.is_empty() {
-        return Err(CliError::UnknownSymbol.into());
+        return Err(ClientError::UnknownSymbol.into());
     }
-    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let range = range.ok_or_else(|| ClientError::InvalidRange)?;
     let (_, window) = get_start_and_window(range.as_str())?;
     let mut ch = get_price_history_with_cache(symbol.clone(), range, db.clone()).await?;
     let rs =
@@ -407,11 +407,11 @@ pub async fn get_price_history_column(
     range: Option<String>,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<Vec<PriceColumn>> {
-    let symbol = symbol.ok_or_else(|| CliError::UnknownSymbol)?;
+    let symbol = symbol.ok_or_else(|| ClientError::UnknownSymbol)?;
     if symbol.is_empty() {
-        return Err(CliError::UnknownSymbol.into());
+        return Err(ClientError::UnknownSymbol.into());
     }
-    let range = range.ok_or_else(|| CliError::InvalidRange)?;
+    let range = range.ok_or_else(|| ClientError::InvalidRange)?;
     let (_, window) = get_start_and_window(range.as_str())?;
     let mut ch = get_price_history_column_with_cache(symbol.clone(), range, db.clone()).await?;
     let rs =
