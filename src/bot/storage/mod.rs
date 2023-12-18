@@ -1,7 +1,7 @@
 use std::fmt;
+pub mod entity;
 pub mod local;
 pub mod postgres;
-
 pub enum DbType {
     Local,
     Postgres,

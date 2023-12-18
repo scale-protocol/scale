@@ -3,18 +3,12 @@ CREATE TABLE IF NOT EXISTS tb_list (
     id          char(64) CONSTRAINT list_id PRIMARY KEY,
     total       int NOT NULL DEFAULT 0 CHECK (total > 0),
     officer     integer NOT NULL DEFAULT 3 CHECK (officer > 0 and officer < 4),
-    pool_id     char(64) NOT NULL
+    vault_supply bigint NOT NULL DEFAULT 0,
+    vault_balance bigint NOT NULL DEFAULT 0,
+    profit_balance bigint NOT NULL DEFAULT 0,
+    insurance_balance bigint NOT NULL DEFAULT 0,
+    epoch_profit JSON
 );
-
-CREATE TABLE IF NOT EXISTS tb_pool (
-     id          char(64) CONSTRAINT pool_id PRIMARY KEY,
-     vault_supply bigint NOT NULL DEFAULT 0,
-     vault_balance bigint NOT NULL DEFAULT 0,
-     profit_balance bigint NOT NULL DEFAULT 0,
-     insurance_balance bigint NOT NULL DEFAULT 0,
-     epoch_profit JSON
-);
-
 CREATE TABLE IF NOT EXISTS tb_market (
      id          char(64) CONSTRAINT market_id PRIMARY KEY,
      max_leverage integer NOT NULL DEFAULT 0 CHECK (max_leverage > 0),

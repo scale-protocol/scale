@@ -54,6 +54,11 @@ impl FromStr for Address {
         decode_bytes_hex(s).map_err(|e| anyhow!(e))
     }
 }
+impl From<String> for Address {
+    fn from(s: String) -> Self {
+        Self::from_str(s.as_str()).unwrap_or(Address::default())
+    }
+}
 impl TryFrom<Vec<u8>> for Address {
     type Error = anyhow::Error;
 
@@ -161,6 +166,7 @@ pub struct Pool {
     pub insurance_balance: u64,
     // Spread benefits, to prevent robot cheating and provide benefits to sponsors
     pub spread_profit: u64,
+    pub epoch_profit: HashMap<u64, u64>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct List {
@@ -311,6 +317,16 @@ pub enum Officer {
     ProjectTeam = 1,
     CertifiedThirdParty,
     Community,
+}
+impl From<i32> for Officer {
+    fn from(item: i32) -> Self {
+        match item {
+            1 => Officer::ProjectTeam,
+            2 => Officer::CertifiedThirdParty,
+            3 => Officer::Community,
+            _ => panic!("Invalid value for Officer"),
+        }
+    }
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Account {

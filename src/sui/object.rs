@@ -430,6 +430,11 @@ impl From<SuiPool> for Pool {
             profit_balance: p.profit_balance.value(),
             insurance_balance: p.insurance_balance.value(),
             spread_profit: p.spread_profit.value(),
+            epoch_profit: p
+                .epoch_profit
+                .into_iter()
+                .map(|e| (e.key, e.value))
+                .collect(),
         }
     }
 }
