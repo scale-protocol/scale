@@ -21,7 +21,121 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
+pub fn get_account_info(
+    mp: bot::machine::SharedStateMap,
+    address: String,
+) -> anyhow::Result<Option<Account>> {
+    let address = Address::from_str(address.as_str())
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
+    let r = mp.account.get(&address);
+    Ok(r.map(|a| a.value().clone()))
+}
 
+pub fn get_position_info(
+    mp: bot::machine::SharedStateMap,
+    address: String,
+    position_address: String,
+) -> anyhow::Result<Option<Position>> {
+    let address = Address::from_str(address.as_str())
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
+    let position_address = Address::from_str(position_address.as_str())
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
+    let r = mp.position.get(&address);
+    if let Some(p) = r {
+        let v = p.value();
+        let s = v.get(&position_address);
+        if let Some(p) = s {
+            return Ok(Some(p.clone()));
+        }
+    }
+    Ok(mp.storage.get_position_info(&address, &position_address))
+}
+
+pub fn get_position_list(
+    mp: SharedStateMap,
+    prefix: String,
+    address: String,
+) -> anyhow::Result<Vec<Position>> {
+    let address = Address::from_str(address.as_str())
+        .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
+    let prefix = local::Prefix::from_str(prefix.as_str())?;
+    let mut rs: Vec<Position> = Vec::new();
+    match prefix {
+        local::Prefix::Active => {
+            let r = mp.position.get(&address);
+            match r {
+                Some(p) => {
+                    for i in p.value().iter() {
+                        rs.push(i.clone());
+                    }
+                }
+                None => {}
+            }
+        }
+        local::Prefix::History => {
+            let items = mp.storage.get_position_history_list(&address);
+            for i in items {
+                match i {
+                    Ok((_k, v)) => {
+                        // let key = String::from_utf8(k.to_vec())
+                        //     .map_err(|e| ClientError::JsonError(e.to_string()))?;
+                        // let keys = storage::Keys::from_str(key.as_str())?;
+                        // let pk = keys.get_end();
+                        // let pbk = Address::from_str(pk.as_str())
+                        //     .map_err(|e| ClientError::Unknown(e.to_string()))?;
+                        let values: State = serde_json::from_slice(v.to_vec().as_slice())
+                            .map_err(|e| ClientError::JsonError(e.to_string()))?;
+                        match values {
+                            State::Position(p) => {
+                                rs.push(p);
+                            }
+                            _ => {}
+                        }
+                    }
+                    Err(e) => {
+                        error!("{}", e);
+                    }
+                }
+            }
+        }
+        local::Prefix::None => {}
+    }
+    Ok(rs)
+}
+
+pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Result<Vec<Market>> {
+    let prefix = local::Prefix::from_str(prefix.as_str())?;
+    let mut rs: Vec<Market> = Vec::new();
+    match prefix {
+        local::Prefix::Active => {
+            for i in mp.market.iter() {
+                rs.push(i.value().clone());
+            }
+        }
+        local::Prefix::History => {
+            let items = mp.storage.get_market_history_list();
+            for i in items {
+                match i {
+                    Ok((_k, v)) => {
+                        let values: State = serde_json::from_slice(v.to_vec().as_slice())
+                            .map_err(|e| ClientError::JsonError(e.to_string()))?;
+                        match values {
+                            State::Market(m) => {
+                                rs.push(m);
+                            }
+                            _ => {}
+                        }
+                    }
+                    Err(e) => {
+                        error!("{}", e);
+                    }
+                }
+            }
+        }
+        local::Prefix::None => {}
+    }
+    Ok(rs)
+}
 pub async fn get_symbol_list(mp: SharedStateMap) -> anyhow::Result<Vec<String>> {
     let mut rs: Vec<String> = Vec::new();
     for i in mp.ws_state.supported_symbol.iter() {

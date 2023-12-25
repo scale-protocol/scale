@@ -1,7 +1,7 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
     Account, Address, Direction, Event, Market, Message, MessageReceiver, MessageSender, MoveCall,
-    Position, PositionStatus, PositionType, Price, State, BURST_RATE,
+    Position, PositionStatus, PositionType, Price, State, Storage, BURST_RATE,
 };
 use crate::bot::storage::local::{self, Local};
 use crate::bot::ws::{
@@ -39,7 +39,6 @@ pub struct StateMap {
     pub account: DmAccount,
     pub position: DmAccountPosition,
     pub price: DmPrice,
-    pub storage: Local,
     pub ws_state: WsServerState,
     pub account_dynamic_data: DmAccountDynamicData,
     pub position_dynamic_data: DmPositionDynamicData,
@@ -55,7 +54,6 @@ impl StateMap {
             market,
             account,
             position,
-            storage,
             price,
             ws_state: WsServerState::new(supported_symbol),
             account_dynamic_data: DashMap::new(),

@@ -124,29 +124,20 @@ async fn get_user_info(
     Path(address): Path<String>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_FOUND,
-        "Welcome to scale robot service. No resources found.",
-    )
+    JsonResponse::from(service::get_account_info(state, address)).to_json()
 }
 async fn get_position_info(
     Path((address, position_address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_FOUND,
-        "Welcome to scale robot service. No resources found.",
-    )
+    JsonResponse::from(service::get_position_info(state, address, position_address)).to_json()
 }
 
 async fn get_user_position_list(
     Path((prefix, address)): Path<(String, String)>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_FOUND,
-        "Welcome to scale robot service. No resources found.",
-    )
+    JsonResponse::from(service::get_position_list(state, prefix, address)).to_json()
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,10 +173,8 @@ async fn get_market_list(
     Path(prefix): Path<String>,
     Extension(state): Extension<SharedStateMap>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_FOUND,
-        "Welcome to scale robot service. No resources found.",
-    )
+    let r = service::get_market_list(state, prefix).await;
+    JsonResponse::from(r).to_json()
 }
 
 async fn get_symbol_list(Extension(state): Extension<SharedStateMap>) -> impl IntoResponse {
