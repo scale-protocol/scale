@@ -50,10 +50,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-f --full <FULL> "If set to true, a full node will be started, and it is necessary to specify an external InfluxDB database and SQL database in order to start.").default_value("true").value_parser(clap::value_parser!(bool)))
-                .arg(arg!(-d --duration <DURATION> r#"If this option is set, the price of the simple price prediction machine will be updated within the interval.
-                 Please set it to a reasonable value in the devnet and testnet to avoid using up coins. Unit is second,e.g. 5.
-                  -1 means disable updates, 0 means unlimited time updates."#).value_parser(clap::value_parser!(i64)))
+                .arg(arg!(-f --full <FULL> "If set to true, a full node will be started, and it is necessary to specify an external InfluxDB database and PostgreSQL database in order to start.").default_value("true").value_parser(clap::value_parser!(bool)))
         )
 }
 
@@ -583,7 +580,7 @@ fn aptos() -> Command {
 
 pub fn run() -> anyhow::Result<()> {
     let matches = cli().get_matches();
-    let config_file = matches.get_one::<PathBuf>("file");
+    let config_file = matches.get_one::<PathBuf>("file").map(|p| p.to_path_buf());
     let log_file = matches.get_one::<PathBuf>("log");
     let gas_budget = *matches.get_one::<u64>("gasbudget").unwrap_or(&1000);
     init_log(log_file);

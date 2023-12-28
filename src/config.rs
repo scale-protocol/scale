@@ -37,10 +37,13 @@ pub trait Config {
     }
     fn get_config_file(&self) -> PathBuf;
     fn set_config_file(&mut self, path: PathBuf);
+    fn get_storage_path(&self) -> PathBuf;
+    fn get_influxdb_config(&self) -> InfluxdbConfig;
+    fn get_sql_db_config(&self) -> SqlDbConfig;
     fn print(&self);
 }
 
-pub fn config<C: Config>(cfg: &mut C, config_file: Option<&PathBuf>) -> anyhow::Result<()>
+pub fn config<C: Config>(cfg: &mut C, config_file: Option<PathBuf>) -> anyhow::Result<()>
 where
     C: DeserializeOwned,
 {
@@ -54,7 +57,7 @@ where
 pub struct PriceConfig {
     pub price_server_url: String,
     pub ws_url: String,
-    pub db: Influxdb,
+    pub db: InfluxdbConfig,
     pub worm_package: String,
     pub worm_state: String,
     pub pyth_package: String,
@@ -100,7 +103,7 @@ impl Default for PriceConfig {
         Self {
             price_server_url,
             ws_url: "wss://xc-testnet.pyth.network/ws".to_string(),
-            db: Influxdb::default(),
+            db: InfluxdbConfig::default(),
             worm_package: "0x0".to_string(),
             worm_state: "0x0".to_string(),
             pyth_package: "0x0".to_string(),
@@ -121,13 +124,13 @@ impl Default for SqlDbConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Influxdb {
+pub struct InfluxdbConfig {
     pub url: String,
     pub org: String,
     pub bucket: String,
     pub token: String,
 }
-impl Default for Influxdb {
+impl Default for InfluxdbConfig {
     fn default() -> Self {
         Self {
             url: "http://127.0.0.1:8086".to_string(),

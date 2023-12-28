@@ -28,6 +28,15 @@ impl cfg for Config {
     fn set_config_file(&mut self, path: PathBuf) {
         self.scale_config_file = path;
     }
+    fn get_storage_path(&self) -> PathBuf {
+        PathBuf::from("")
+    }
+    fn get_influxdb_config(&self) -> config::InfluxdbConfig {
+        config::InfluxdbConfig::default()
+    }
+    fn get_sql_db_config(&self) -> config::SqlDbConfig {
+        config::SqlDbConfig::default()
+    }
     fn print(&self) {
         println!("scale_config_file: {:?}", self.scale_config_file);
     }

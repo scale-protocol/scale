@@ -142,7 +142,7 @@ pub struct Message {
     pub event: Event,
 }
 impl Watch {
-    pub async fn new(mp: SharedStateMap, event_ws_tx: WsWatchTx, is_write_ws_event: bool) -> Self {
+    pub async fn new(ssm: SharedStateMap, event_ws_tx: WsWatchTx, is_write_ws_event: bool) -> Self {
         let (watch_tx, watch_rx) = mpsc::unbounded_channel::<Message>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         Self {
@@ -166,7 +166,7 @@ impl Watch {
 }
 
 async fn watch_message(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     mut watch_rx: UnboundedReceiver<Message>,
     mut shutdown_rx: oneshot::Receiver<()>,
     event_ws_tx: WsWatchTx,
@@ -183,7 +183,7 @@ async fn watch_message(
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
+                        keep_message(ssm.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -196,7 +196,7 @@ async fn watch_message(
 }
 
 async fn keep_message(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     msg: Message,
     event_ws_tx: WsWatchTx,
     is_write_ws_event: bool,
@@ -208,21 +208,21 @@ async fn keep_message(
         State::Market(market) => {
             let mut keys = keys.add(tag).add(msg.address.to_string());
             if msg.event == Event::Deleted {
-                mp.market.remove(&msg.address);
-                if let Some(p) = mp.price_market_idx.get(&market.symbol) {
+                ssm.market.remove(&msg.address);
+                if let Some(p) = ssm.price_market_idx.get(&market.symbol) {
                     p.value().remove(&msg.address);
                 }
                 save_as_history(mp, &mut keys, &State::Market(market))
             } else {
-                mp.market.insert(msg.address.clone(), market.clone());
-                match mp.price_market_idx.get(&market.symbol) {
+                ssm.market.insert(msg.address.clone(), market.clone());
+                match ssm.price_market_idx.get(&market.symbol) {
                     Some(p) => {
                         p.value().insert(msg.address.clone());
                     }
                     None => {
                         let set = DashSet::new();
                         set.insert(msg.address.clone());
-                        mp.price_market_idx.insert(market.symbol.clone(), set);
+                        ssm.price_market_idx.insert(market.symbol.clone(), set);
                     }
                 }
                 save_to_active(mp, &mut keys, &State::Market(market))
@@ -232,16 +232,16 @@ async fn keep_message(
             let mut keys = keys.add(tag).add(msg.address.to_string());
 
             if msg.event == Event::Deleted {
-                mp.account.remove(&msg.address);
-                save_as_history(mp.clone(), &mut keys, &State::Account(account.clone()))
+                ssm.account.remove(&msg.address);
+                save_as_history(ssm.clone(), &mut keys, &State::Account(account.clone()))
             } else {
-                mp.account.insert(msg.address.clone(), account.clone());
-                save_to_active(mp.clone(), &mut keys, &State::Account(account.clone()))
+                ssm.account.insert(msg.address.clone(), account.clone());
+                save_to_active(ssm.clone(), &mut keys, &State::Account(account.clone()))
             }
             if is_write_ws_event {
                 let mut account_data = AccountDynamicData::default();
                 account_data.id = account.id;
-                if let Some(data) = mp.account_dynamic_data.get(&msg.address) {
+                if let Some(data) = ssm.account_dynamic_data.get(&msg.address) {
                     account_data = data.clone();
                 } else {
                     account_data.equity = account.balance as i64;
@@ -264,7 +264,7 @@ async fn keep_message(
             let account_id = position.account_id.copy();
             let position_id = position.id.copy();
 
-            if let Some(m) = mp.market.get(&position.market_id) {
+            if let Some(m) = ssm.market.get(&position.market_id) {
                 position.symbol = m.symbol.clone();
                 position.symbol_short = m.symbol_short.clone();
                 position.icon = m.icon.clone();
@@ -274,7 +274,7 @@ async fn keep_message(
                 || position.status == PositionStatus::NormalClosing
                 || position.status == PositionStatus::ForcedClosing
             {
-                match mp.position.get(&position.account_id) {
+                match ssm.position.get(&position.account_id) {
                     Some(p) => {
                         p.remove(&msg.address);
                     }
@@ -282,23 +282,23 @@ async fn keep_message(
                         // nothing to do
                     }
                 };
-                save_as_history(mp.clone(), &mut keys, &State::Position(position))
+                save_as_history(ssm.clone(), &mut keys, &State::Position(position))
             } else {
-                match mp.position.get(&position.account_id) {
+                match ssm.position.get(&position.account_id) {
                     Some(p) => {
                         p.insert(msg.address.clone(), position.clone());
                     }
                     None => {
                         let p: DmPosition = dashmap::DashMap::new();
                         p.insert(msg.address.clone(), position.clone());
-                        mp.position.insert((&position.account_id).copy(), p);
+                        ssm.position.insert((&position.account_id).copy(), p);
                     }
                 };
-                save_to_active(mp.clone(), &mut keys, &State::Position(position))
+                save_to_active(ssm.clone(), &mut keys, &State::Position(position))
             }
             if is_write_ws_event {
                 let mut position_data = PositionDynamicData::default();
-                if let Some(data) = mp.position_dynamic_data.get(&msg.address) {
+                if let Some(data) = ssm.position_dynamic_data.get(&msg.address) {
                     position_data = data.clone();
                 }
                 position_data.id = position_id;
@@ -315,13 +315,13 @@ async fn keep_message(
         }
 
         State::Price(org_price) => {
-            let idx_set = &mp.price_market_idx;
-            let market_mp = &mp.market;
-            let price_mp = &mp.price_idx;
+            let idx_set = &ssm.price_market_idx;
+            let market_mp = &ssm.market;
+            let price_mp = &ssm.price_idx;
             match idx_set.get(&org_price.symbol) {
                 Some(p) => {
                     for market in p.value().iter() {
-                        if let Some(m) = market_mp.get(&market) {
+                        if let Some(m) = market_ssm.get(&market) {
                             if org_price.price <= 0 {
                                 error!("got a danger price : {:?}", &org_price);
                                 continue;
@@ -339,7 +339,7 @@ async fn keep_message(
                                     error!("send spread data to channel error: {}", e);
                                 }
                             }
-                            price_mp.insert(m.id.clone(), price);
+                            price_ssm.insert(m.id.clone(), price);
                         }
                     }
                 }
@@ -354,9 +354,9 @@ async fn keep_message(
     }
 }
 
-fn save_data(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {}
-fn save_as_history(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {
-    match mp.storage.save_as_history(ks, data) {
+fn save_data(ssm: SharedStateMap, ks: &mut local::Keys, data: &State) {}
+fn save_as_history(ssm: SharedStateMap, ks: &mut local::Keys, data: &State) {
+    match ssm.storage.save_as_history(ks, data) {
         Ok(()) => {
             debug!(
                 "save a address as history success! key:{}",
@@ -373,8 +373,8 @@ fn save_as_history(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {
     }
 }
 
-fn save_to_active(mp: SharedStateMap, ks: &mut local::Keys, data: &State) {
-    match mp.storage.save_to_active(ks, data) {
+fn save_to_active(ssm: SharedStateMap, ks: &mut local::Keys, data: &State) {
+    match ssm.storage.save_to_active(ks, data) {
         Ok(()) => {
             debug!(
                 "save a address as active success! key:{}",
@@ -399,7 +399,7 @@ pub struct Liquidation {
 
 impl Liquidation {
     pub async fn new<C>(
-        mp: SharedStateMap,
+        ssm: SharedStateMap,
         tasks: usize,
         event_ws_tx: WsWatchTx,
         is_write_ws_event: bool,
@@ -424,7 +424,7 @@ impl Liquidation {
             "liquidation_account_task",
             shutdown_tx,
             tokio::spawn(loop_account_task(
-                mp.clone(),
+                ssm.clone(),
                 task_tx,
                 fund_task_tx,
                 shutdown_rx,
@@ -462,7 +462,7 @@ impl Liquidation {
 }
 
 async fn loop_account_task<C>(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     task_tx: flume::Sender<Address>,
     fund_task_tx: flume::Sender<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
@@ -483,7 +483,7 @@ where
             },
             _ = fund_fee_timer.recv() => {
                 info!("Got fund fee timer signal , current time: {:?}",Utc::now());
-                for v in & mp.account {
+                for v in & ssm.account {
                     let address = v.key().clone();
                     if let Err(e) = fund_task_tx.send(address) {
                         error!("send address to fund task channel error: {}", e);
@@ -492,14 +492,14 @@ where
             }
             _= opening_price_timer.recv() => {
                 info!("Got opening price timer signal , current time: {:?}",Utc::now());
-                update_opening_price(&mp.market,call.clone()).await;
+                update_opening_price(&ssm.market,call.clone()).await;
             }
             // loop account
             _ = async {
                loop{
                     let now = tokio_time::Instant::now();
                     info!("Start a new round of liquidation... count: {}",count);
-                    for v in & mp.account {
+                    for v in & ssm.account {
                         debug!("account id: {}",v.key());
                         let address = v.key().clone();
                         if let Err(e) = task_tx.send(address) {
@@ -531,7 +531,7 @@ where
     }
 }
 async fn loop_position_task<C>(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     tasks: usize,
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
@@ -548,7 +548,7 @@ where
         // let cfg = config.clone();
         let (task_shutdown_tx, task_shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(loop_position_by_user(
-            mp.clone(),
+            ssm.clone(),
             task_rx.clone(),
             fund_task_rx.clone(),
             task_shutdown_rx,
@@ -566,7 +566,7 @@ where
 }
 
 async fn loop_position_by_user<C>(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     task_rx: flume::Receiver<Address>,
     fund_task_rx: flume::Receiver<Address>,
     mut shutdown_rx: oneshot::Receiver<()>,
@@ -587,10 +587,10 @@ where
                 match account_address {
                     Ok(address) => {
                         debug!("got account address from task recv: {:?}",address.to_string());
-                        let account = mp.account.get(&address);
+                        let account = ssm.account.get(&address);
                         match account {
                             Some(account) => {
-                                compute_position(mp.clone(),&account,&address,event_ws_tx.clone(),is_write_ws_event,call.clone()).await;
+                                compute_position(ssm.clone(),&account,&address,event_ws_tx.clone(),is_write_ws_event,call.clone()).await;
                             },
                             None => {
                                 debug!("no account for state map : {:?}",address);
@@ -638,7 +638,7 @@ where
 }
 
 async fn compute_position<C>(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     account: &Account,
     address: &Address,
     event_ws_tx: WsWatchTx,
@@ -647,11 +647,11 @@ async fn compute_position<C>(
 ) where
     C: MoveCall,
 {
-    match mp.position.get(&address) {
+    match ssm.position.get(&address) {
         Some(positions) => {
             debug!("got position: {:?}", positions);
             compute_pl_all_position(
-                mp.clone(),
+                ssm.clone(),
                 account,
                 &positions,
                 event_ws_tx,
@@ -667,7 +667,7 @@ async fn compute_position<C>(
 }
 
 async fn compute_pl_all_position<C>(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     account: &Account,
     dm_position: &DmPosition,
     event_ws_tx: WsWatchTx,
@@ -687,8 +687,8 @@ async fn compute_pl_all_position<C>(
         if position.status != PositionStatus::Normal {
             continue;
         }
-        match mp.market.get(&position.market_id) {
-            Some(market) => match mp.price_idx.get(&position.market_id) {
+        match ssm.market.get(&position.market_id) {
+            Some(market) => match ssm.price_idx.get(&position.market_id) {
                 Some(price) => {
                     let pl = position.get_pl(&price);
                     let fund_fee = position.get_position_fund_fee(&market);
@@ -726,7 +726,7 @@ async fn compute_pl_all_position<C>(
                             error!("send position dynamic data to ws channel data error: {}", e);
                         }
                     }
-                    mp.position_dynamic_data
+                    ssm.position_dynamic_data
                         .insert(position.id.copy(), position_dynamic_data);
                     position_sort.push(PositionSort {
                         profit: pl_and_fund_fee,
@@ -797,7 +797,7 @@ async fn compute_pl_all_position<C>(
         account_data.profit_rate =
             com::f64_round_4(account_data.profit as f64 / account.margin_total as f64);
     }
-    mp.account_dynamic_data
+    ssm.account_dynamic_data
         .insert(account.id.copy(), account_data.clone());
     if is_write_ws_event {
         if let Err(e) = event_ws_tx

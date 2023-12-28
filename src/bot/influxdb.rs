@@ -1,11 +1,5 @@
+use crate::config::InfluxdbConfig;
 use influxdb2_client::Client;
-
-pub struct InfluxdbConfig {
-    pub url: String,
-    pub org: String,
-    pub bucket: String,
-    pub token: String,
-}
 #[derive(Clone)]
 pub struct Influxdb {
     pub org: String,

@@ -205,6 +205,15 @@ impl cfg for Config {
     fn set_config_file(&mut self, path: PathBuf) {
         self.scale_config_file = path;
     }
+    fn get_storage_path(&self) -> PathBuf {
+        self.scale_store_path.clone()
+    }
+    fn get_influxdb_config(&self) -> config::InfluxdbConfig {
+        self.price_config.db.clone()
+    }
+    fn get_sql_db_config(&self) -> config::SqlDbConfig {
+        self.sql_db_config.clone()
+    }
     fn print(&self) {
         println!(
             r#"sui cli config file: {}

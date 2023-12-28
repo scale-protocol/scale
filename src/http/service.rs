@@ -22,9 +22,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
 
-pub async fn get_symbol_list(mp: SharedStateMap) -> anyhow::Result<Vec<String>> {
+pub async fn get_symbol_list(ssm: SharedStateMap) -> anyhow::Result<Vec<String>> {
     let mut rs: Vec<String> = Vec::new();
-    for i in mp.ws_state.supported_symbol.iter() {
+    for i in ssm.ws_state.supported_symbol.iter() {
         rs.push(i.clone());
     }
     Ok(rs)
@@ -89,9 +89,9 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
     }
 }
 
-pub async fn init_price_history_cache(mp: SharedStateMap, db: Arc<Influxdb>) {
+pub async fn init_price_history_cache(ssm: SharedStateMap, db: Arc<Influxdb>) {
     let mut tasks = Vec::new();
-    for i in mp.ws_state.supported_symbol.iter() {
+    for i in ssm.ws_state.supported_symbol.iter() {
         let symbol = i.clone();
         let db = db.clone();
         tasks.push(tokio::spawn(async move {
@@ -317,12 +317,12 @@ pub fn new_price_status() -> DmPriceStatus {
 }
 
 pub async fn init_price_status(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     dps: DmPriceStatus,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<()> {
     debug!("init price status");
-    for symbol in mp.ws_state.supported_symbol.iter() {
+    for symbol in ssm.ws_state.supported_symbol.iter() {
         let query = get_24h_price_status_query(db.bucket.as_str(), symbol.as_str(), "price");
         let db_query_rs = db
             .client
@@ -375,14 +375,14 @@ pub struct PriceBroadcast {
 
 impl PriceBroadcast {
     pub async fn new(
-        mp: SharedStateMap,
+        ssm: SharedStateMap,
         dps: DmPriceStatus,
         price_ws_rx: PriceWatchRx,
         db: Arc<Influxdb>,
     ) -> (Self, PriceStatusWatchRx) {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
         let (price_status_ws_tx, price_status_ws_rx) =
-            broadcast::channel(mp.ws_state.supported_symbol.len());
+            broadcast::channel(ssm.ws_state.supported_symbol.len());
         let task = Task::new(
             "price broadcast",
             shutdown_tx,
@@ -394,7 +394,7 @@ impl PriceBroadcast {
             )),
         );
         tokio::spawn(async move {
-            if let Err(e) = init_price_status(mp, dps, db).await {
+            if let Err(e) = init_price_status(ssm, dps, db).await {
                 error!("init price status error: {}", e);
             }
         });
@@ -436,7 +436,7 @@ pub struct SubRequest {
 }
 
 pub async fn handle_ws(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     mut socket: WebSocket,
     address: Option<Address>,
     mut price_status_rx: PriceStatusWatchRx,
@@ -518,7 +518,7 @@ pub async fn handle_ws(
                     Some(Ok(msg))=>{
                         match msg {
                             Message::Text(t) => {
-                                handle_ws_events(mp.clone(), t, &symbols_set);
+                                handle_ws_events(ssm.clone(), t, &symbols_set);
                             }
                             Message::Binary(_) => {
                                 debug!("client sent binary data");
@@ -559,24 +559,24 @@ pub async fn handle_ws(
 }
 
 fn handle_ws_events(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     msg: String,
     // address: &Address,
     symbols_set: &DashSet<String>,
 ) {
     let sub_req: SubRequest = serde_json::from_str(msg.as_str()).unwrap();
     let symbol = sub_req.symbol;
-    if !mp.ws_state.is_supported_symbol(&symbol) {
+    if !ssm.ws_state.is_supported_symbol(&symbol) {
         return;
     }
     let sub_type = sub_req.sub_type;
     match sub_type {
         SubType::Subscribe => {
-            // mp.ws_state.add_symbol_sub(symbol.clone(), address.copy());
+            // ssm.ws_state.add_symbol_sub(symbol.clone(), address.copy());
             symbols_set.insert(symbol.clone());
         }
         SubType::Unsubscribe => {
-            // mp.ws_state.remove_symbol_sub(&symbol, &address);
+            // ssm.ws_state.remove_symbol_sub(&symbol, &address);
             // symbols.retain(|s| s != &symbol);
             symbols_set.remove(&symbol);
         }

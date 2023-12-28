@@ -27,7 +27,7 @@ pub fn get_account_info(
 ) -> anyhow::Result<Option<Account>> {
     let address = Address::from_str(address.as_str())
         .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
-    let r = mp.account.get(&address);
+    let r = ssm.account.get(&address);
     Ok(r.map(|a| a.value().clone()))
 }
 
@@ -40,7 +40,7 @@ pub fn get_position_info(
         .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
     let position_address = Address::from_str(position_address.as_str())
         .map_err(|e| ClientError::HttpServerError(e.to_string()))?;
-    let r = mp.position.get(&address);
+    let r = ssm.position.get(&address);
     if let Some(p) = r {
         let v = p.value();
         let s = v.get(&position_address);
@@ -48,11 +48,11 @@ pub fn get_position_info(
             return Ok(Some(p.clone()));
         }
     }
-    Ok(mp.storage.get_position_info(&address, &position_address))
+    Ok(ssm.storage.get_position_info(&address, &position_address))
 }
 
 pub fn get_position_list(
-    mp: SharedStateMap,
+    ssm:SharedStateMap,
     prefix: String,
     address: String,
 ) -> anyhow::Result<Vec<Position>> {
@@ -62,7 +62,7 @@ pub fn get_position_list(
     let mut rs: Vec<Position> = Vec::new();
     match prefix {
         local::Prefix::Active => {
-            let r = mp.position.get(&address);
+            let r = ssm.position.get(&address);
             match r {
                 Some(p) => {
                     for i in p.value().iter() {
@@ -73,7 +73,7 @@ pub fn get_position_list(
             }
         }
         local::Prefix::History => {
-            let items = mp.storage.get_position_history_list(&address);
+            let items = ssm.storage.get_position_history_list(&address);
             for i in items {
                 match i {
                     Ok((_k, v)) => {
@@ -103,17 +103,17 @@ pub fn get_position_list(
     Ok(rs)
 }
 
-pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Result<Vec<Market>> {
+pub async fn get_market_list(ssm:SharedStateMap, prefix: String) -> anyhow::Result<Vec<Market>> {
     let prefix = local::Prefix::from_str(prefix.as_str())?;
     let mut rs: Vec<Market> = Vec::new();
     match prefix {
         local::Prefix::Active => {
-            for i in mp.market.iter() {
+            for i in ssm.market.iter() {
                 rs.push(i.value().clone());
             }
         }
         local::Prefix::History => {
-            let items = mp.storage.get_market_history_list();
+            let items = ssm.storage.get_market_history_list();
             for i in items {
                 match i {
                     Ok((_k, v)) => {
@@ -136,9 +136,9 @@ pub async fn get_market_list(mp: SharedStateMap, prefix: String) -> anyhow::Resu
     }
     Ok(rs)
 }
-pub async fn get_symbol_list(mp: SharedStateMap) -> anyhow::Result<Vec<String>> {
+pub async fn get_symbol_list(ssm) -> anyhow::Result<Vec<String>> {
     let mut rs: Vec<String> = Vec::new();
-    for i in mp.ws_state.supported_symbol.iter() {
+    for i in ssm.ws_state.supported_symbol.iter() {
         rs.push(i.clone());
     }
     Ok(rs)
@@ -203,9 +203,9 @@ fn get_start_and_window(range: &str) -> anyhow::Result<(String, String)> {
     }
 }
 
-pub async fn init_price_history_cache(mp: SharedStateMap, db: Arc<Influxdb>) {
+pub async fn init_price_history_cache(ssm:SharedStateMap, db: Arc<Influxdb>) {
     let mut tasks = Vec::new();
-    for i in mp.ws_state.supported_symbol.iter() {
+    for i in ssm.ws_state.supported_symbol.iter() {
         let symbol = i.clone();
         let db = db.clone();
         tasks.push(tokio::spawn(async move {
@@ -431,12 +431,12 @@ pub fn new_price_status() -> DmPriceStatus {
 }
 
 pub async fn init_price_status(
-    mp: SharedStateMap,
+    ssm:SharedStateMap,
     dps: DmPriceStatus,
     db: Arc<Influxdb>,
 ) -> anyhow::Result<()> {
     debug!("init price status");
-    for symbol in mp.ws_state.supported_symbol.iter() {
+    for symbol in ssm.ws_state.supported_symbol.iter() {
         let query = get_24h_price_status_query(db.bucket.as_str(), symbol.as_str(), "price");
         let db_query_rs = db
             .client
@@ -489,14 +489,14 @@ pub struct PriceBroadcast {
 
 impl PriceBroadcast {
     pub async fn new(
-        mp: SharedStateMap,
+        ssm:SharedStateMap,
         dps: DmPriceStatus,
         price_ws_rx: PriceWatchRx,
         db: Arc<Influxdb>,
     ) -> (Self, PriceStatusWatchRx) {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let (price_status_ws_tx, price_status_ws_rx) =
-            broadcast::channel(mp.ws_state.supported_symbol.len());
+            broadcast::channel(ssm.ws_state.supported_symbol.len());
         let task = Task::new(
             "price broadcast",
             shutdown_tx,
@@ -550,7 +550,7 @@ pub struct SubRequest {
 }
 
 pub async fn handle_ws(
-    mp: SharedStateMap,
+    ssm:SharedStateMap,
     mut socket: WebSocket,
     address: Option<Address>,
     mut price_status_rx: PriceStatusWatchRx,
@@ -632,7 +632,7 @@ pub async fn handle_ws(
                     Some(Ok(msg))=>{
                         match msg {
                             Message::Text(t) => {
-                                handle_ws_events(mp.clone(), t, &symbols_set);
+                                handle_ws_events(ssm.clone(), t, &symbols_set);
                             }
                             Message::Binary(_) => {
                                 debug!("client sent binary data");
@@ -673,24 +673,24 @@ pub async fn handle_ws(
 }
 
 fn handle_ws_events(
-    mp: SharedStateMap,
+    ssm:SharedStateMap,
     msg: String,
     // address: &Address,
     symbols_set: &DashSet<String>,
 ) {
     let sub_req: SubRequest = serde_json::from_str(msg.as_str()).unwrap();
     let symbol = sub_req.symbol;
-    if !mp.ws_state.is_supported_symbol(&symbol) {
+    if !ssm.ws_state.is_supported_symbol(&symbol) {
         return;
     }
     let sub_type = sub_req.sub_type;
     match sub_type {
         SubType::Subscribe => {
-            // mp.ws_state.add_symbol_sub(symbol.clone(), address.copy());
+            // ssm.ws_state.add_symbol_sub(symbol.clone(), address.copy());
             symbols_set.insert(symbol.clone());
         }
         SubType::Unsubscribe => {
-            // mp.ws_state.remove_symbol_sub(&symbol, &address);
+            // ssm.ws_state.remove_symbol_sub(&symbol, &address);
             // symbols.retain(|s| s != &symbol);
             symbols_set.remove(&symbol);
         }

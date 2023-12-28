@@ -31,7 +31,7 @@ impl PriceOracle {
     where
         C: MoveCall + Send + Sync + 'static,
     {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
         if duration == 0 {
             let task = Task::new(
                 "price now oracle",

@@ -37,15 +37,15 @@ pub struct HttpServer {
 impl HttpServer {
     pub async fn new(
         addr: &SocketAddr,
-        mp: SharedStateMap,
+        ssm: SharedStateMap,
         db: Arc<Influxdb>,
         event_ws_rx: WsWatchRx,
         price_ws_rx: PriceWatchRx,
     ) -> Self {
         let dps = service::new_price_status();
         let (price_broadcast, price_status_rx) =
-            service::PriceBroadcast::new(mp.clone(), dps.clone(), price_ws_rx, db.clone()).await;
-        let router = router(mp.clone(), db.clone(), price_status_rx, event_ws_rx);
+            service::PriceBroadcast::new(ssm.clone(), dps.clone(), price_ws_rx, db.clone()).await;
+        let router = router(ssm.clone(), db.clone(), price_status_rx, event_ws_rx);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server = axum::Server::bind(&addr)
             .serve(router.into_make_service())
@@ -75,7 +75,7 @@ impl HttpServer {
 }
 
 pub fn router(
-    mp: SharedStateMap,
+    ssm: SharedStateMap,
     db: Arc<Influxdb>,
     price_status_rx: PriceStatusWatchRx,
     event_ws_rx: WsWatchRx,

@@ -44,8 +44,7 @@ pub struct StateMap {
     pub position_dynamic_data: DmPositionDynamicData,
 }
 impl StateMap {
-    pub fn new(store_path: PathBuf, supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
-        let storage = local::Local::new(store_path)?;
+    pub fn new(supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
         let market: DmMarket = DashMap::new();
         let account: DmAccount = DashMap::new();
         let position: DmAccountPosition = DashMap::new();
@@ -73,16 +72,25 @@ pub struct Watch {
     task: Task,
 }
 impl Watch {
-    pub async fn new(mp: SharedStateMap, event_ws_tx: WsWatchTx, is_write_ws_event: bool) -> Self {
+    pub async fn new<S>(
+        ssm: SharedStateMap,
+        storage: Arc<S>,
+        event_ws_tx: WsWatchTx,
+        is_write_ws_event: bool,
+    ) -> Self
+    where
+        S: Storage + Send + Sync + 'static,
+    {
         let (watch_tx, watch_rx) = mpsc::unbounded_channel::<Message>();
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
         Self {
             watch_tx,
             task: Task::new(
                 "watch",
                 shutdown_tx,
                 tokio::spawn(watch_message(
-                    mp,
+                    ssm,
+                    storage,
                     watch_rx,
                     shutdown_rx,
                     event_ws_tx,
@@ -96,13 +104,17 @@ impl Watch {
     }
 }
 
-async fn watch_message(
-    mp: SharedStateMap,
+async fn watch_message<S>(
+    ssm: SharedStateMap,
+    storage: Arc<S>,
     mut watch_rx: MessageReceiver,
     mut shutdown_rx: oneshot::Receiver<()>,
     event_ws_tx: WsWatchTx,
     is_write_spread: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    S: Storage + Send + Sync + 'static,
+{
     info!("start scale data watch ...");
     loop {
         tokio::select! {
@@ -114,7 +126,7 @@ async fn watch_message(
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(mp.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
+                        keep_message(ssm.clone(),storage.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -126,14 +138,15 @@ async fn watch_message(
     Ok(())
 }
 
-async fn keep_message(
-    mp: SharedStateMap,
+async fn keep_message<S>(
+    ssm: SharedStateMap,
+    storage: Arc<S>,
     msg: Message,
     event_ws_tx: WsWatchTx,
     is_write_ws_event: bool,
-) {
-    let tag = msg.state.to_string();
-    let keys = local::Keys::new(local::Prefix::Active);
+) where
+    S: Storage + Send + Sync + 'static,
+{
     match msg.state {
         State::List(list) => {}
         State::Market(market) => {}
@@ -153,7 +166,7 @@ pub struct Liquidation {
 
 impl Liquidation {
     pub async fn new<C>(
-        mp: SharedStateMap,
+        ssm: SharedStateMap,
         tasks: usize,
         event_ws_tx: WsWatchTx,
         is_write_ws_event: bool,

@@ -282,7 +282,7 @@ impl WsClient {
             + Sync,
     {
         let (tx, rx) = mpsc::channel(1);
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
         let u = url.clone();
         let send_tx = tx.clone();
         Ok(Self {

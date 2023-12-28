@@ -82,19 +82,19 @@ pub fn new_tokio_one_thread() -> tokio::runtime::Runtime {
         .build()
         .expect("build tokio runtime")
 }
-
+type TaskStopper = oneshot::Sender<()>;
+type TaskStopRx = oneshot::Receiver<()>;
 pub struct Task {
-    shutdown_tx: oneshot::Sender<()>,
+    shutdown_tx: TaskStopper,
     job: JoinHandle<anyhow::Result<()>>,
     name: String,
 }
 
 impl Task {
-    pub fn new(
-        name: &str,
-        shutdown_tx: oneshot::Sender<()>,
-        job: JoinHandle<anyhow::Result<()>>,
-    ) -> Self {
+    pub fn new_shutdown_channel() -> (TaskStopper, TaskStopRx) {
+        oneshot::channel::<()>()
+    }
+    pub fn new(name: &str, shutdown_tx: TaskStopper, job: JoinHandle<anyhow::Result<()>>) -> Self {
         Self {
             shutdown_tx,
             job,
