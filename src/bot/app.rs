@@ -1,5 +1,4 @@
 use crate::app::App;
-use crate::bot::oracle::{DmPriceFeed, PriceFeed, PriceOracle};
 use crate::bot::{
     influxdb, machine, price,
     state::MoveCall,
@@ -24,13 +23,12 @@ use std::{
 };
 use tokio::{runtime::Builder, runtime::Runtime, signal, sync::mpsc};
 
-use super::storage;
+use crate::bot::{machine::Watch, ws::WsClient};
 
 #[derive(Debug, Clone)]
 pub struct Options {
     pub tasks: usize,
     pub socket_addr: Option<SocketAddr>,
-    pub duration: i64,
     pub full_node: bool,
     pub gas_budget: u64,
     pub config_file: Option<PathBuf>,
@@ -54,17 +52,9 @@ pub fn run(
         Some(i) => i.to_string(),
         None => "127.0.0.1".to_string(),
     };
-    let mut duration: i64 = match args.get_one::<i64>("duration") {
-        Some(d) => *d,
-        None => -1,
-    };
-    if duration < 0 {
-        duration = -1;
-    }
     let mut opt = Options {
         tasks,
         socket_addr: None,
-        duration,
         full_node: *args.get_one::<bool>("full_node").unwrap_or(&false),
         gas_budget,
         config_file,
@@ -104,41 +94,9 @@ pub fn run(
     }
 }
 
-fn new_symbol_id_vec(cfg: &SuiConfig) -> Vec<ws::SymbolId> {
-    cfg.price_config
-        .pyth_symbol
-        .iter()
-        .map(|s| ws::SymbolId {
-            symbol: s.symbol.clone(),
-            id: s.pyth_feed.clone(),
-        })
-        .collect::<Vec<ws::SymbolId>>()
-}
-
-fn new_price_feed_map(cfg: &SuiConfig) -> Arc<DmPriceFeed> {
-    let price_feed = DmPriceFeed::new();
-    for s in cfg.price_config.pyth_symbol.iter() {
-        price_feed.insert(
-            s.symbol.clone(),
-            PriceFeed {
-                feed_address: s.pyth_feed.clone(),
-                price: 0,
-                timestamp: 0,
-            },
-        );
-    }
-    Arc::new(price_feed)
-}
-
-fn run_sui_app(runtime: Runtime, mut opt: Options) -> anyhow::Result<()> {
+fn run_sui_app(runtime: Runtime, opt: Options) -> anyhow::Result<()> {
     let mut conf = SuiConfig::default();
     config::config(&mut conf, opt.config_file.clone())?;
-    let (sds, supported_symbol) = new_shared_dm_symbol_id(new_symbol_id_vec(&conf));
-    let price_feed = new_price_feed_map(&conf);
-    let mut state_mp = machine::StateMap::new(supported_symbol)?;
-    // try load local state data
-    // state_ssm.load_active_account_from_local()?;
-    let mp: machine::SharedStateMap = Arc::new(state_mp);
     runtime.block_on(async move {
         let tool: Tool;
         match Tool::new(conf.clone(), opt.gas_budget).await {
@@ -151,21 +109,21 @@ fn run_sui_app(runtime: Runtime, mut opt: Options) -> anyhow::Result<()> {
             }
         }
         let run = run_bot(opt, Arc::new(conf.clone()), Arc::new(tool)).await;
-        // let (watch, liquidation, ws_client, http_server, oracle) = match run {
-        //     Ok(r) => r,
-        //     Err(e) => {
-        //         error!("run bot error: {}", e);
-        //         return;
-        //     }
-        // };
-        // let ctx = SuiContext::new(conf).await.expect("sui context init error");
-        // if let Err(e) = subscribe::sync_all_objects(ctx.clone(), watch.watch_tx.clone()).await {
-        //     error!("sync all orders error: {}", e);
-        // }
-        // let (_sync_tx, sync_rx) = mpsc::unbounded_channel();
+        let (watch, ws_client) = match run {
+            Ok(r) => r,
+            Err(e) => {
+                error!("run bot error: {}", e);
+                return;
+            }
+        };
+        let ctx = SuiContext::new(conf).await.expect("sui context init error");
+        if let Err(e) = subscribe::sync_all_objects(ctx.clone(), watch.watch_tx.clone()).await {
+            error!("sync all orders error: {}", e);
+        }
+        let (sync_tx, sync_rx) = mpsc::unbounded_channel();
         // // start event task
-        // let event_task =
-        //     subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone(), sync_rx).await;
+        let event_task =
+            subscribe::EventSubscriber::new(ctx.clone(), watch.watch_tx.clone(), sync_rx).await;
         info!("bot start success");
         signal::ctrl_c().await.expect("failed to listen for event");
         info!("Ctrl-C received, shutting down");
@@ -186,17 +144,47 @@ fn run_aptos_app(_runtime: Runtime, _opt: Options) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_bot<C, CF>(opt: Options, conf: Arc<CF>, call: Arc<C>) -> anyhow::Result<()>
+async fn run_bot<C, CF>(
+    opt: Options,
+    conf: Arc<CF>,
+    call: Arc<C>,
+) -> anyhow::Result<(Watch, WsClient)>
 where
     C: MoveCall + Send + Sync + 'static,
     CF: Config + Send + Sync + 'static,
 {
-    // let (event_ws_tx, event_ws_rx) = ws::new_event_channel(100);
+    let (sds, supported_symbol) = new_shared_dm_symbol_id(conf.get_price_config().pyth_symbol);
+    // let price_feed = new_price_feed_map(&conf);
+    let mut state_mp = machine::StateMap::new(supported_symbol)?;
+    // try load local state data
+    // state_ssm.load_active_account_from_local()?;
+    let ssm: machine::SharedStateMap = Arc::new(state_mp);
+    let (event_ws_tx, event_ws_rx) = ws::new_event_channel(100);
+    let influxdb = influxdb::Influxdb::new(conf.get_influxdb_config());
+    let mut watch: Watch;
+    let ws_client: WsClient;
     if opt.full_node {
-        let db = postgres::new(conf.get_sql_db_config()).await?;
+        let db = Arc::new(postgres::new(conf.get_sql_db_config()).await?);
+        watch = machine::Watch::new(ssm.clone(), db.clone(), event_ws_tx.clone(), true).await;
+        ws_client = price::sub_price(
+            watch.watch_tx.clone(),
+            conf.get_price_config().ws_url.clone(),
+            influxdb,
+            sds.clone(),
+            opt.full_node,
+        )
+        .await?;
     } else {
-        let db = local::Local::new(conf.get_storage_path())?;
-        let influxdb = influxdb::Influxdb::new(conf.get_influxdb_config());
+        let db = Arc::new(local::Local::new(conf.get_storage_path())?);
+        watch = machine::Watch::new(ssm.clone(), db.clone(), event_ws_tx.clone(), false).await;
+        ws_client = price::sub_price(
+            watch.watch_tx.clone(),
+            conf.get_price_config().ws_url.clone(),
+            influxdb,
+            sds.clone(),
+            opt.full_node,
+        )
+        .await?;
     }
-    Ok(())
+    Ok((watch, ws_client))
 }

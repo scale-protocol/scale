@@ -40,7 +40,8 @@ pub trait Config {
     fn get_storage_path(&self) -> PathBuf;
     fn get_influxdb_config(&self) -> InfluxdbConfig;
     fn get_sql_db_config(&self) -> SqlDbConfig;
-    fn print(&self);
+    fn get_price_config(&self) -> PriceConfig;
+    fn get(&mut self);
 }
 
 pub fn config<C: Config>(cfg: &mut C, config_file: Option<PathBuf>) -> anyhow::Result<()>

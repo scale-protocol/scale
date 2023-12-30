@@ -48,6 +48,6 @@ reqwest = { version = "0.11", features = ["json"] }
 base64="0.21.2"
 bcs = "0.1.4"
 sqlx = { version = "0.7", features = [ "runtime-tokio","postgres","macros","migrate","chrono","json","rust_decimal" ] }
-rust_decimal = "1.33"
+rust_decimal = { version = "1.33",features = ["rkyv"] }
 rust_decimal_macros = "1.33"
 # sea-orm = { version = "0.12", features = [ "sqlx-postgres","runtime-tokio", "macros" ,"debug-print","with-chrono","debug-print"] }

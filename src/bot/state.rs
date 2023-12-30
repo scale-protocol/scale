@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Error};
 use std::str::FromStr;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 pub const DENOMINATOR: u64 = 10000;
 pub const BURST_RATE: f64 = 0.5;
@@ -153,6 +153,14 @@ pub struct Message {
 }
 pub type MessageSender = UnboundedSender<Message>;
 pub type MessageReceiver = UnboundedReceiver<Message>;
+pub fn new_message_channel() -> (MessageSender, MessageReceiver) {
+    mpsc::unbounded_channel::<Message>()
+}
+pub type EventSyncTx = UnboundedSender<Address>;
+pub type EventSyncRx = UnboundedReceiver<Address>;
+pub fn new_event_sync_channel() -> (EventSyncTx, EventSyncRx) {
+    mpsc::unbounded_channel::<Address>()
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pool {
     // The original supply of the liquidity pool represents
@@ -168,6 +176,18 @@ pub struct Pool {
     pub spread_profit: u64,
     pub epoch_profit: HashMap<u64, u64>,
 }
+impl Default for Pool {
+    fn default() -> Self {
+        Self {
+            vault_supply: 0,
+            vault_balance: 0,
+            profit_balance: 0,
+            insurance_balance: 0,
+            spread_profit: 0,
+            epoch_profit: HashMap::new(),
+        }
+    }
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct List {
     pub id: Address,
@@ -178,6 +198,16 @@ pub struct List {
     /// 3 Community
     pub officer: Officer,
     pub pool: Pool,
+}
+impl Default for List {
+    fn default() -> Self {
+        Self {
+            id: Address::default(),
+            total: 0,
+            officer: Officer::ProjectTeam,
+            pool: Pool::default(),
+        }
+    }
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Market {

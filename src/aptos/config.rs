@@ -37,7 +37,10 @@ impl cfg for Config {
     fn get_sql_db_config(&self) -> config::SqlDbConfig {
         config::SqlDbConfig::default()
     }
-    fn print(&self) {
+    fn get_price_config(&self) -> config::PriceConfig {
+        config::PriceConfig::default()
+    }
+    fn get(&mut self) {
         println!("scale_config_file: {:?}", self.scale_config_file);
     }
 }

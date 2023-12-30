@@ -59,19 +59,19 @@ impl Storage for Local {
         match state {
             State::List(data) => {
                 keys = keys.add(data.id.to_string());
-                self.save(&keys, &State::List(data));
+                self.save(&keys, &State::List(data))?;
             }
             State::Market(data) => {
                 keys = keys.add(data.id.to_string());
-                self.save(&keys, &State::Market(data));
+                self.save(&keys, &State::Market(data))?;
             }
             State::Account(data) => {
                 keys = keys.add(data.id.to_string());
-                self.save(&keys, &State::Account(data));
+                self.save(&keys, &State::Account(data))?;
             }
             State::Position(data) => {
                 keys = keys.add(data.id.to_string());
-                self.save(&keys, &State::Position(data));
+                self.save(&keys, &State::Position(data))?;
             }
             _ => {}
         }
@@ -81,7 +81,7 @@ impl Storage for Local {
         let r = self.db.iter();
         for i in r {
             match i {
-                Ok((k, v)) => {
+                Ok((_k, v)) => {
                     let values: State = serde_json::from_slice(v.to_vec().as_slice())
                         .map_err(|e| com::ClientError::JsonError(e.to_string()))?;
                     if let Err(e) = send.send(Message {

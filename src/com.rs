@@ -20,6 +20,8 @@ pub const DENOMINATOR128: u64 = 10000;
 pub enum ClientError {
     #[error("Unknown error: {0}")]
     ClientError(String),
+    #[error("Invalid client config: {0}")]
+    ConfigError(String),
     #[error("Invalid client command params: {0}")]
     InvalidCliParams(String),
     #[error("can not load scale config: {0}")]
@@ -64,7 +66,7 @@ pub enum ClientError {
     NoGasCoin,
     #[error("pyth price info not found: {0}")]
     PythPriceInfoNotFound(String),
-    #[error("pyth price info not found: {0}")]
+    #[error("db init err: {0}")]
     DBInitError(String),
 }
 
@@ -82,19 +84,19 @@ pub fn new_tokio_one_thread() -> tokio::runtime::Runtime {
         .build()
         .expect("build tokio runtime")
 }
-type TaskStopper = oneshot::Sender<()>;
-type TaskStopRx = oneshot::Receiver<()>;
+pub type TaskStopTx = oneshot::Sender<()>;
+pub type TaskStopRx = oneshot::Receiver<()>;
 pub struct Task {
-    shutdown_tx: TaskStopper,
+    shutdown_tx: TaskStopTx,
     job: JoinHandle<anyhow::Result<()>>,
     name: String,
 }
 
 impl Task {
-    pub fn new_shutdown_channel() -> (TaskStopper, TaskStopRx) {
+    pub fn new_shutdown_channel() -> (TaskStopTx, TaskStopRx) {
         oneshot::channel::<()>()
     }
-    pub fn new(name: &str, shutdown_tx: TaskStopper, job: JoinHandle<anyhow::Result<()>>) -> Self {
+    pub fn new(name: &str, shutdown_tx: TaskStopTx, job: JoinHandle<anyhow::Result<()>>) -> Self {
         Self {
             shutdown_tx,
             job,

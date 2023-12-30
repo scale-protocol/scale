@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use crate::bot::state::{Event, Message, MessageSender};
+use crate::bot::state::{Event, EventSyncRx, Message, MessageSender};
+use crate::com::{Task, TaskStopRx};
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
@@ -10,10 +11,7 @@ use move_core_types::{identifier::Identifier, language_storage::TypeTag};
 use sui_sdk::rpc_types::{EventFilter, SuiEvent};
 use sui_sdk::types::base_types::ObjectID;
 use sui_types::event::EventID;
-use tokio::sync::{
-    mpsc::{UnboundedReceiver, UnboundedSender},
-    watch,
-};
+use tokio::sync::watch;
 use tokio::{
     task::JoinHandle,
     time::{self, Duration},
@@ -21,28 +19,29 @@ use tokio::{
 // use tokio_stream::StreamExt;
 use futures::StreamExt;
 use serde_json::Value;
+
 pub struct EventSubscriber {
-    task: JoinHandle<anyhow::Result<()>>,
-    close_tx: watch::Sender<bool>,
+    // task: JoinHandle<anyhow::Result<()>>,
+    // close_tx: watch::Sender<bool>,
+    task: Task,
 }
 
 impl EventSubscriber {
-    pub async fn new(
-        ctx: Ctx,
-        watch_tx: MessageSender,
-        sync_rx: UnboundedReceiver<ObjectID>,
-    ) -> Self {
-        let (close_tx, close_rx) = watch::channel(false);
+    pub async fn new(ctx: Ctx, watch_tx: MessageSender, sync_rx: EventSyncRx) -> Self {
+        let (close_tx, close_rx) = Task::new_shutdown_channel();
         Self {
-            task: tokio::spawn(Self::run(ctx, close_rx, watch_tx, sync_rx)),
-            close_tx,
+            task: Task::new(
+                "event sub",
+                close_tx,
+                tokio::spawn(Self::run(ctx, close_rx, watch_tx, sync_rx)),
+            ),
         }
     }
     async fn run(
         ctx: Ctx,
-        mut close_rx: watch::Receiver<bool>,
-        watch_tx: UnboundedSender<Message>,
-        mut sync_rx: UnboundedReceiver<ObjectID>,
+        mut close_rx: TaskStopRx,
+        watch_tx: MessageSender,
+        mut sync_rx: EventSyncRx,
     ) -> anyhow::Result<()> {
         'connection: loop {
             info!("event sub connecting ...");
@@ -58,8 +57,8 @@ impl EventSubscriber {
             // let mut timer = time::interval(Duration::from_secs(5));
             'sub: loop {
                 tokio::select! {
-                    _ = close_rx.changed() => {
-                        debug!("event sub got close signal");
+                    r = &mut close_rx => {
+                        debug!("event sub got close signal: {:?}", r);
                         break 'connection;
                     }
                     rs = sub.next() =>{
@@ -97,8 +96,15 @@ impl EventSubscriber {
                     id = sync_rx.recv() => {
                         debug!("event sync got sync object id: {:?}", id);
                         if let Some(id) = id {
-                            if let Err(e) = object::pull_object(ctx.clone(), id).await{
-                                error!("pull object error: {:?}", e);
+                            match ObjectID::from_str(id.to_string().as_str()){
+                                Ok(id) => {
+                                    if let Err(e) = object::pull_object(ctx.clone(), id).await{
+                                        error!("pull object error: {:?}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("parse object id error: {:?}", e);
+                                }
                             }
                         }
                     }
@@ -109,22 +115,8 @@ impl EventSubscriber {
         }
         Ok(())
     }
-
     pub async fn shutdown(self) {
-        debug!("EventSubscriber shutdown");
-        if let Err(e) = self.close_tx.send(true) {
-            error!("EventSubscriber close_tx send error: {:?}", e);
-        }
-        if let Err(e) = time::timeout(Duration::from_secs(2), async {
-            if let Err(e) = self.task.await {
-                error!("task shutdown error: {:?}", e);
-            }
-        })
-        .await
-        {
-            error!("task shutdown await timeout: {:?}", e);
-        }
-        info!("EventSubscriber stopped successfully!");
+        self.task.shutdown().await;
     }
 }
 #[derive(Debug, Clone)]
@@ -151,7 +143,7 @@ fn get_change_object(event: SuiEvent) -> Option<EventResult> {
     None
 }
 
-pub async fn sync_all_objects(ctx: Ctx, watch_tx: UnboundedSender<Message>) -> anyhow::Result<()> {
+pub async fn sync_all_objects(ctx: Ctx, watch_tx: MessageSender) -> anyhow::Result<()> {
     info!("start sync all objects");
     tokio::spawn(async move {
         // get all events

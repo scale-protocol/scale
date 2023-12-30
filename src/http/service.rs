@@ -2,14 +2,14 @@ use crate::bot::{
     self,
     influxdb::Influxdb,
     state::{Account, Address, Market, OrgPrice, Position, State},
-    ws::{PriceStatus, PriceStatusWatchRx, PriceWatchRx, SubType, WsSrvMessage, WsWatchRx},
+    ws::{PriceStatus, PriceStatusWatchRx, SubType, WsSrvMessage, WsWatchRx},
 };
 
 use crate::bot::{
     machine::SharedStateMap,
     storage::local::{self, Local},
 };
-use crate::com::{self, ClientError, Task};
+use crate::com::{self, ClientError, Task, TaskStopRx, TaskStopTx};
 use axum::extract::ws::{Message, WebSocket};
 use cached::proc_macro::cached;
 use chrono::Utc;
@@ -377,7 +377,7 @@ impl PriceBroadcast {
     pub async fn new(
         ssm: SharedStateMap,
         dps: DmPriceStatus,
-        price_ws_rx: PriceWatchRx,
+        price_ws_rx: WsWatchRx,
         db: Arc<Influxdb>,
     ) -> (Self, PriceStatusWatchRx) {
         let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
@@ -407,17 +407,24 @@ impl PriceBroadcast {
 
 async fn broadcast_price(
     dps: DmPriceStatus,
-    mut price_ws_rx: PriceWatchRx,
+    mut price_ws_rx: WsWatchRx,
     price_status_ws_tx: broadcast::Sender<PriceStatus>,
-    mut shutdown_rx: oneshot::Receiver<()>,
+    mut shutdown_rx: TaskStopRx,
 ) -> anyhow::Result<()> {
     loop {
         tokio::select! {
-            _ = (&mut shutdown_rx) => {
-                info!("got shutdown signal , break price broadcast!");
+            r = &mut shutdown_rx => {
+                match r {
+                    Ok(_) => {
+                        info!("got shutdown signal {:?}, break price broadcast!",r);
+                    }
+                    Err(e) => {
+                        error!("shutdown channel error: {}", e);
+                    }
+                }
                 break;
             },
-            Ok(price) = price_ws_rx.0.recv() => {
+            Ok(WsSrvMessage::PriceEvent(price)) = price_ws_rx.0.recv() => {
                 if let Ok(Some(price_status)) = get_broadcast_price_status(&dps, &price) {
                     if let Err(e) = price_status_ws_tx.send(price_status) {
                         error!("broadcast price status error: {}", e);

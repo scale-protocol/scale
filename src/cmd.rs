@@ -50,7 +50,7 @@ fn cli() -> Command {
                 .arg(arg!(-p --port <PORT> "The web server port provides http query service and websocket push service. The default value is 3000. If it is set to 0, the web service is disabled.").value_parser(clap::value_parser!(u64)))
                 .arg(arg!(-i --ip <IP> "The IP address bound to the web server. The default is 127.0.0.1."))
                 .arg(arg!(-b --blockchain <BLOCKCHAIN> "Target blockchain, optional value: sui , aptos").default_value("sui").value_parser(["sui","aptos"]))
-                .arg(arg!(-f --full <FULL> "If set to true, a full node will be started, and it is necessary to specify an external InfluxDB database and PostgreSQL database in order to start.").default_value("true").value_parser(clap::value_parser!(bool)))
+                .arg(arg!(-f --full_node <FULL_NODE> "If set to true, a full node will be started, and it is necessary to specify an external InfluxDB database and PostgreSQL database in order to start.").default_value("true").value_parser(clap::value_parser!(bool)))
         )
 }
 
@@ -591,7 +591,7 @@ pub fn run() -> anyhow::Result<()> {
             match matches.subcommand() {
                 Some(("config", matches)) => match matches.subcommand() {
                     Some(("get", _)) => {
-                        (&conf).print();
+                        (&mut conf).get();
                     }
                     Some(("set", matches)) => {
                         conf.set_config(matches);
@@ -798,7 +798,7 @@ pub fn run() -> anyhow::Result<()> {
             match matches.subcommand() {
                 Some(("config", matches)) => match matches.subcommand() {
                     Some(("get", _)) => {
-                        (&conf).print();
+                        (&mut conf).get();
                     }
                     Some(("set", _matches)) => {
                         println!("set config");

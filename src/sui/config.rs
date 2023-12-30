@@ -163,9 +163,6 @@ impl cfg for Config {
     where
         Self: DeserializeOwned,
     {
-        if !self.scale_config_file.exists() {
-            return self.init();
-        }
         let config_str = fs::read_to_string(&self.scale_config_file)?;
         debug!("read config from local config file: {}", config_str);
         match serde_yaml::from_str::<Config>(&config_str) {
@@ -194,7 +191,7 @@ impl cfg for Config {
             }
             Err(e) => {
                 debug!("load scale config error: {}", e);
-                return self.init();
+                return Err(com::ClientError::ConfigError(e.to_string()).into());
             }
         }
         Ok(())
@@ -214,22 +211,33 @@ impl cfg for Config {
     fn get_sql_db_config(&self) -> config::SqlDbConfig {
         self.sql_db_config.clone()
     }
-    fn print(&self) {
+    fn get_price_config(&self) -> config::PriceConfig {
+        self.price_config.clone()
+    }
+    fn get(&mut self) {
+        if !self.scale_config_file.exists() {
+            if let Err(e) = self.init() {
+                println!("init config error: {}", e);
+                return;
+            }
+        }
         println!(
             r#"sui cli config file: {}
 scale config file: {}
 scale store path: {}
 scale package id: {}
 scale market list id: {}
+scale bot id: {}
 scale bond factory id: {}
 scale publisher id: {}
-scale admin id: {}
 scale coin package id: {}
 scale coin reserve id: {}
 scale coin admin id: {}
+scale admin cap id: {}
 scale oracle package id: {}
 scale oracle admin id: {}
-scale oracle root id: {}
+scale oracle state id: {}
+scale oracle pyth state id: {}
 scale nft package id: {}
 scale nft admin id: {}
 "#,
@@ -238,15 +246,17 @@ scale nft admin id: {}
             self.scale_store_path.display(),
             self.scale_package_id,
             self.scale_market_list_id,
+            self.scale_bot_id,
             self.scale_bond_factory_id,
             self.scale_publisher_id,
-            self.scale_admin_cap_id,
             self.scale_coin_package_id,
             self.scale_coin_reserve_id,
             self.scale_coin_admin_id,
+            self.scale_admin_cap_id,
             self.scale_oracle_package_id,
             self.scale_oracle_admin_id,
             self.scale_oracle_state_id,
+            self.scale_oracle_pyth_state_id,
             self.scale_nft_package_id,
             self.scale_nft_admin_id,
         );
@@ -341,6 +351,11 @@ impl Config {
                             && object_type.name.as_str() == "BondFactory"
                         {
                             self.scale_bond_factory_id = object_id;
+                        }
+                        if object_type.module.as_str() == "bot"
+                            && object_type.name.as_str() == "ScaleBot"
+                        {
+                            self.scale_bot_id = object_id;
                         }
                         if object_type.module.as_str() == "admin"
                             && object_type.name.as_str() == "AdminCap"

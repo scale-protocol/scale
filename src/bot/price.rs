@@ -2,8 +2,8 @@
 // see https://docs.pyth.network/pythnet-price-feeds/best-practices
 // see ids: https://pyth.network/developers/price-feed-ids
 use crate::bot::influxdb::Influxdb;
-use crate::bot::state::{Address, Event, Message, OrgPrice, State};
-use crate::bot::ws::{PriceWatchRx, SharedDmSymbolId, SubType, WsClient, WsClientMessage};
+use crate::bot::state::{Address, Event, Message, MessageSender, OrgPrice, State};
+use crate::bot::ws::{SharedDmSymbolId, SubType, WsClient, WsClientMessage};
 use crate::com::{ClientError, DECIMALS};
 use futures::prelude::*;
 use influxdb2_client::api::write::Precision;
@@ -110,13 +110,12 @@ impl EmaPrice {
 }
 
 pub async fn sub_price(
-    watch_tx: UnboundedSender<Message>,
+    watch_tx: MessageSender,
     price_ws_url: String,
     inf_db: Influxdb,
     sds: SharedDmSymbolId,
     full_node: bool,
-    is_broadcast_price: bool,
-) -> anyhow::Result<(WsClient, PriceWatchRx)> {
+) -> anyhow::Result<WsClient> {
     debug!("start sub price url: {:?}", price_ws_url);
     let mut sub_req = Request {
         type_field: SubType::Subscribe,
@@ -127,10 +126,7 @@ pub async fn sub_price(
     for id in sds.iter() {
         sub_req.ids.push(id.key().to_string());
     }
-    let (ws_price_tx, ws_price_rx) = broadcast::channel::<OrgPrice>(sds.len());
-
     let req = serde_json::to_string(&sub_req)?;
-
     let ws_client = WsClient::new(
         price_ws_url,
         Some(WsClientMessage::Txt(req)),
@@ -140,7 +136,6 @@ pub async fn sub_price(
             let influxdb_client = inf_db.client.clone();
             let org = inf_db.org.clone();
             let bucket = inf_db.bucket.clone();
-            let ws_price_tx = ws_price_tx.clone();
             Box::pin(async move {
                 if let WsClientMessage::Txt(txt) = msg {
                     // debug!("price txt: {:?}", txt);
@@ -160,11 +155,6 @@ pub async fn sub_price(
                     };
                     if let Err(e) = watch_tx.send(watch_msg) {
                         error!("send watch msg error: {:?}", e);
-                    }
-                    if is_broadcast_price {
-                        if let Err(e) = ws_price_tx.send(op) {
-                            error!("send ws price msg error: {:?}", e);
-                        }
                     }
                     if !full_node {
                         return Ok(());
@@ -189,5 +179,5 @@ pub async fn sub_price(
         },
     )
     .await?;
-    Ok((ws_client, PriceWatchRx(ws_price_rx)))
+    Ok(ws_client)
 }

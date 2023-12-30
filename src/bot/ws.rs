@@ -1,5 +1,6 @@
 use crate::bot::state::{Address, OrgPrice};
-use crate::com::{ClientError, Task};
+use crate::com::{ClientError, Task, TaskStopRx};
+use crate::config::PythSymbol;
 use dashmap::{DashMap, DashSet};
 use futures_util::{SinkExt, StreamExt};
 use log::*;
@@ -21,23 +22,17 @@ use tokio_tungstenite::{
     tungstenite::protocol::{frame::coding::CloseCode, CloseFrame, Message},
 };
 
-// like Crypto.BTC/USD 0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SymbolId {
-    pub symbol: String,
-    pub id: String,
-}
 // key is id(address), value is symbol
-pub type DmSymbolId = DashMap<String, String>;
-pub type SharedDmSymbolId = Arc<DmSymbolId>;
+pub type DmFeedIdSymbol = DashMap<String, String>;
+pub type SharedDmSymbolId = Arc<DmFeedIdSymbol>;
 pub type SupportedSymbol = DashSet<String>;
 pub fn new_shared_dm_symbol_id(
-    symbol_id_vec: Vec<SymbolId>,
+    symbol_id_vec: Vec<PythSymbol>,
 ) -> (SharedDmSymbolId, SupportedSymbol) {
     let dm = DashMap::new();
     let ss = DashSet::new();
     for symbol_id in symbol_id_vec {
-        let id = symbol_id.id.as_str();
+        let id = symbol_id.pyth_feed.as_str();
         let id_key = id.strip_prefix("0x").unwrap_or(id).to_string();
         dm.insert(id_key.clone(), symbol_id.symbol.clone());
         ss.insert(symbol_id.symbol);
@@ -87,16 +82,16 @@ impl WsServerState {
 // key is symbol, value is address set
 // pub type DmPriceSubMap = DashMap<String, DashSet<Address>>;
 
-pub struct PriceWatchRx(pub broadcast::Receiver<OrgPrice>);
+// pub struct PriceWatchRx(pub broadcast::Receiver<OrgPrice>);
 pub struct WsWatchTx(pub broadcast::Sender<WsSrvMessage>);
 pub struct WsWatchRx(pub broadcast::Receiver<WsSrvMessage>);
 pub struct PriceStatusWatchRx(pub broadcast::Receiver<PriceStatus>);
 
-impl Clone for PriceWatchRx {
-    fn clone(&self) -> Self {
-        Self(self.0.resubscribe())
-    }
-}
+// impl Clone for PriceWatchRx {
+//     fn clone(&self) -> Self {
+//         Self(self.0.resubscribe())
+//     }
+// }
 
 impl Clone for WsWatchRx {
     fn clone(&self) -> Self {
@@ -134,6 +129,7 @@ pub enum WsSrvMessage {
     PositionUpdate(PositionDynamicData),
     PositionOpen(PositionDynamicData),
     PositionClose(PositionDynamicData),
+    PriceEvent(OrgPrice),
     PriceUpdate(PriceStatus),
     SpreadUpdate(SpreadData),
     Close,
@@ -163,6 +159,10 @@ impl WsSrvMessage {
                 serde_json::to_string(&position)
                     .unwrap_or_default()
                     .as_str(),
+            ),
+            Self::PriceEvent(price) => Self::json_warp(
+                "price_event",
+                serde_json::to_string(&price).unwrap_or_default().as_str(),
             ),
             Self::SpreadUpdate(spread) => Self::json_warp(
                 "spread_update",
@@ -309,7 +309,7 @@ impl WsClient {
 
 async fn handle<F>(
     url: String,
-    mut shutdown_rx: oneshot::Receiver<()>,
+    mut shutdown_rx: TaskStopRx,
     send_tx: Sender<WsClientMessage>,
     mut send_rx: Receiver<WsClientMessage>,
     start_msg: Option<WsClientMessage>,
@@ -364,8 +364,15 @@ where
 
         'sub: loop {
             tokio::select! {
-                _ = (&mut shutdown_rx) => {
-                    info!("Got shutdown signal , break loop price ws client!");
+                r = &mut shutdown_rx => {
+                    match r {
+                        Ok(_) => {
+                            info!("got shutdown signal , break price broadcast!");
+                        }
+                        Err(e) => {
+                            error!("shutdown channel error: {}", e);
+                        }
+                    }
                     sender.send(Message::Close(Some(CloseFrame {
                         code: CloseCode::Normal,
                         reason: "Shutdown".into(),
