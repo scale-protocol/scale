@@ -1,7 +1,8 @@
 use crate::bot::cron::Cron;
 use crate::bot::state::{
-    Account, Address, Direction, Event, List, Market, Message, MessageReceiver, MessageSender,
-    MoveCall, Position, PositionStatus, PositionType, Price, State, Storage, BURST_RATE,
+    Account, Address, Direction, Event, EventUpdate, EventUpdateRx, EventUpdateTx, List, Market,
+    Message, MessageReceiver, MessageSender, MoveCall, Position, PositionStatus, PositionType,
+    Price, State, Storage, BURST_RATE,
 };
 use crate::bot::storage::local::{self, Local};
 use crate::bot::ws::{
@@ -21,7 +22,8 @@ use tokio::{
 };
 
 use super::state;
-// key is market Addrsymboless,value is market data
+type DmList = DashMap<Address, List>;
+// key is market symbol,value is market data
 type DmMarket = DashMap<String, Market>;
 // key is account Address,value is account data.
 type DmAccount = DashMap<Address, Account>;
@@ -36,7 +38,7 @@ type DmAccountDynamicData = DashMap<Address, AccountDynamicData>;
 type DmPositionDynamicData = DashMap<Address, PositionDynamicData>;
 #[derive(Clone)]
 pub struct StateMap {
-    pub list: Arc<RwLock<List>>,
+    pub list: DmList,
     pub market: DmMarket,
     pub account: DmAccount,
     pub position: DmAccountPosition,
@@ -47,7 +49,7 @@ pub struct StateMap {
 }
 impl StateMap {
     pub fn new(supported_symbol: SupportedSymbol) -> anyhow::Result<Self> {
-        let list = Arc::new(RwLock::new(List::default()));
+        let list: DmList = DashMap::new();
         let market: DmMarket = DashMap::new();
         let account: DmAccount = DashMap::new();
         let position: DmAccountPosition = DashMap::new();
@@ -62,12 +64,6 @@ impl StateMap {
             account_dynamic_data: DashMap::new(),
             position_dynamic_data: DashMap::new(),
         })
-    }
-
-    pub fn load_active_account_from_local(&mut self) -> anyhow::Result<()> {
-        info!("start load active object from local!");
-
-        Ok(())
     }
 }
 pub type SharedStateMap = Arc<StateMap>;
@@ -125,7 +121,7 @@ where
             r = &mut shutdown_rx => {
                 match r {
                     Ok(_) => {
-                        info!("got shutdown signal {:?}, break price broadcast!",r);
+                        info!("got shutdown signal {:?}, break message watch!",r);
                     }
                     Err(e) => {
                         error!("shutdown channel error: {}", e);
@@ -137,7 +133,7 @@ where
                 match r {
                     Some(msg)=>{
                         // debug!("data channel got data : {:?}",msg);
-                        keep_message(ssm.clone(),storage.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
+                        handle_message(ssm.clone(),storage.clone(), msg,event_ws_tx.clone(),is_write_spread).await;
                     }
                     None=>{
                         debug!("data channel got none : {:?}",r);
@@ -149,7 +145,7 @@ where
     Ok(())
 }
 
-async fn keep_message<S>(
+async fn handle_message<S>(
     ssm: SharedStateMap,
     storage: Arc<S>,
     msg: Message,
@@ -161,8 +157,10 @@ async fn keep_message<S>(
     match msg.state {
         State::List(list) => {
             info!("got list data : {:?}", list);
-            let mut l = ssm.list.write().unwrap();
-            *l = list;
+            ssm.list.insert(list.id.clone(), list.clone());
+            if let Err(e) = storage.save_one(State::List(list)).await {
+                error!("save list error: {}", e);
+            }
         }
         State::Market(market) => {
             if msg.event == Event::Deleted {
@@ -245,7 +243,7 @@ async fn keep_message<S>(
     }
 }
 pub struct Liquidation {
-    // account_tasks: Task,
+    state_update_task: Task,
     // position_tasks: Vec<Task>,
     // cron: Cron,
 }
@@ -255,16 +253,85 @@ impl Liquidation {
         ssm: SharedStateMap,
         tasks: usize,
         event_ws_tx: WsWatchTx,
+        event_update_rx: EventUpdateRx,
         is_write_ws_event: bool,
         call: Arc<C>,
     ) -> anyhow::Result<Self>
     where
         C: MoveCall + Send + Sync + 'static,
     {
-        Ok(Self {})
+        let (shutdown_tx, shutdown_rx) = Task::new_shutdown_channel();
+        Ok(Self {
+            state_update_task: Task::new(
+                "state_update",
+                shutdown_tx,
+                tokio::spawn(watch_state_update(
+                    ssm.clone(),
+                    event_update_rx,
+                    shutdown_rx,
+                    event_ws_tx,
+                    call.clone(),
+                )),
+            ),
+            // position_tasks: Vec::new(),
+            // cron: Cron::new(ssm.clone(), tasks, event_ws_tx, is_write_ws_event, call.clone()).await?,
+        })
     }
 
     pub async fn shutdown(self) {
         debug!("start shutdown liquidation...");
     }
 }
+
+async fn watch_state_update<C>(
+    ssm: SharedStateMap,
+    mut event_update_rx: EventUpdateRx,
+    mut shutdown_rx: TaskStopRx,
+    event_ws_tx: WsWatchTx,
+    call: Arc<C>,
+) -> anyhow::Result<()>
+where
+    C: MoveCall + Send + Sync + 'static,
+{
+    info!("start scale data watch ...");
+    loop {
+        tokio::select! {
+            r = &mut shutdown_rx => {
+                match r {
+                    Ok(_) => {
+                        info!("got shutdown signal {:?}, break watch state update!",r);
+                    }
+                    Err(e) => {
+                        error!("shutdown channel error: {}", e);
+                    }
+                }
+                break;
+            }
+            r = event_update_rx.recv()=> {
+                match r {
+                    Some(msg)=>{
+                        // debug!("data channel got data : {:?}",msg);
+                        match msg {
+                            EventUpdate::AccountUpdate(account) => {
+                                handle_account_state_update(ssm.clone(), account).await;
+                            }
+                            EventUpdate::PositionUpdate(position) => {
+                                handle_position_state_update(ssm.clone(), position).await;
+                            }
+                            EventUpdate::Price(price) => {
+                                // handle_price_state_update(ssm.clone(), price).await;
+                            }
+                        }
+                    }
+                    None=>{
+                        debug!("data channel got none : {:?}",r);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_account_state_update(ssm: SharedStateMap, address: Account) {}
+async fn handle_position_state_update(ssm: SharedStateMap, address: Position) {}

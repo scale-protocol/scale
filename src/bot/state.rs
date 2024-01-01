@@ -158,8 +158,20 @@ pub fn new_message_channel() -> (MessageSender, MessageReceiver) {
 }
 pub type EventSyncTx = UnboundedSender<Address>;
 pub type EventSyncRx = UnboundedReceiver<Address>;
+
 pub fn new_event_sync_channel() -> (EventSyncTx, EventSyncRx) {
     mpsc::unbounded_channel::<Address>()
+}
+#[derive(Debug, Clone)]
+pub enum EventUpdate {
+    AccountUpdate(Account),
+    PositionUpdate(Position),
+    Price(OrgPrice),
+}
+pub type EventUpdateTx = UnboundedSender<EventUpdate>;
+pub type EventUpdateRx = UnboundedReceiver<EventUpdate>;
+pub fn new_event_update_channel() -> (EventUpdateTx, EventUpdateRx) {
+    mpsc::unbounded_channel::<EventUpdate>()
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pool {
@@ -436,8 +448,7 @@ pub struct Position {
     pub market_id: Address,
     pub account_id: Address,
     pub symbol: String,
-    pub symbol_short: String,
-    pub icon: String,
+    pub force_close_price: i64,
 }
 
 impl Position {

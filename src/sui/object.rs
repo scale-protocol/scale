@@ -31,6 +31,7 @@ extern crate serde;
 const OBJECT_MAX_REQUEST_LIMIT: usize = 100;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ObjectType {
+    List,
     Market,
     Account,
     Position,
@@ -39,7 +40,9 @@ pub enum ObjectType {
 }
 impl<'a> From<&'a str> for ObjectType {
     fn from(value: &'a str) -> Self {
-        if value.contains("Market") {
+        if value.contains("List") {
+            Self::List
+        } else if value.contains("Market") {
             Self::Market
         } else if value.contains("Account") {
             Self::Account
@@ -55,6 +58,7 @@ impl<'a> From<&'a str> for ObjectType {
 impl fmt::Display for ObjectType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let t = match *self {
+            Self::List => "list",
             Self::Market => "market",
             Self::Account => "account",
             Self::Position => "position",
@@ -136,6 +140,7 @@ pub async fn pull_objects_with_limit_and_send(
             },
         )
         .await?;
+    debug!("got objects: {:?}", rs);
     for r in rs {
         let mut ev = prase_object_response(r).await?;
         ev.event = event.clone();
@@ -271,6 +276,15 @@ pub async fn prase_object_response(rs: SuiObjectResponse) -> anyhow::Result<Mess
                     let t: ObjectType = m.type_.clone().name.into_string().as_str().into();
                     debug!("got move object data type: {:?}", t);
                     match t {
+                        ObjectType::List => {
+                            let sui_list: SuiList = m.deserialize()?;
+                            debug!("list: {:?}", sui_list);
+                            let list = List::from(sui_list);
+                            return Ok(Message {
+                                state: State::List(list),
+                                event: Event::None,
+                            });
+                        }
                         ObjectType::Market => {
                             let sui_market: SuiMarket = m.deserialize()?;
                             debug!("market: {:?}", sui_market);
@@ -559,9 +573,6 @@ impl From<I64> for i64 {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SuiPosition {
     pub id: UID,
-    pub offset: u64,
-    /// Initial position margin
-    pub margin: u64,
     /// Current actual margin balance of isolated
     pub margin_balance: Balance,
     pub info: SuiPositionInfo,
@@ -621,8 +632,8 @@ impl From<SuiPosition> for Position {
     fn from(p: SuiPosition) -> Self {
         Self {
             id: Address::new(p.id.id.bytes.to_vec()),
-            offset: p.offset,
-            margin: p.margin,
+            offset: p.info.offset,
+            margin: p.info.margin,
             margin_balance: p.margin_balance.value(),
             leverage: p.info.leverage,
             position_type: PositionType::try_from(p.info.position_type).unwrap(),
@@ -646,9 +657,8 @@ impl From<SuiPosition> for Position {
             close_operator: Address::new(p.info.close_operator.to_vec()),
             market_id: Address::new(p.info.market_id.bytes.to_vec()),
             account_id: Address::new(p.info.account_id.bytes.to_vec()),
-            symbol: "".to_string(),
-            symbol_short: "".to_string(),
-            icon: "".to_string(),
+            symbol: p.info.symbol,
+            force_close_price: 0,
         }
     }
 }

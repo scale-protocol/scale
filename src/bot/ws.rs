@@ -367,7 +367,7 @@ where
                 r = &mut shutdown_rx => {
                     match r {
                         Ok(_) => {
-                            info!("got shutdown signal , break price broadcast!");
+                            info!("got shutdown signal , break ws client!");
                         }
                         Err(e) => {
                             error!("shutdown channel error: {}", e);

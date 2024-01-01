@@ -62,7 +62,7 @@ impl PG {
             ins.spread_profit,
             ins.epoch_profit
         )
-        .fetch_one(&self.db)
+        .execute(&self.db)
         .await?;
         Ok(())
     }
@@ -92,7 +92,7 @@ impl PG {
             ins.unit_size,
             ins.opening_price,
             ins.list_id
-        ).fetch_one(&self.db).await?;
+        ).execute(&self.db).await?;
         Ok(())
     }
     pub async fn save_account(&self, data: Account) -> anyhow::Result<()> {
@@ -118,16 +118,16 @@ impl PG {
             ins.margin_isolated_sell_total,
             ins.cross_position_idx,
             &ins.isolated_position_idx
-        ).fetch_one(&self.db).await?;
+        ).execute(&self.db).await?;
         Ok(())
     }
     pub async fn save_position(&self, data: Position) -> anyhow::Result<()> {
         let ins: DbPosition = data.into();
         sqlx::query!(
             r#"
-            INSERT INTO tb_position (id, offset_idx, margin, margin_balance, leverage, position_type, status, direction, unit_size, lot, open_price, open_spread, open_real_price, close_price, close_spread, close_real_price, profit, stop_surplus_price, stop_loss_price, create_time, open_time, close_time, open_operator, close_operator, market_id, account_id, symbol, symbol_short, icon)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
-            ON CONFLICT (id) DO UPDATE SET offset_idx = $2, margin = $3, margin_balance = $4, leverage = $5, position_type = $6, status = $7, direction = $8, unit_size = $9, lot = $10, open_price = $11, open_spread = $12, open_real_price = $13, close_price = $14, close_spread = $15, close_real_price = $16, profit = $17, stop_surplus_price = $18, stop_loss_price = $19, create_time = $20, open_time = $21, close_time = $22, open_operator = $23, close_operator = $24, market_id = $25, account_id = $26, symbol = $27, symbol_short = $28, icon = $29
+            INSERT INTO tb_position (id, offset_idx, margin, margin_balance, leverage, position_type, status, direction, unit_size, lot, open_price, open_spread, open_real_price, close_price, close_spread, close_real_price, profit, stop_surplus_price, stop_loss_price, create_time, open_time, close_time, open_operator, close_operator, market_id, account_id, symbol, force_close_price)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+            ON CONFLICT (id) DO UPDATE SET offset_idx = $2, margin = $3, margin_balance = $4, leverage = $5, position_type = $6, status = $7, direction = $8, unit_size = $9, lot = $10, open_price = $11, open_spread = $12, open_real_price = $13, close_price = $14, close_spread = $15, close_real_price = $16, profit = $17, stop_surplus_price = $18, stop_loss_price = $19, create_time = $20, open_time = $21, close_time = $22, open_operator = $23, close_operator = $24, market_id = $25, account_id = $26, symbol=$27, force_close_price = $28
             "#,
             ins.id,
             ins.offset_idx,
@@ -156,9 +156,8 @@ impl PG {
             ins.market_id,
             ins.account_id,
             ins.symbol,
-            ins.symbol_short,
-            ins.icon
-        ).fetch_one(&self.db).await?;
+            ins.force_close_price,
+        ).execute(&self.db).await?;
         Ok(())
     }
     async fn load_all_list(&self, send: MessageSender) -> anyhow::Result<()> {

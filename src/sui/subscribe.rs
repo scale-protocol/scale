@@ -1,28 +1,20 @@
 use std::str::FromStr;
 
-use crate::bot::state::{Event, EventSyncRx, Message, MessageSender};
+use crate::bot::state::{Event, EventSyncRx, MessageSender};
 use crate::com::{Task, TaskStopRx};
 use crate::sui::config::Ctx;
 use crate::sui::object;
 use crate::sui::object::ObjectType;
 use log::*;
-// use std::time::Duration;
 use move_core_types::{identifier::Identifier, language_storage::TypeTag};
 use sui_sdk::rpc_types::{EventFilter, SuiEvent};
 use sui_sdk::types::base_types::ObjectID;
 use sui_types::event::EventID;
-use tokio::sync::watch;
-use tokio::{
-    task::JoinHandle,
-    time::{self, Duration},
-};
 // use tokio_stream::StreamExt;
 use futures::StreamExt;
 use serde_json::Value;
 
 pub struct EventSubscriber {
-    // task: JoinHandle<anyhow::Result<()>>,
-    // close_tx: watch::Sender<bool>,
     task: Task,
 }
 

@@ -1,6 +1,6 @@
 run:
 	cargo install --path .
-	RUST_LOG=debug scale -l /Users/m/work/lihua/blok/scale/scale/sui.log bot -b sui
+	RUST_LOG=debug scale -l /Users/lihua/work/lihua/blok/scale/scale/scale.log bot -b sui
 debug:
 	cargo install --path .
 	export RUST_LOG=scale::http=debug && export RUST_BACKTRACE=full && scale bot -b sui -p 8081 -t 10

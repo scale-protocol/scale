@@ -25,6 +25,8 @@ use tokio::{runtime::Builder, runtime::Runtime, signal, sync::mpsc};
 
 use crate::bot::{machine::Watch, ws::WsClient};
 
+use super::state::Storage;
+
 #[derive(Debug, Clone)]
 pub struct Options {
     pub tasks: usize,
@@ -157,11 +159,10 @@ where
     // let price_feed = new_price_feed_map(&conf);
     let mut state_mp = machine::StateMap::new(supported_symbol)?;
     // try load local state data
-    // state_ssm.load_active_account_from_local()?;
-    let ssm: machine::SharedStateMap = Arc::new(state_mp);
+    let ssm: machine::SharedStateMap = Arc::new(state_mp.clone());
     let (event_ws_tx, event_ws_rx) = ws::new_event_channel(100);
     let influxdb = influxdb::Influxdb::new(conf.get_influxdb_config());
-    let mut watch: Watch;
+    let watch: Watch;
     let ws_client: WsClient;
     if opt.full_node {
         let db = Arc::new(postgres::new(conf.get_sql_db_config()).await?);
@@ -174,6 +175,7 @@ where
             opt.full_node,
         )
         .await?;
+        db.load_all(watch.watch_tx.clone()).await?;
     } else {
         let db = Arc::new(local::Local::new(conf.get_storage_path())?);
         watch = machine::Watch::new(ssm.clone(), db.clone(), event_ws_tx.clone(), false).await;
@@ -185,6 +187,7 @@ where
             opt.full_node,
         )
         .await?;
+        db.load_all(watch.watch_tx.clone()).await?;
     }
     Ok((watch, ws_client))
 }

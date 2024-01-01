@@ -1,6 +1,6 @@
 
 CREATE TABLE IF NOT EXISTS tb_list (
-    id          char(64) CONSTRAINT list_id PRIMARY KEY,
+    id          varchar(128) CONSTRAINT list_id PRIMARY KEY,
     total       int NOT NULL DEFAULT 0 CHECK (total > 0),
     officer     smallint NOT NULL DEFAULT 3 CHECK (officer > 0 and officer < 4),
     vault_supply decimal(20,0) NOT NULL DEFAULT 0,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS tb_list (
     epoch_profit JSON
 );
 CREATE TABLE IF NOT EXISTS tb_market (
-     id          char(64) CONSTRAINT market_id PRIMARY KEY,
+     id          varchar(128) CONSTRAINT market_id PRIMARY KEY,
      max_leverage smallint NOT NULL DEFAULT 0 CHECK (max_leverage > 0),
      insurance_fee bigint NOT NULL DEFAULT 0 CHECK (insurance_fee >= 0),
      margin_fee bigint NOT NULL DEFAULT 0 CHECK (margin_fee >= 0),
@@ -22,19 +22,19 @@ CREATE TABLE IF NOT EXISTS tb_market (
      status smallint NOT NULL DEFAULT 1 CHECK (status > 0 and status < 4),
      long_position_total decimal(20,0) NOT NULL DEFAULT 0,
      short_position_total decimal(20,0) NOT NULL DEFAULT 0,
-     symbol char(20) NOT NULL DEFAULT '',
-     symbol_short char(5) NOT NULL DEFAULT '',
+     symbol varchar(20) NOT NULL DEFAULT '',
+     symbol_short varchar(10) NOT NULL DEFAULT '',
      icon varchar(256) NOT NULL DEFAULT '',
      description varchar(1000) NOT NULL DEFAULT '',
      unit_size bigint NOT NULL DEFAULT 0,
      opening_price bigint NOT NULL DEFAULT 0,
-     list_id char(64) NOT NULL DEFAULT ''
+     list_id varchar(128) NOT NULL DEFAULT ''
 );
 CREATE INDEX idx_market_status ON tb_market (status);
 
 CREATE TABLE IF NOT EXISTS tb_account (
-    id     char(64) CONSTRAINT account_id PRIMARY KEY,
-    owner  char(64) NOT NULL,
+    id     varchar(128) CONSTRAINT account_id PRIMARY KEY,
+    owner  varchar(128) NOT NULL,
     offset_idx bigint NOT NULL DEFAULT 0 CHECK (offset_idx >= 0),
     balance decimal(20,0) NOT NULL DEFAULT 0,
     isolated_balance decimal(20,0) NOT NULL DEFAULT 0,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS tb_account (
 CREATE INDEX idx_account_owner ON tb_account (owner);
 
 CREATE TABLE IF NOT EXISTS tb_position (
-    id     char(64) CONSTRAINT position_id PRIMARY KEY,
+    id     varchar(128) CONSTRAINT position_id PRIMARY KEY,
     offset_idx bigint NOT NULL DEFAULT 0 CHECK (offset_idx >= 0),
     margin decimal(20,0) NOT NULL DEFAULT 0,
     margin_balance decimal(20,0) NOT NULL DEFAULT 0,
@@ -74,13 +74,12 @@ CREATE TABLE IF NOT EXISTS tb_position (
     create_time bigint NOT NULL DEFAULT 0,
     open_time bigint NOT NULL DEFAULT 0,
     close_time bigint NOT NULL DEFAULT 0,
-    open_operator char(64) NOT NULL DEFAULT '',
-    close_operator char(64) NOT NULL DEFAULT '',
-    market_id char(64) NOT NULL DEFAULT '',
-    account_id char(64) NOT NULL DEFAULT '',
-    symbol char(20) NOT NULL DEFAULT '',
-    symbol_short char(5) NOT NULL DEFAULT '',
-    icon varchar(256) NOT NULL DEFAULT ''
+    open_operator varchar(128) NOT NULL DEFAULT '',
+    close_operator varchar(128) NOT NULL DEFAULT '',
+    market_id varchar(128) NOT NULL DEFAULT '',
+    account_id varchar(128) NOT NULL DEFAULT '',
+    symbol varchar(20) NOT NULL DEFAULT '',
+    force_close_price bigint NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_position_owner ON tb_position (account_id);

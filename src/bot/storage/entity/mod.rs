@@ -1,6 +1,6 @@
 use crate::bot::state::{
-    Account, Address, Direction, Event, List, Market, MarketStatus, Message, Officer, Pool,
-    Position, PositionStatus, PositionType, State,
+    Account, Address, Direction, List, Market, MarketStatus, Officer, Pool, Position,
+    PositionStatus, PositionType,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -300,8 +300,7 @@ pub struct DbPosition {
     pub market_id: String,
     pub account_id: String,
     pub symbol: String,
-    pub symbol_short: String,
-    pub icon: String,
+    pub force_close_price: i64,
 }
 impl From<Position> for DbPosition {
     fn from(value: Position) -> Self {
@@ -332,9 +331,8 @@ impl From<Position> for DbPosition {
             close_operator: value.close_operator.to_string(),
             market_id: value.market_id.to_string(),
             account_id: value.account_id.to_string(),
-            symbol: value.symbol.to_string(),
-            symbol_short: value.symbol_short.to_string(),
-            icon: value.icon.to_string(),
+            symbol: value.symbol,
+            force_close_price: value.force_close_price,
         }
     }
 }
@@ -368,9 +366,8 @@ impl From<DbPosition> for Position {
             close_operator: Address::from_str(value.close_operator.as_str()).unwrap(),
             market_id: Address::from_str(value.market_id.as_str()).unwrap(),
             account_id: Address::from_str(value.account_id.as_str()).unwrap(),
-            symbol: value.symbol.to_string(),
-            symbol_short: value.symbol_short.to_string(),
-            icon: value.icon.to_string(),
+            symbol: value.symbol,
+            force_close_price: value.force_close_price,
         }
     }
 }

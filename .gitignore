@@ -8,3 +8,4 @@ sui.log*
 /sh/data-dev
 /sh/data-test
 node_modules
+scale.log
